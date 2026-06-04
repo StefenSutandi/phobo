@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Jomhuria } from "next/font/google";
+import { SessionProvider } from "@/lib/session/session-store";
 import "./globals.css";
 
 const jomhuria = Jomhuria({
@@ -19,7 +20,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={jomhuria.className}>{children}</body>
+      <body className={jomhuria.className}>
+        <SessionProvider>{children}</SessionProvider>
+      </body>
     </html>
   );
 }

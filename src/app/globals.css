@@ -109,6 +109,11 @@ button {
   transform: translateY(1px);
 }
 
+.kiosk-button.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .rounded-panel {
   border-radius: 38px;
   position: absolute;
@@ -312,6 +317,11 @@ button {
   width: 100px;
 }
 
+.frame-choice.is-selected {
+  outline: 4px solid var(--purple);
+  outline-offset: 5px;
+}
+
 .frame-choice__top,
 .frame-choice__bottom {
   background: var(--placeholder);
@@ -392,6 +402,11 @@ button {
   width: 40px;
 }
 
+.background-choice.is-selected {
+  outline: 3px solid var(--purple);
+  outline-offset: -3px;
+}
+
 .preview-composer {
   border-radius: 34px;
   height: 82.05%;
@@ -463,7 +478,15 @@ button {
   background: var(--placeholder);
   border: 0;
   height: 72px;
+  overflow: hidden;
   width: 62px;
+}
+
+.strip-photo__image {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
 }
 
 .sticker-picker {
@@ -548,4 +571,83 @@ button {
   letter-spacing: 0.08em;
   margin-bottom: 12px;
   padding: 5px 9px;
+}
+
+.kiosk-message {
+  color: var(--white);
+  font-size: 24px;
+  left: 0;
+  line-height: 0.8;
+  position: absolute;
+  text-align: center;
+  top: 90%;
+  width: 100%;
+}
+
+.camera-message {
+  top: 91.5%;
+}
+
+.dev-control {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  color: var(--white);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--sans-font);
+  font-size: 11px;
+  justify-content: center;
+  min-height: 28px;
+  padding: 7px 12px;
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  z-index: 4;
+}
+
+.dev-control--secondary {
+  top: 52px;
+}
+
+.dev-note {
+  bottom: 12px;
+  color: rgba(255, 255, 255, 0.72);
+  font-family: var(--sans-font);
+  font-size: 11px;
+  left: 18px;
+  max-width: 360px;
+  position: absolute;
+  z-index: 4;
+}
+
+.admin-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-top: 12px;
+}
+
+.admin-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.admin-action {
+  background: var(--purple);
+  border: 0;
+  border-radius: 999px;
+  color: var(--white);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--sans-font);
+  font-size: 14px;
+  padding: 10px 14px;
+}
+
+.admin-action--muted {
+  background: rgba(255, 255, 255, 0.18);
 }

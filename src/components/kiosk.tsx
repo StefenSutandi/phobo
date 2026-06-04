@@ -62,7 +62,13 @@ export function KioskButton({
 
   if (href) {
     return (
-      <Link href={href} className={classes} style={style} aria-label={ariaLabel}>
+      <Link
+        href={href}
+        className={classes}
+        style={style}
+        aria-label={ariaLabel}
+        onClick={onClick}
+      >
         <span className="kiosk-button__label">{children}</span>
       </Link>
     );
@@ -104,16 +110,16 @@ export function RoundedPanel({
 type PackageCardProps = {
   title: string;
   color: "orange" | "brown" | "purple";
-  href: string;
+  onSelect?: () => void;
 };
 
-export function PackageCard({ title, color, href }: PackageCardProps) {
+export function PackageCard({ title, color, onSelect }: PackageCardProps) {
   return (
     <div className="package-column">
       <RoundedPanel color={color} className="package-card">
         <p className="package-title">{title}</p>
       </RoundedPanel>
-      <KioskButton href={href} variant={color} className="package-select">
+      <KioskButton onClick={onSelect} variant={color} className="package-select">
         SELECT
       </KioskButton>
     </div>
@@ -124,6 +130,7 @@ type QrScreenProps = {
   title: string;
   initialSeconds: number;
   completionText: string;
+  onComplete?: () => void;
   nextHref?: string;
 };
 
@@ -131,6 +138,7 @@ export function QrScreen({
   title,
   initialSeconds,
   completionText,
+  onComplete,
   nextHref,
 }: QrScreenProps) {
   const [isComplete, setIsComplete] = useState(false);
@@ -141,7 +149,10 @@ export function QrScreen({
       <p className="qr-timer">
         <CountdownTimer
           initialSeconds={initialSeconds}
-          onComplete={() => setIsComplete(true)}
+          onComplete={() => {
+            setIsComplete(true);
+            onComplete?.();
+          }}
         />
       </p>
       {isComplete && <p className="qr-status">{completionText}</p>}
@@ -159,14 +170,29 @@ export function QrScreen({
   );
 }
 
-export function FrameGridScroller() {
-  const frames = Array.from({ length: 18 }, (_, index) => index + 1);
+type FrameGridScrollerProps = {
+  frames?: string[];
+  selectedFrameId?: string;
+  onSelectFrame?: (frameId: string) => void;
+};
+
+export function FrameGridScroller({
+  frames = Array.from({ length: 18 }, (_, index) => `frame-${index + 1}`),
+  selectedFrameId,
+  onSelectFrame,
+}: FrameGridScrollerProps) {
 
   return (
     <div className="frame-scroller" aria-label="Frame thumbnails">
       <div className="frame-grid">
-        {frames.map((frame) => (
-          <button type="button" className="frame-choice" key={frame} aria-label={`Frame ${frame}`}>
+        {frames.map((frameId) => (
+          <button
+            type="button"
+            className={`frame-choice ${selectedFrameId === frameId ? "is-selected" : ""}`}
+            key={frameId}
+            aria-label={frameId}
+            onClick={() => onSelectFrame?.(frameId)}
+          >
             <span className="frame-choice__top" />
             <span className="frame-choice__bottom" />
           </button>
@@ -184,13 +210,29 @@ export function CameraPanel() {
   );
 }
 
-export function BackgroundPicker() {
+type BackgroundPickerProps = {
+  backgrounds?: string[];
+  selectedBackgroundId?: string;
+  onSelectBackground?: (backgroundId: string) => void;
+};
+
+export function BackgroundPicker({
+  backgrounds = Array.from({ length: 16 }, (_, index) => `background-${index + 1}`),
+  selectedBackgroundId,
+  onSelectBackground,
+}: BackgroundPickerProps) {
   return (
     <RoundedPanel className="background-picker">
       <p className="background-title">PILIH BACKGROUND</p>
       <div className="background-grid">
-        {Array.from({ length: 16 }, (_, index) => (
-          <button type="button" className="background-choice" key={index} aria-label={`Background ${index + 1}`} />
+        {backgrounds.map((backgroundId) => (
+          <button
+            type="button"
+            className={`background-choice ${selectedBackgroundId === backgroundId ? "is-selected" : ""}`}
+            key={backgroundId}
+            aria-label={backgroundId}
+            onClick={() => onSelectBackground?.(backgroundId)}
+          />
         ))}
       </div>
     </RoundedPanel>
@@ -205,13 +247,21 @@ export function PreviewComposer() {
   );
 }
 
-export function PhotoResultStrip() {
+type PhotoResultStripProps = {
+  photos?: string[];
+};
+
+export function PhotoResultStrip({ photos = [] }: PhotoResultStripProps) {
+  const visiblePhotos = photos.length > 0 ? photos : Array.from({ length: 4 }, () => "");
+
   return (
     <RoundedPanel className="photo-strip">
       <p className="strip-title">HASIL FOTO</p>
       <div className="strip-scroll">
-        {Array.from({ length: 8 }, (_, index) => (
-          <button type="button" className="strip-photo" key={index} aria-label={`Photo result ${index + 1}`} />
+        {visiblePhotos.map((photoUrl, index) => (
+          <button type="button" className="strip-photo" key={`${photoUrl}-${index}`} aria-label={`Photo result ${index + 1}`}>
+            {photoUrl && <img src={photoUrl} alt="" className="strip-photo__image" />}
+          </button>
         ))}
       </div>
     </RoundedPanel>
