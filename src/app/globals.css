@@ -212,12 +212,22 @@ button {
 }
 
 .qr-box {
+  align-items: center;
   background: var(--placeholder);
+  display: flex;
   height: 45.91%;
+  justify-content: center;
   left: 36.53%;
   position: absolute;
   top: 29.77%;
   width: 26.4%;
+}
+
+.qr-image {
+  display: block;
+  height: 92%;
+  object-fit: contain;
+  width: 92%;
 }
 
 .qr-timer {
@@ -620,6 +630,32 @@ button {
   max-width: 360px;
   position: absolute;
   z-index: 4;
+}
+
+.dev-note a {
+  text-decoration: underline;
+}
+
+.result-dev-actions {
+  align-items: center;
+  bottom: 12px;
+  display: flex;
+  gap: 10px;
+  position: absolute;
+  right: 18px;
+  z-index: 4;
+}
+
+.result-dev-link,
+.result-dev-button {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  color: var(--white);
+  cursor: pointer;
+  font-family: var(--sans-font);
+  font-size: 11px;
+  padding: 7px 10px;
 }
 
 .admin-grid {

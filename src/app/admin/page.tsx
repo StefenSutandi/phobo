@@ -20,7 +20,34 @@ export default function Admin() {
     setPaymentStatus,
     resetSession,
     clearCapturedPhotos,
+    setPrintStatus,
   } = useSessionStore();
+
+  async function mockPrintResult() {
+    if (!session?.sessionId || !session.finalImageUrl) {
+      return;
+    }
+
+    setPrintStatus("queued");
+
+    try {
+      const response = await fetch("/api/printer/print", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: session.sessionId,
+          resultUrl: session.finalImageUrl,
+        }),
+      });
+      const payload = (await response.json()) as { ok?: boolean };
+
+      setPrintStatus(response.ok && payload.ok ? "printed" : "failed");
+    } catch {
+      setPrintStatus("failed");
+    }
+  }
 
   return (
     <main className="admin-page">
@@ -49,6 +76,13 @@ export default function Admin() {
           <Field label="Created At" value={session?.createdAt} />
           <Field label="Updated At" value={session?.updatedAt} />
         </div>
+        {session?.finalImageUrl && (
+          <p>
+            <a href={session.finalImageUrl} target="_blank" rel="noreferrer">
+              Open saved result
+            </a>
+          </p>
+        )}
       </section>
 
       <section className="admin-card">
@@ -65,6 +99,26 @@ export default function Admin() {
           </button>
           <button type="button" className="admin-action admin-action--muted" onClick={clearCapturedPhotos}>
             Clear Captured Photos
+          </button>
+          <button
+            type="button"
+            className="admin-action"
+            onClick={mockPrintResult}
+            disabled={!session?.finalImageUrl}
+          >
+            Mock Print Result
+          </button>
+          <button
+            type="button"
+            className="admin-action"
+            onClick={() => {
+              if (session?.finalImageUrl) {
+                window.open(session.finalImageUrl, "_blank", "noopener,noreferrer");
+              }
+            }}
+            disabled={!session?.finalImageUrl}
+          >
+            Open Result
           </button>
         </div>
       </section>

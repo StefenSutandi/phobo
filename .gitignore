@@ -20,6 +20,10 @@
 # production
 /build
 
+# generated kiosk results
+public/results/*
+!public/results/.gitkeep
+
 # misc
 .DS_Store
 *.pem

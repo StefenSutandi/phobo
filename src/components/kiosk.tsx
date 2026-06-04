@@ -132,6 +132,7 @@ type QrScreenProps = {
   completionText: string;
   onComplete?: () => void;
   nextHref?: string;
+  qrContent?: ReactNode;
 };
 
 export function QrScreen({
@@ -140,12 +141,15 @@ export function QrScreen({
   completionText,
   onComplete,
   nextHref,
+  qrContent,
 }: QrScreenProps) {
   const [isComplete, setIsComplete] = useState(false);
   const content = (
     <>
       <h1 className="qr-title">{title}</h1>
-      <div className="qr-box" aria-label={`${title} QR placeholder`} />
+      <div className="qr-box" aria-label={`${title} QR placeholder`}>
+        {qrContent}
+      </div>
       <p className="qr-timer">
         <CountdownTimer
           initialSeconds={initialSeconds}

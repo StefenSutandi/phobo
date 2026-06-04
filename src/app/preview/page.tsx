@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   KioskButton,
@@ -29,6 +29,8 @@ function createMockFinalImageUrl(sessionId: string) {
 export default function Preview() {
   const router = useRouter();
   const { session, hasHydrated, setFinalImageUrl } = useSessionStore();
+  const [saveError, setSaveError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!hasHydrated) {
@@ -40,13 +42,43 @@ export default function Preview() {
     }
   }, [hasHydrated, router, session?.capturedPhotos.length]);
 
-  function finishPreview() {
+  async function finishPreview() {
     if (!session) {
       return;
     }
 
-    setFinalImageUrl(createMockFinalImageUrl(session.sessionId));
-    router.push("/result");
+    setIsSaving(true);
+    setSaveError("");
+
+    try {
+      const finalImageDataUrl = createMockFinalImageUrl(session.sessionId);
+      const response = await fetch("/api/results/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: session.sessionId,
+          finalImageDataUrl,
+        }),
+      });
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        resultUrl?: string;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.ok || !payload.resultUrl) {
+        throw new Error(payload.error || "Failed to save result");
+      }
+
+      setFinalImageUrl(payload.resultUrl);
+      router.push("/result");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Failed to save result");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -54,9 +86,10 @@ export default function Preview() {
       <PreviewComposer />
       <PhotoResultStrip photos={session?.capturedPhotos ?? []} />
       <StickerPicker />
-      <KioskButton href="/result" onClick={finishPreview} className="preview-next">
-        NEXT
+      <KioskButton onClick={finishPreview} className="preview-next">
+        {isSaving ? "SAVE" : "NEXT"}
       </KioskButton>
+      {saveError && <p className="kiosk-message">{saveError}</p>}
     </KioskStage>
   );
 }
