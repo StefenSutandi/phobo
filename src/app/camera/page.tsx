@@ -8,9 +8,8 @@ import {
   KioskButton,
   KioskStage,
 } from "@/components/kiosk";
+import { backgrounds } from "@/lib/phobo-data";
 import { useSessionStore } from "@/lib/session/session-store";
-
-const backgrounds = Array.from({ length: 16 }, (_, index) => `background-${index + 1}`);
 
 type CaptureResponse = {
   ok: boolean;
@@ -40,7 +39,7 @@ export default function Camera() {
     }
 
     if (!session.selectedBackgroundId) {
-      selectBackground(backgrounds[0]);
+      selectBackground(backgrounds[0].id);
     }
   }, [hasHydrated, router, selectBackground, session?.selectedBackgroundId, session?.selectedFrameId]);
 
@@ -83,7 +82,7 @@ export default function Camera() {
     <KioskStage>
       <CameraPanel />
       <BackgroundPicker
-        backgrounds={backgrounds}
+        backgrounds={backgrounds.map((background) => background.id)}
         selectedBackgroundId={session?.selectedBackgroundId}
         onSelectBackground={(backgroundId) => {
           selectBackground(backgroundId);

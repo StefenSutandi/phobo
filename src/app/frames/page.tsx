@@ -8,9 +8,8 @@ import {
   KioskStage,
   RoundedPanel,
 } from "@/components/kiosk";
+import { frames } from "@/lib/phobo-data";
 import { useSessionStore } from "@/lib/session/session-store";
-
-const frames = Array.from({ length: 18 }, (_, index) => `frame-${index + 1}`);
 
 export default function Frames() {
   const router = useRouter();
@@ -41,7 +40,7 @@ export default function Frames() {
       <h1 className="frames-title">FRAME</h1>
       <RoundedPanel className="frame-panel" />
       <FrameGridScroller
-        frames={frames}
+        frames={frames.map((frame) => frame.id)}
         selectedFrameId={session?.selectedFrameId}
         onSelectFrame={(frameId) => {
           selectFrame(frameId);

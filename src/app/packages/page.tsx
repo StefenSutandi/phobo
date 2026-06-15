@@ -2,13 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { KioskStage, PackageCard } from "@/components/kiosk";
+import { packages } from "@/lib/phobo-data";
 import { useSessionStore } from "@/lib/session/session-store";
-
-const packages = [
-  { id: "package-1", title: "PACKAGE 1", color: "orange" as const },
-  { id: "package-2", title: "PACKAGE 2", color: "brown" as const },
-  { id: "package-3", title: "PACKAGE 3", color: "purple" as const },
-];
 
 export default function Packages() {
   const router = useRouter();

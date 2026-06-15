@@ -119,6 +119,9 @@ export default function Result() {
       </p>
       {session?.finalImageUrl && (
         <div className="result-dev-actions">
+          <a href={session.finalImageUrl} className="result-dev-link" target="_blank" rel="noreferrer">
+            OPEN RESULT
+          </a>
           <a href={session.finalImageUrl} className="result-dev-link" download>
             DOWNLOAD
           </a>

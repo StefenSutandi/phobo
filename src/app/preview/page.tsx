@@ -11,24 +11,9 @@ import {
 } from "@/components/kiosk";
 import { useSessionStore } from "@/lib/session/session-store";
 
-function createMockFinalImageUrl(sessionId: string) {
-  const safeSession = sessionId.replace(/[^a-zA-Z0-9-]/g, "");
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="640" height="900" viewBox="0 0 640 900">
-      <rect width="640" height="900" fill="#d3974d"/>
-      <rect x="80" y="80" width="480" height="560" rx="28" fill="#d9d9d9"/>
-      <rect x="120" y="690" width="400" height="80" rx="40" fill="#591f42"/>
-      <text x="320" y="743" fill="#ffffff" font-family="Arial" font-size="32" text-anchor="middle">PHOBO MOCK RESULT</text>
-      <text x="320" y="820" fill="#404a4b" font-family="Arial" font-size="20" text-anchor="middle">${safeSession.slice(0, 28)}</text>
-    </svg>
-  `;
-
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
-
 export default function Preview() {
   const router = useRouter();
-  const { session, hasHydrated, setFinalImageUrl } = useSessionStore();
+  const { session, hasHydrated, setFinalImageUrl, setPrintImageUrl } = useSessionStore();
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -51,31 +36,39 @@ export default function Preview() {
     setSaveError("");
 
     try {
-      const finalImageDataUrl = createMockFinalImageUrl(session.sessionId);
-      const response = await fetch("/api/results/save", {
+      const response = await fetch("/api/results/compose", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           sessionId: session.sessionId,
-          finalImageDataUrl,
+          capturedPhotos: session.capturedPhotos,
+          selectedFrameId: session.selectedFrameId,
+          selectedBackgroundId: session.selectedBackgroundId,
+          options: {
+            applyChromaKey: true,
+            greenMin: 110,
+            greenTolerance: 45,
+          },
         }),
       });
       const payload = (await response.json()) as {
         ok?: boolean;
-        resultUrl?: string;
+        finalImageUrl?: string;
+        printImageUrl?: string;
         error?: string;
       };
 
-      if (!response.ok || !payload.ok || !payload.resultUrl) {
-        throw new Error(payload.error || "Failed to save result");
+      if (!response.ok || !payload.ok || !payload.finalImageUrl || !payload.printImageUrl) {
+        throw new Error(payload.error || "Failed to compose result");
       }
 
-      setFinalImageUrl(payload.resultUrl);
+      setFinalImageUrl(payload.finalImageUrl);
+      setPrintImageUrl(payload.printImageUrl);
       router.push("/result");
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Failed to save result");
+      setSaveError(error instanceof Error ? error.message : "Failed to compose result");
     } finally {
       setIsSaving(false);
     }

@@ -46,6 +46,13 @@ type PrintResult = {
   error?: string;
 };
 
+type ComposeResult = {
+  ok: boolean;
+  finalImageUrl?: string;
+  printImageUrl?: string;
+  error?: string;
+};
+
 export default function Admin() {
   const router = useRouter();
   const {
@@ -53,6 +60,7 @@ export default function Admin() {
     setPaymentStatus,
     resetSession,
     clearCapturedPhotos,
+    setFinalImageUrl,
     setPrintImageUrl,
     setPrintStatus,
   } = useSessionStore();
@@ -61,9 +69,11 @@ export default function Admin() {
   const [printerMode, setPrinterMode] = useState("mock");
   const [printerNameConfigured, setPrinterNameConfigured] = useState(false);
   const [cameraResult, setCameraResult] = useState<CaptureResult | null>(null);
+  const [composeResult, setComposeResult] = useState<ComposeResult | null>(null);
   const [printTemplateResult, setPrintTemplateResult] = useState<PrintTemplateResult | null>(null);
   const [printResult, setPrintResult] = useState<PrintResult | null>(null);
   const [isTestingCamera, setIsTestingCamera] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
   const [isGeneratingPrint, setIsGeneratingPrint] = useState(false);
   const [isTestingPrint, setIsTestingPrint] = useState(false);
 
@@ -160,6 +170,54 @@ export default function Admin() {
     }
   }
 
+  async function composeResultFile() {
+    if (!session?.sessionId || !session.selectedFrameId || !session.selectedBackgroundId) {
+      setComposeResult({
+        ok: false,
+        error: "Session needs a selected frame and background",
+      });
+      return;
+    }
+
+    setIsComposing(true);
+    setComposeResult(null);
+
+    try {
+      const response = await fetch("/api/results/compose", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: session.sessionId,
+          capturedPhotos: session.capturedPhotos,
+          selectedFrameId: session.selectedFrameId,
+          selectedBackgroundId: session.selectedBackgroundId,
+          options: {
+            applyChromaKey: true,
+            greenMin: 110,
+            greenTolerance: 45,
+          },
+        }),
+      });
+      const payload = (await response.json()) as ComposeResult;
+
+      setComposeResult(payload);
+
+      if (response.ok && payload.ok && payload.finalImageUrl && payload.printImageUrl) {
+        setFinalImageUrl(payload.finalImageUrl);
+        setPrintImageUrl(payload.printImageUrl);
+      }
+    } catch {
+      setComposeResult({
+        ok: false,
+        error: "Compose request failed",
+      });
+    } finally {
+      setIsComposing(false);
+    }
+  }
+
   async function testCameraCapture() {
     const testSessionId = session?.sessionId || `admin-test-${Date.now()}`;
 
@@ -224,6 +282,17 @@ export default function Admin() {
             </a>
           </p>
         )}
+        {session?.capturedPhotos.length ? (
+          <div className="admin-result">
+            <strong>Captured Photos</strong>
+            {session.capturedPhotos.map((photoUrl, index) => (
+              <p key={`${photoUrl}-${index}`}>
+                {index + 1}: {photoUrl.slice(0, 96)}
+                {photoUrl.length > 96 ? "..." : ""}
+              </p>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="admin-card">
@@ -289,10 +358,30 @@ export default function Admin() {
           <button
             type="button"
             className="admin-action"
+            onClick={composeResultFile}
+            disabled={!session?.sessionId || isComposing}
+          >
+            {isComposing ? "Composing Result..." : "Compose Result"}
+          </button>
+          <button
+            type="button"
+            className="admin-action"
             onClick={generatePrintFile}
             disabled={!session?.sessionId || isGeneratingPrint}
           >
             {isGeneratingPrint ? "Generating Print File..." : "Generate Print File"}
+          </button>
+          <button
+            type="button"
+            className="admin-action"
+            onClick={() => {
+              if (session?.finalImageUrl) {
+                window.open(session.finalImageUrl, "_blank", "noopener,noreferrer");
+              }
+            }}
+            disabled={!session?.finalImageUrl}
+          >
+            Open Final Result
           </button>
           <button
             type="button"
@@ -304,7 +393,7 @@ export default function Admin() {
             }}
             disabled={!session?.printImageUrl}
           >
-            Open Print File
+            Open Print Image
           </button>
           <button
             type="button"
@@ -319,19 +408,15 @@ export default function Admin() {
           >
             {isTestingPrint ? "Testing Print..." : "Test Print"}
           </button>
-          <button
-            type="button"
-            className="admin-action"
-            onClick={() => {
-              if (session?.finalImageUrl) {
-                window.open(session.finalImageUrl, "_blank", "noopener,noreferrer");
-              }
-            }}
-            disabled={!session?.finalImageUrl}
-          >
-            Open Result
-          </button>
         </div>
+        {composeResult && (
+          <div className="admin-result">
+            <p>Compose result: {composeResult.ok ? "success" : "failed"}</p>
+            {composeResult.finalImageUrl && <p>Final URL: {composeResult.finalImageUrl}</p>}
+            {composeResult.printImageUrl && <p>Print URL: {composeResult.printImageUrl}</p>}
+            {composeResult.error && <p>Error: {composeResult.error}</p>}
+          </div>
+        )}
         {printTemplateResult && (
           <div className="admin-result">
             <p>Print file result: {printTemplateResult.ok ? "success" : "failed"}</p>

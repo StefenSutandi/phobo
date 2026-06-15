@@ -133,6 +133,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       updateSession(current, (activeSession) => ({
         ...activeSession,
         selectedFrameId: frameId,
+        finalImageUrl: undefined,
+        printImageUrl: undefined,
       })),
     );
   }, []);
@@ -142,6 +144,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       updateSession(current, (activeSession) => ({
         ...activeSession,
         selectedBackgroundId: backgroundId,
+        finalImageUrl: undefined,
+        printImageUrl: undefined,
       })),
     );
   }, []);
