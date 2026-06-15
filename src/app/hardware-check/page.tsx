@@ -9,6 +9,26 @@ function ModeBadge({ value }: { value: string }) {
   return <span className="mock-badge">{value.toUpperCase()}</span>;
 }
 
+function ReadinessIndicator({
+  label,
+  isMock,
+}: {
+  label: string;
+  isMock: boolean;
+}) {
+  return (
+    <div>
+      <strong>{label}</strong>
+      <p>{isMock ? "Mock Mode" : "Real Mode Pending"}</p>
+      <p>
+        {isMock
+          ? "Safe for operator testing without hardware."
+          : "Configured for a real adapter path; validate with hardware before event use."}
+      </p>
+    </div>
+  );
+}
+
 export default async function HardwareCheck() {
   const [cameraStatus, printerStatus, storageStatus] = await Promise.all([
     camera.getStatus(),
@@ -34,6 +54,15 @@ export default async function HardwareCheck() {
         <h2>App Mode</h2>
         <p>Current app mode: {appMode}</p>
         <p>Real Canon capture, SELPHY printing, Google Drive, and payment gateway are not implemented yet.</p>
+      </section>
+
+      <section className="admin-card">
+        <h2>Mock Mode / Real Mode Pending</h2>
+        <div className="admin-grid">
+          <ReadinessIndicator label="Camera" isMock={env.cameraMode === "mock"} />
+          <ReadinessIndicator label="Printer" isMock={env.printerMode === "mock"} />
+          <ReadinessIndicator label="Storage" isMock={env.storageMode === "local"} />
+        </div>
       </section>
 
       <section className="admin-card">

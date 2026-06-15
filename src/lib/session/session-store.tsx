@@ -24,6 +24,7 @@ type SessionContextValue = {
   selectBackground: (backgroundId: string) => void;
   addCapturedPhoto: (photoUrl: string) => void;
   clearCapturedPhotos: () => void;
+  clearFinalResult: () => void;
   setFinalImageUrl: (url: string) => void;
   setPrintImageUrl: (url: string) => void;
   setDriveUrl: (url: string) => void;
@@ -171,6 +172,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const clearFinalResult = useCallback(() => {
+    setSession((current) =>
+      updateSession(current, (activeSession) => ({
+        ...activeSession,
+        finalImageUrl: undefined,
+        printImageUrl: undefined,
+        printStatus: "idle",
+      })),
+    );
+  }, []);
+
   const setFinalImageUrl = useCallback((url: string) => {
     setSession((current) =>
       updateSession(current, (activeSession) => ({
@@ -220,6 +232,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       selectBackground,
       addCapturedPhoto,
       clearCapturedPhotos,
+      clearFinalResult,
       setFinalImageUrl,
       setPrintImageUrl,
       setDriveUrl,
@@ -236,6 +249,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       selectBackground,
       addCapturedPhoto,
       clearCapturedPhotos,
+      clearFinalResult,
       setFinalImageUrl,
       setPrintImageUrl,
       setDriveUrl,

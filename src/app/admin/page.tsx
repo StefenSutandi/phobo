@@ -53,6 +53,11 @@ type ComposeResult = {
   error?: string;
 };
 
+type OperatorLogEntry = {
+  timestamp: string;
+  message: string;
+};
+
 export default function Admin() {
   const router = useRouter();
   const {
@@ -60,6 +65,7 @@ export default function Admin() {
     setPaymentStatus,
     resetSession,
     clearCapturedPhotos,
+    clearFinalResult,
     setFinalImageUrl,
     setPrintImageUrl,
     setPrintStatus,
@@ -76,6 +82,23 @@ export default function Admin() {
   const [isComposing, setIsComposing] = useState(false);
   const [isGeneratingPrint, setIsGeneratingPrint] = useState(false);
   const [isTestingPrint, setIsTestingPrint] = useState(false);
+  const [showResultsFolderInstruction, setShowResultsFolderInstruction] = useState(false);
+  const [operatorLog, setOperatorLog] = useState<OperatorLogEntry[]>([
+    {
+      timestamp: new Date().toLocaleTimeString(),
+      message: "Admin dashboard opened",
+    },
+  ]);
+
+  function addOperatorLog(message: string) {
+    setOperatorLog((current) => [
+      {
+        timestamp: new Date().toLocaleTimeString(),
+        message,
+      },
+      ...current,
+    ].slice(0, 8));
+  }
 
   useEffect(() => {
     async function loadDiagnostics() {
@@ -98,10 +121,12 @@ export default function Admin() {
 
   async function mockPrintResult() {
     if (!session?.sessionId || !session.printImageUrl) {
+      addOperatorLog("Print skipped: no print image URL");
       return;
     }
 
     setPrintStatus("queued");
+    addOperatorLog("Print test queued");
 
     try {
       const response = await fetch("/api/printer/print", {
@@ -118,12 +143,14 @@ export default function Admin() {
 
       setPrintResult(payload as PrintResult);
       setPrintStatus(response.ok && payload.ok ? "printed" : "failed");
+      addOperatorLog(response.ok && payload.ok ? "Print test succeeded" : "Print test failed");
     } catch {
       setPrintResult({
         ok: false,
         error: "Print request failed",
       });
       setPrintStatus("failed");
+      addOperatorLog("Print test failed: request error");
     }
   }
 
@@ -133,11 +160,13 @@ export default function Admin() {
         ok: false,
         error: "No active session",
       });
+      addOperatorLog("Print file generation failed: no active session");
       return;
     }
 
     setIsGeneratingPrint(true);
     setPrintTemplateResult(null);
+    addOperatorLog("Regenerating print file");
 
     try {
       const response = await fetch("/api/results/print-template", {
@@ -159,12 +188,16 @@ export default function Admin() {
 
       if (response.ok && payload.ok && payload.printUrl) {
         setPrintImageUrl(payload.printUrl);
+        addOperatorLog("Print file regenerated");
+      } else {
+        addOperatorLog("Print file regeneration failed");
       }
     } catch {
       setPrintTemplateResult({
         ok: false,
         error: "Print file request failed",
       });
+      addOperatorLog("Print file regeneration failed: request error");
     } finally {
       setIsGeneratingPrint(false);
     }
@@ -176,11 +209,13 @@ export default function Admin() {
         ok: false,
         error: "Session needs a selected frame and background",
       });
+      addOperatorLog("Compose failed: missing frame or background");
       return;
     }
 
     setIsComposing(true);
     setComposeResult(null);
+    addOperatorLog("Regenerating final result");
 
     try {
       const response = await fetch("/api/results/compose", {
@@ -207,12 +242,16 @@ export default function Admin() {
       if (response.ok && payload.ok && payload.finalImageUrl && payload.printImageUrl) {
         setFinalImageUrl(payload.finalImageUrl);
         setPrintImageUrl(payload.printImageUrl);
+        addOperatorLog("Final result regenerated");
+      } else {
+        addOperatorLog("Final result regeneration failed");
       }
     } catch {
       setComposeResult({
         ok: false,
         error: "Compose request failed",
       });
+      addOperatorLog("Final result regeneration failed: request error");
     } finally {
       setIsComposing(false);
     }
@@ -223,6 +262,7 @@ export default function Admin() {
 
     setIsTestingCamera(true);
     setCameraResult(null);
+    addOperatorLog("Camera capture test started");
 
     try {
       const response = await fetch("/api/camera/capture", {
@@ -237,15 +277,46 @@ export default function Admin() {
       const payload = (await response.json()) as CaptureResult;
 
       setCameraResult(payload);
+      addOperatorLog(payload.ok ? "Camera capture test succeeded" : "Camera capture test failed");
     } catch {
       setCameraResult({
         ok: false,
         error: "Camera capture request failed",
       });
+      addOperatorLog("Camera capture test failed: request error");
     } finally {
       setIsTestingCamera(false);
     }
   }
+
+  function clearCurrentSession() {
+    resetSession();
+    setCameraResult(null);
+    setComposeResult(null);
+    setPrintTemplateResult(null);
+    setPrintResult(null);
+    addOperatorLog("Current session cleared");
+  }
+
+  function clearFinalOutput() {
+    clearFinalResult();
+    setComposeResult(null);
+    setPrintTemplateResult(null);
+    setPrintResult(null);
+    addOperatorLog("Final result and print image cleared from session");
+  }
+
+  const lastCameraError = cameraResult?.ok === false ? cameraResult.error : undefined;
+  const lastComposeError = composeResult?.ok === false ? composeResult.error : undefined;
+  const lastPrintError =
+    printResult?.ok === false
+      ? printResult.error
+      : printTemplateResult?.ok === false
+        ? printTemplateResult.error
+        : undefined;
+  const resultsFolderInstruction = session?.sessionId
+    ? `Open this folder in File Explorer: public\\results\\${session.sessionId.replace(/[^a-zA-Z0-9_-]/g, "")}`
+    : "No active session. Results are stored under public\\results\\{sessionId}.";
 
   return (
     <main className="admin-page">
@@ -296,6 +367,29 @@ export default function Admin() {
       </section>
 
       <section className="admin-card">
+        <h2>Operator Status</h2>
+        <div className="admin-grid">
+          <Field label="Last Camera Capture Error" value={lastCameraError} />
+          <Field label="Last Compose Error" value={lastComposeError} />
+          <Field label="Last Print Error" value={lastPrintError} />
+        </div>
+        <div className="admin-result">
+          <strong>Status / Error Log</strong>
+          {operatorLog.map((entry) => (
+            <p key={`${entry.timestamp}-${entry.message}`}>
+              {entry.timestamp}: {entry.message}
+            </p>
+          ))}
+        </div>
+        {showResultsFolderInstruction && (
+          <div className="admin-result">
+            <p>{resultsFolderInstruction}</p>
+            <p>Windows shortcut: open File Explorer, paste the path, then press Enter.</p>
+          </div>
+        )}
+      </section>
+
+      <section className="admin-card">
         <h2>Camera Capture</h2>
         <div className="admin-grid">
           <Field label="Camera Mode" value={cameraMode} />
@@ -343,17 +437,60 @@ export default function Admin() {
       <section className="admin-card">
         <h2>Session Controls</h2>
         <div className="admin-action-row">
-          <button type="button" className="admin-action" onClick={() => setPaymentStatus("confirmed")}>
+          <button
+            type="button"
+            className="admin-action"
+            onClick={() => {
+              setPaymentStatus("confirmed");
+              addOperatorLog("Payment marked confirmed");
+            }}
+          >
             Confirm Payment
           </button>
-          <button type="button" className="admin-action" onClick={() => setPaymentStatus("failed")}>
+          <button
+            type="button"
+            className="admin-action"
+            onClick={() => {
+              setPaymentStatus("failed");
+              addOperatorLog("Payment marked failed");
+            }}
+          >
             Fail Payment
           </button>
-          <button type="button" className="admin-action admin-action--muted" onClick={resetSession}>
-            Reset Session
+          <button
+            type="button"
+            className="admin-action admin-action--muted"
+            onClick={clearCurrentSession}
+          >
+            Clear Current Session
           </button>
-          <button type="button" className="admin-action admin-action--muted" onClick={clearCapturedPhotos}>
+          <button
+            type="button"
+            className="admin-action admin-action--muted"
+            onClick={clearFinalOutput}
+            disabled={!session?.finalImageUrl && !session?.printImageUrl}
+          >
+            Clear Final Result
+          </button>
+          <button
+            type="button"
+            className="admin-action admin-action--muted"
+            onClick={() => {
+              clearCapturedPhotos();
+              addOperatorLog("Captured photos cleared");
+            }}
+          >
             Clear Captured Photos
+          </button>
+          <button
+            type="button"
+            className="admin-action admin-action--muted"
+            onClick={() => {
+              setShowResultsFolderInstruction((current) => !current);
+              addOperatorLog("Results folder instruction toggled");
+            }}
+          >
+            Open Results Folder Instruction
           </button>
           <button
             type="button"
@@ -361,7 +498,7 @@ export default function Admin() {
             onClick={composeResultFile}
             disabled={!session?.sessionId || isComposing}
           >
-            {isComposing ? "Composing Result..." : "Compose Result"}
+            {isComposing ? "Regenerating Final..." : "Regenerate Final Result"}
           </button>
           <button
             type="button"
@@ -369,7 +506,7 @@ export default function Admin() {
             onClick={generatePrintFile}
             disabled={!session?.sessionId || isGeneratingPrint}
           >
-            {isGeneratingPrint ? "Generating Print File..." : "Generate Print File"}
+            {isGeneratingPrint ? "Regenerating Print..." : "Regenerate Print File"}
           </button>
           <button
             type="button"
