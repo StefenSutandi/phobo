@@ -60,6 +60,15 @@ export default async function HardwareCheck() {
         <p>Configured public base URL: {env.publicBaseUrl}</p>
       </section>
 
+      <section className="admin-card">
+        <h2>Camera Capture Adapter</h2>
+        {env.cameraMode === "mock" && <span className="mock-badge">MOCK</span>}
+        <p>Camera mode: {env.cameraMode}</p>
+        <p>Capture directory: {env.cameraCaptureDir}</p>
+        <p>Command configured: {env.cameraCommandConfigured ? "yes" : "no"}</p>
+        <p>Timeout: {env.cameraTimeoutMs}ms</p>
+      </section>
+
       <BrowserDiagnostics />
 
       <section className="admin-card">

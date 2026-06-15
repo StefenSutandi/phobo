@@ -10,6 +10,9 @@ export function GET() {
     timestamp: new Date().toISOString(),
     env: {
       cameraMode: env.cameraMode,
+      cameraCaptureDir: env.cameraCaptureDir,
+      cameraCommandConfigured: env.cameraCommandConfigured,
+      cameraTimeoutMs: env.cameraTimeoutMs,
       printerMode: env.printerMode,
       storageMode: env.storageMode,
       driveEnabled: env.driveEnabled,

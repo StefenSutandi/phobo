@@ -12,19 +12,11 @@ import { useSessionStore } from "@/lib/session/session-store";
 
 const backgrounds = Array.from({ length: 16 }, (_, index) => `background-${index + 1}`);
 
-function createMockPhotoUrl(photoNumber: number) {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="320" height="420" viewBox="0 0 320 420">
-      <rect width="320" height="420" fill="#d9d9d9"/>
-      <rect x="28" y="28" width="264" height="264" rx="18" fill="#535a64"/>
-      <circle cx="160" cy="138" r="54" fill="#ffffff"/>
-      <rect x="86" y="214" width="148" height="50" rx="25" fill="#ffffff"/>
-      <text x="160" y="350" fill="#404a4b" font-family="Arial" font-size="28" text-anchor="middle">MOCK ${photoNumber}</text>
-    </svg>
-  `;
-
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
+type CaptureResponse = {
+  ok: boolean;
+  imageUrl?: string;
+  error?: string;
+};
 
 export default function Camera() {
   const router = useRouter();
@@ -35,6 +27,7 @@ export default function Camera() {
     addCapturedPhoto,
   } = useSessionStore();
   const [message, setMessage] = useState("");
+  const [isCapturing, setIsCapturing] = useState(false);
 
   useEffect(() => {
     if (!hasHydrated) {
@@ -51,15 +44,39 @@ export default function Camera() {
     }
   }, [hasHydrated, router, selectBackground, session?.selectedBackgroundId, session?.selectedFrameId]);
 
-  function shoot() {
-    if (!session?.selectedBackgroundId) {
+  async function shoot() {
+    if (!session?.sessionId || !session.selectedBackgroundId) {
       setMessage("PILIH BACKGROUND DULU");
       return;
     }
 
-    const nextPhotoNumber = (session.capturedPhotos.length ?? 0) + 1;
-    addCapturedPhoto(createMockPhotoUrl(nextPhotoNumber));
-    router.push("/preview");
+    setIsCapturing(true);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/camera/capture", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: session.sessionId,
+        }),
+      });
+      const payload = (await response.json()) as CaptureResponse;
+
+      if (!response.ok || !payload.ok || !payload.imageUrl) {
+        setMessage(payload.error || "CAMERA CAPTURE GAGAL");
+        return;
+      }
+
+      addCapturedPhoto(payload.imageUrl);
+      router.push("/preview");
+    } catch {
+      setMessage("CAMERA CAPTURE GAGAL");
+    } finally {
+      setIsCapturing(false);
+    }
   }
 
   return (
@@ -74,7 +91,7 @@ export default function Camera() {
         }}
       />
       <KioskButton onClick={shoot} className="camera-shoot">
-        SHOOT
+        {isCapturing ? "..." : "SHOOT"}
       </KioskButton>
       {message && <p className="kiosk-message camera-message">{message}</p>}
     </KioskStage>

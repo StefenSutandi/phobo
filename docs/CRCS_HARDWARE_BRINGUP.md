@@ -61,6 +61,43 @@ Do not connect the Canon 700D to the Phobo app as a real capture source yet. Thi
 | Capture latency notes |  | Time from trigger to file available |
 | Failure notes |  | USB dropouts, battery, focus, permissions |
 
+## Future Canon 700D command-mode validation
+
+Real validation is pending until the Canon 700D and capture command-line tool are available. Keep `PHOBO_CAMERA_MODE=mock` if the command fails.
+
+Set `.env.local`:
+
+```txt
+PHOBO_CAMERA_MODE=command
+PHOBO_CAMERA_CAPTURE_DIR=C:\PhoboCameraCaptures
+PHOBO_CAMERA_COMMAND_PATH=C:\Program Files\digiCamControl\CameraControlCmd.exe
+PHOBO_CAMERA_COMMAND_ARGS_TEMPLATE=/filename "{output}" /capture
+```
+
+Start app:
+
+```bash
+npm run dev
+```
+
+Open:
+
+```txt
+http://localhost:3000/admin
+```
+
+Click:
+
+```txt
+Test Camera Capture
+```
+
+Expected:
+
+- Captured image is saved under `public/results/{sessionId}/captures/`.
+- The image link opens in the browser.
+- If command capture fails, switch back to `PHOBO_CAMERA_MODE=mock` until the Canon 700D and capture tool can be validated manually.
+
 ## Canon SELPHY CP1500 Checklist
 
 Do not connect the SELPHY to the Phobo print flow as a real printer yet. This section is only for OS print capability.

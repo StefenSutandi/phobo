@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useSessionStore } from "@/lib/session/session-store";
 
 function Field({ label, value }: { label: string; value?: string | number }) {
@@ -13,6 +14,21 @@ function Field({ label, value }: { label: string; value?: string | number }) {
   );
 }
 
+type DiagnosticsResponse = {
+  env?: {
+    cameraMode?: string;
+    cameraCommandConfigured?: boolean;
+  };
+};
+
+type CaptureResult = {
+  ok: boolean;
+  mode?: "mock" | "command";
+  imageUrl?: string;
+  localFilePath?: string;
+  error?: string;
+};
+
 export default function Admin() {
   const router = useRouter();
   const {
@@ -22,6 +38,26 @@ export default function Admin() {
     clearCapturedPhotos,
     setPrintStatus,
   } = useSessionStore();
+  const [cameraMode, setCameraMode] = useState("mock");
+  const [cameraCommandConfigured, setCameraCommandConfigured] = useState(false);
+  const [cameraResult, setCameraResult] = useState<CaptureResult | null>(null);
+  const [isTestingCamera, setIsTestingCamera] = useState(false);
+
+  useEffect(() => {
+    async function loadDiagnostics() {
+      try {
+        const response = await fetch("/api/diagnostics");
+        const payload = (await response.json()) as DiagnosticsResponse;
+
+        setCameraMode(payload.env?.cameraMode || "mock");
+        setCameraCommandConfigured(Boolean(payload.env?.cameraCommandConfigured));
+      } catch {
+        setCameraMode("unknown");
+      }
+    }
+
+    loadDiagnostics();
+  }, []);
 
   async function mockPrintResult() {
     if (!session?.sessionId || !session.finalImageUrl) {
@@ -46,6 +82,35 @@ export default function Admin() {
       setPrintStatus(response.ok && payload.ok ? "printed" : "failed");
     } catch {
       setPrintStatus("failed");
+    }
+  }
+
+  async function testCameraCapture() {
+    const testSessionId = session?.sessionId || `admin-test-${Date.now()}`;
+
+    setIsTestingCamera(true);
+    setCameraResult(null);
+
+    try {
+      const response = await fetch("/api/camera/capture", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: testSessionId,
+        }),
+      });
+      const payload = (await response.json()) as CaptureResult;
+
+      setCameraResult(payload);
+    } catch {
+      setCameraResult({
+        ok: false,
+        error: "Camera capture request failed",
+      });
+    } finally {
+      setIsTestingCamera(false);
     }
   }
 
@@ -82,6 +147,46 @@ export default function Admin() {
               Open saved result
             </a>
           </p>
+        )}
+      </section>
+
+      <section className="admin-card">
+        <h2>Camera Capture</h2>
+        <div className="admin-grid">
+          <Field label="Camera Mode" value={cameraMode} />
+          <Field
+            label="Command Configured"
+            value={cameraCommandConfigured ? "yes" : "no"}
+          />
+        </div>
+        <div className="admin-action-row">
+          <button
+            type="button"
+            className="admin-action"
+            onClick={testCameraCapture}
+            disabled={isTestingCamera}
+          >
+            {isTestingCamera ? "Testing Camera..." : "Test Camera Capture"}
+          </button>
+          {cameraResult?.ok && cameraResult.imageUrl && (
+            <a
+              href={cameraResult.imageUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="admin-action"
+            >
+              Open Captured Image
+            </a>
+          )}
+        </div>
+        {cameraResult && (
+          <div className="admin-result">
+            <p>Last capture result: {cameraResult.ok ? "success" : "failed"}</p>
+            <p>Mode: {cameraResult.mode || cameraMode}</p>
+            {cameraResult.imageUrl && <p>Image URL: {cameraResult.imageUrl}</p>}
+            {cameraResult.localFilePath && <p>Local file: {cameraResult.localFilePath}</p>}
+            {cameraResult.error && <p>Last capture error: {cameraResult.error}</p>}
+          </div>
         )}
       </section>
 
