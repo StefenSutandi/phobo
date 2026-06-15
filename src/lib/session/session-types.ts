@@ -10,6 +10,7 @@ export type KioskSession = {
   selectedBackgroundId?: string;
   capturedPhotos: string[];
   finalImageUrl?: string;
+  printImageUrl?: string;
   driveUrl?: string;
   printStatus: PrintStatus;
   createdAt: string;

@@ -25,6 +25,7 @@ type SessionContextValue = {
   addCapturedPhoto: (photoUrl: string) => void;
   clearCapturedPhotos: () => void;
   setFinalImageUrl: (url: string) => void;
+  setPrintImageUrl: (url: string) => void;
   setDriveUrl: (url: string) => void;
   setPrintStatus: (status: PrintStatus) => void;
 };
@@ -111,6 +112,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         selectedBackgroundId: undefined,
         capturedPhotos: [],
         finalImageUrl: undefined,
+        printImageUrl: undefined,
         driveUrl: undefined,
         printStatus: "idle",
       })),
@@ -149,6 +151,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       updateSession(current, (activeSession) => ({
         ...activeSession,
         capturedPhotos: [...activeSession.capturedPhotos, photoUrl],
+        printImageUrl: undefined,
       })),
     );
   }, []);
@@ -159,6 +162,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         ...activeSession,
         capturedPhotos: [],
         finalImageUrl: undefined,
+        printImageUrl: undefined,
       })),
     );
   }, []);
@@ -168,6 +172,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       updateSession(current, (activeSession) => ({
         ...activeSession,
         finalImageUrl: url,
+        printImageUrl: undefined,
+      })),
+    );
+  }, []);
+
+  const setPrintImageUrl = useCallback((url: string) => {
+    setSession((current) =>
+      updateSession(current, (activeSession) => ({
+        ...activeSession,
+        printImageUrl: url,
       })),
     );
   }, []);
@@ -203,6 +217,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       addCapturedPhoto,
       clearCapturedPhotos,
       setFinalImageUrl,
+      setPrintImageUrl,
       setDriveUrl,
       setPrintStatus,
     }),
@@ -218,6 +233,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       addCapturedPhoto,
       clearCapturedPhotos,
       setFinalImageUrl,
+      setPrintImageUrl,
       setDriveUrl,
       setPrintStatus,
     ],

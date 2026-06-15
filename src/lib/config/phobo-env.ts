@@ -3,6 +3,8 @@ export function getPhoboEnv() {
     process.env.PHOBO_CAMERA_CAPTURE_TIMEOUT_MS || "15000",
     10,
   );
+  const printWidthPx = Number.parseInt(process.env.PHOBO_PRINT_WIDTH_PX || "1748", 10);
+  const printHeightPx = Number.parseInt(process.env.PHOBO_PRINT_HEIGHT_PX || "1181", 10);
 
   return {
     cameraMode: process.env.PHOBO_CAMERA_MODE || "mock",
@@ -10,6 +12,11 @@ export function getPhoboEnv() {
     cameraCommandConfigured: Boolean(process.env.PHOBO_CAMERA_COMMAND_PATH),
     cameraTimeoutMs: Number.isFinite(cameraTimeoutMs) ? cameraTimeoutMs : 15000,
     printerMode: process.env.PHOBO_PRINTER_MODE || "mock",
+    printerNameConfigured: Boolean(process.env.PHOBO_PRINTER_NAME),
+    printCommandMode: process.env.PHOBO_PRINT_COMMAND_MODE || "powershell-printto",
+    printPaper: process.env.PHOBO_PRINT_PAPER || "4R",
+    printWidthPx: Number.isFinite(printWidthPx) ? printWidthPx : 1748,
+    printHeightPx: Number.isFinite(printHeightPx) ? printHeightPx : 1181,
     storageMode: process.env.PHOBO_STORAGE_MODE || "local",
     driveEnabled: process.env.PHOBO_DRIVE_ENABLED === "true",
     resultsDir: process.env.PHOBO_RESULTS_DIR || "public/results",

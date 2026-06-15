@@ -18,6 +18,8 @@ type DiagnosticsResponse = {
   env?: {
     cameraMode?: string;
     cameraCommandConfigured?: boolean;
+    printerMode?: string;
+    printerNameConfigured?: boolean;
   };
 };
 
@@ -29,6 +31,21 @@ type CaptureResult = {
   error?: string;
 };
 
+type PrintTemplateResult = {
+  ok: boolean;
+  printUrl?: string;
+  localFilePath?: string;
+  error?: string;
+};
+
+type PrintResult = {
+  ok: boolean;
+  mode?: "mock" | "windows";
+  message?: string;
+  jobId?: string;
+  error?: string;
+};
+
 export default function Admin() {
   const router = useRouter();
   const {
@@ -36,12 +53,19 @@ export default function Admin() {
     setPaymentStatus,
     resetSession,
     clearCapturedPhotos,
+    setPrintImageUrl,
     setPrintStatus,
   } = useSessionStore();
   const [cameraMode, setCameraMode] = useState("mock");
   const [cameraCommandConfigured, setCameraCommandConfigured] = useState(false);
+  const [printerMode, setPrinterMode] = useState("mock");
+  const [printerNameConfigured, setPrinterNameConfigured] = useState(false);
   const [cameraResult, setCameraResult] = useState<CaptureResult | null>(null);
+  const [printTemplateResult, setPrintTemplateResult] = useState<PrintTemplateResult | null>(null);
+  const [printResult, setPrintResult] = useState<PrintResult | null>(null);
   const [isTestingCamera, setIsTestingCamera] = useState(false);
+  const [isGeneratingPrint, setIsGeneratingPrint] = useState(false);
+  const [isTestingPrint, setIsTestingPrint] = useState(false);
 
   useEffect(() => {
     async function loadDiagnostics() {
@@ -51,8 +75,11 @@ export default function Admin() {
 
         setCameraMode(payload.env?.cameraMode || "mock");
         setCameraCommandConfigured(Boolean(payload.env?.cameraCommandConfigured));
+        setPrinterMode(payload.env?.printerMode || "mock");
+        setPrinterNameConfigured(Boolean(payload.env?.printerNameConfigured));
       } catch {
         setCameraMode("unknown");
+        setPrinterMode("unknown");
       }
     }
 
@@ -60,7 +87,7 @@ export default function Admin() {
   }, []);
 
   async function mockPrintResult() {
-    if (!session?.sessionId || !session.finalImageUrl) {
+    if (!session?.sessionId || !session.printImageUrl) {
       return;
     }
 
@@ -74,14 +101,62 @@ export default function Admin() {
         },
         body: JSON.stringify({
           sessionId: session.sessionId,
-          resultUrl: session.finalImageUrl,
+          printUrl: session.printImageUrl,
         }),
       });
       const payload = (await response.json()) as { ok?: boolean };
 
+      setPrintResult(payload as PrintResult);
       setPrintStatus(response.ok && payload.ok ? "printed" : "failed");
     } catch {
+      setPrintResult({
+        ok: false,
+        error: "Print request failed",
+      });
       setPrintStatus("failed");
+    }
+  }
+
+  async function generatePrintFile() {
+    if (!session?.sessionId) {
+      setPrintTemplateResult({
+        ok: false,
+        error: "No active session",
+      });
+      return;
+    }
+
+    setIsGeneratingPrint(true);
+    setPrintTemplateResult(null);
+
+    try {
+      const response = await fetch("/api/results/print-template", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: session.sessionId,
+          finalImageUrl: session.finalImageUrl,
+          capturedPhotos: session.capturedPhotos,
+          selectedFrameId: session.selectedFrameId,
+          selectedBackgroundId: session.selectedBackgroundId,
+        }),
+      });
+      const payload = (await response.json()) as PrintTemplateResult;
+
+      setPrintTemplateResult(payload);
+
+      if (response.ok && payload.ok && payload.printUrl) {
+        setPrintImageUrl(payload.printUrl);
+      }
+    } catch {
+      setPrintTemplateResult({
+        ok: false,
+        error: "Print file request failed",
+      });
+    } finally {
+      setIsGeneratingPrint(false);
     }
   }
 
@@ -136,6 +211,7 @@ export default function Admin() {
           <Field label="Selected Background" value={session?.selectedBackgroundId} />
           <Field label="Captured Photo Count" value={session?.capturedPhotos.length ?? 0} />
           <Field label="Final Image URL" value={session?.finalImageUrl} />
+          <Field label="Print Image URL" value={session?.printImageUrl} />
           <Field label="Drive URL" value={session?.driveUrl} />
           <Field label="Print Status" value={session?.printStatus} />
           <Field label="Created At" value={session?.createdAt} />
@@ -157,6 +233,11 @@ export default function Admin() {
           <Field
             label="Command Configured"
             value={cameraCommandConfigured ? "yes" : "no"}
+          />
+          <Field label="Printer Mode" value={printerMode} />
+          <Field
+            label="Printer Configured"
+            value={printerNameConfigured ? "yes" : "no"}
           />
         </div>
         <div className="admin-action-row">
@@ -208,10 +289,35 @@ export default function Admin() {
           <button
             type="button"
             className="admin-action"
-            onClick={mockPrintResult}
-            disabled={!session?.finalImageUrl}
+            onClick={generatePrintFile}
+            disabled={!session?.sessionId || isGeneratingPrint}
           >
-            Mock Print Result
+            {isGeneratingPrint ? "Generating Print File..." : "Generate Print File"}
+          </button>
+          <button
+            type="button"
+            className="admin-action"
+            onClick={() => {
+              if (session?.printImageUrl) {
+                window.open(session.printImageUrl, "_blank", "noopener,noreferrer");
+              }
+            }}
+            disabled={!session?.printImageUrl}
+          >
+            Open Print File
+          </button>
+          <button
+            type="button"
+            className="admin-action"
+            onClick={async () => {
+              setIsTestingPrint(true);
+              setPrintResult(null);
+              await mockPrintResult();
+              setIsTestingPrint(false);
+            }}
+            disabled={!session?.printImageUrl || isTestingPrint}
+          >
+            {isTestingPrint ? "Testing Print..." : "Test Print"}
           </button>
           <button
             type="button"
@@ -226,6 +332,23 @@ export default function Admin() {
             Open Result
           </button>
         </div>
+        {printTemplateResult && (
+          <div className="admin-result">
+            <p>Print file result: {printTemplateResult.ok ? "success" : "failed"}</p>
+            {printTemplateResult.printUrl && <p>Print URL: {printTemplateResult.printUrl}</p>}
+            {printTemplateResult.localFilePath && <p>Local file: {printTemplateResult.localFilePath}</p>}
+            {printTemplateResult.error && <p>Error: {printTemplateResult.error}</p>}
+          </div>
+        )}
+        {printResult && (
+          <div className="admin-result">
+            <p>Print result: {printResult.ok ? "success" : "failed"}</p>
+            <p>Mode: {printResult.mode || printerMode}</p>
+            {printResult.message && <p>Message: {printResult.message}</p>}
+            {printResult.jobId && <p>Job ID: {printResult.jobId}</p>}
+            {printResult.error && <p>Error: {printResult.error}</p>}
+          </div>
+        )}
       </section>
 
       <section className="admin-card">

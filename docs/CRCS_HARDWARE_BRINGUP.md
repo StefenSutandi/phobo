@@ -1,6 +1,6 @@
 # CRCS Hardware Bring-Up Checklist
 
-This document is for the first on-site Phobo hardware test at CRCS ITB. The current app is still mock-only. Use this checklist to identify what the Mini PC, Android TV, IR touch panel, Canon 700D, and Canon SELPHY CP1500 can do before any real hardware integration is added to the software.
+This document is for the first on-site Phobo hardware test at CRCS ITB. The current app uses mock-safe defaults with env-gated camera and printer adapter foundations. Use this checklist to identify what the Mini PC, Android TV, IR touch panel, Canon 700D, and Canon SELPHY CP1500 can do before real hardware modes are enabled.
 
 ## Hardware Inventory
 
@@ -14,6 +14,13 @@ This document is for the first on-site Phobo hardware test at CRCS ITB. The curr
 | Printer | Canon SELPHY CP1500 | [ ] |  |
 | Network | WiFi or Ethernet | [ ] |  |
 | Cables | HDMI, USB camera, USB touch, power | [ ] |  |
+
+## Current Site Findings
+
+- Android TV and IR touch panel work.
+- SELPHY CP1500 can print manually from Windows.
+- Mini PC has no Wi-Fi/Bluetooth; LAN is OK for app/network access.
+- Canon 700D command capture validation is deferred until the camera and capture tool are available.
 
 ## Mini PC Checklist
 
@@ -100,7 +107,7 @@ Expected:
 
 ## Canon SELPHY CP1500 Checklist
 
-Do not connect the SELPHY to the Phobo print flow as a real printer yet. This section is only for OS print capability.
+SELPHY CP1500 manual printing from Windows is confirmed. Keep `PHOBO_PRINTER_MODE=mock` until the env-gated Windows print adapter is validated on the Mini PC.
 
 | Check | Result | Notes |
 | --- | --- | --- |
@@ -112,6 +119,35 @@ Do not connect the SELPHY to the Phobo print flow as a real printer yet. This se
 | Paper size/output size confirmed | [ ] Pass / [ ] Fail | Record size/media |
 | Print latency notes |  | Time from print command to finished print |
 | Failure notes |  | Driver, spooler, media, WiFi, USB, power |
+
+## 4R Print Output Pipeline
+
+- Paper target: 4R / postcard / 4x6.
+- App print output: `public/results/{sessionId}/final_print.jpg`.
+- Image size: `1748 x 1181 px`.
+- Orientation: landscape.
+- Template includes safe margins because borderless SELPHY printing may crop edges.
+- The app generates `final_print.jpg` before sending anything to the printer adapter.
+
+Default `.env.local` print mode should stay mock:
+
+```txt
+PHOBO_PRINTER_MODE=mock
+PHOBO_PRINTER_NAME=SELPHY CP1500
+PHOBO_PRINT_COMMAND_MODE=powershell-printto
+PHOBO_PRINT_PAPER=4R
+PHOBO_PRINT_WIDTH_PX=1748
+PHOBO_PRINT_HEIGHT_PX=1181
+```
+
+Future Windows print adapter validation:
+
+1. Keep manual SELPHY printing working from Windows first.
+2. Generate a print file from `/result` or `/admin`.
+3. Confirm `public/results/{sessionId}/final_print.jpg` opens in the browser.
+4. Set `PHOBO_PRINTER_MODE=windows` only for controlled validation.
+5. Use `/admin` -> `Test Print`.
+6. If command printing fails or opens OS dialogs, switch back to `PHOBO_PRINTER_MODE=mock` and record the Windows printer behavior.
 
 ## Network/Internet Checklist
 

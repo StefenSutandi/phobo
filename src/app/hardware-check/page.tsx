@@ -69,6 +69,16 @@ export default async function HardwareCheck() {
         <p>Timeout: {env.cameraTimeoutMs}ms</p>
       </section>
 
+      <section className="admin-card">
+        <h2>Print Adapter</h2>
+        {env.printerMode === "mock" && <span className="mock-badge">MOCK</span>}
+        <p>Printer mode: {env.printerMode}</p>
+        <p>Printer configured: {env.printerNameConfigured ? "yes" : "no"}</p>
+        <p>Command mode: {env.printCommandMode}</p>
+        <p>Paper: {env.printPaper}</p>
+        <p>Print target: {env.printWidthPx} x {env.printHeightPx}px landscape</p>
+      </section>
+
       <BrowserDiagnostics />
 
       <section className="admin-card">
