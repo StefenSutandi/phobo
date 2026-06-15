@@ -2,7 +2,15 @@
 
 Phobo is a Next.js and TypeScript photobox kiosk MVP for a Mini PC controller, Android TV + infrared touch screen panel, Canon 700D camera, and Canon SELPHY CP1500 printer.
 
-Current status: the app is mock-only. The kiosk UI, session flow, local result storage, QR sharing, and mock print flow are implemented. Real Canon capture, real SELPHY printing, Google Drive upload, and payment gateway integration are not implemented yet.
+Current status: the app has mock-safe defaults plus env-gated foundations for camera capture and Windows printing. The kiosk UI, session flow, local result storage, QR sharing, photo compositing, MVP green screen processing, 4R print file generation, and mock print flow are implemented. Real Canon capture, real SELPHY printing, Google Drive upload, and payment gateway integration are not enabled by default.
+
+## Documentation
+
+- [Windows Kiosk Deployment](docs/WINDOWS_KIOSK_DEPLOYMENT.md)
+- [Operator Guide](docs/OPERATOR_GUIDE.md)
+- [Maintenance Guide](docs/MAINTENANCE_GUIDE.md)
+- [Handover Video Script](docs/HANDOVER_VIDEO_SCRIPT.md)
+- [CRCS Hardware Bring-Up](docs/CRCS_HARDWARE_BRINGUP.md)
 
 ## Development Run
 
@@ -102,12 +110,12 @@ All device status values are mock unless a future real adapter mode is explicitl
 8. Review mock captured photo on `/preview`.
 9. Tap `NEXT`.
 10. Scan the QR on `/result` or use the small download link.
-11. Use `MOCK PRINT` from `/result` or `/admin` to test the mock print flow.
+11. Use `GENERATE PRINT FILE` / `PRINT / MOCK PRINT` from `/result` or Admin controls.
 
 Generated result files are saved under:
 
 ```text
-public/results/{sessionId}/final.{ext}
+public/results/{sessionId}/
 ```
 
 Generated result files are ignored by Git.
