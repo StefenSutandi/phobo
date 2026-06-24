@@ -6,6 +6,8 @@ export type ChromaKeyOptions = {
   greenMin?: number;
   greenTolerance?: number;
   greenDominance?: number;
+  spillReduction?: number;
+  edgeSoftness?: number;
 };
 
 export type ChromaKeyBackground = {
@@ -70,8 +72,12 @@ export async function applyChromaKey(
   const metadata = await sharp(photoBuffer).metadata();
   const width = metadata.width ?? 1;
   const height = metadata.height ?? 1;
-  const greenMin = clampByte(options.greenMin ?? 110);
-  const greenTolerance = clampByte(options.greenTolerance ?? 45);
+  const greenMin = clampByte(options.greenMin ?? 90);
+  const greenTolerance = clampByte(options.greenTolerance ?? 35);
+  // TODO: implement advanced real tuning for spillReduction and edgeSoftness
+  const spillReduction = Math.min(100, Math.max(0, options.spillReduction ?? 0));
+  const edgeSoftness = Math.min(20, Math.max(0, options.edgeSoftness ?? 0));
+  
   const greenDominance = clampByte(options.greenDominance ?? 35);
   const raw = await sharp(photoBuffer)
     .rotate()

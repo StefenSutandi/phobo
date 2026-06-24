@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        mode: process.env.PHOBO_CAMERA_MODE === "command" ? "command" : "mock",
+        mode: process.env.PHOBO_CAMERA_MODE === "command" ? "command" : process.env.PHOBO_CAMERA_MODE === "eos-watch" ? "eos-watch" : "mock",
         error: "Request body must be valid JSON",
       },
       { status: 400 },
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        mode: process.env.PHOBO_CAMERA_MODE === "command" ? "command" : "mock",
+        mode: process.env.PHOBO_CAMERA_MODE === "command" ? "command" : process.env.PHOBO_CAMERA_MODE === "eos-watch" ? "eos-watch" : "mock",
         error: "sessionId is required",
       },
       { status: 400 },

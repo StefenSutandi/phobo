@@ -1,13 +1,13 @@
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
-import { access, copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { access, copyFile, mkdir, readdir, stat } from "node:fs/promises";
 import { sanitizeSessionId } from "@/lib/results/result-storage";
 
 const execFileAsync = promisify(execFile);
 
-export type CameraMode = "mock" | "command";
+export type CameraMode = "mock" | "command" | "eos-watch";
 
 export interface CameraStatus {
   connected: boolean;
@@ -28,9 +28,11 @@ export type CapturePhotoResult = {
   localFilePath?: string;
   error?: string;
   rawOutput?: string;
+  sourceFilePath?: string;
 };
 
 function getCameraMode(): CameraMode {
+  if (process.env.PHOBO_CAMERA_MODE === "eos-watch") return "eos-watch";
   return process.env.PHOBO_CAMERA_MODE === "command" ? "command" : "mock";
 }
 
@@ -128,6 +130,85 @@ export async function capturePhoto({
     };
   }
 
+  if (mode === "eos-watch") {
+    const watchDir = process.env.PHOBO_EOS_WATCH_DIR;
+    const allowedExtensions = (process.env.PHOBO_EOS_ALLOWED_EXTENSIONS || ".jpg,.jpeg,.png").split(",").map(ext => ext.trim().toLowerCase());
+    const timeoutMs = Number.parseInt(process.env.PHOBO_CAMERA_CAPTURE_TIMEOUT_MS || "20000", 10);
+    const timeoutToUse = Number.isFinite(timeoutMs) ? timeoutMs : 20000;
+
+    if (!watchDir) {
+      return { ok: false, mode, error: "PHOBO_EOS_WATCH_DIR is required when PHOBO_CAMERA_MODE=eos-watch" };
+    }
+
+    if (!(await fileExists(watchDir))) {
+      return { ok: false, mode, error: "EOS watch folder does not exist" };
+    }
+
+    const captureStartTime = Date.now();
+    const endTime = captureStartTime + timeoutToUse;
+    const safeFileName = sanitizeFileName(fileName);
+    const publicOutputDir = path.join(
+      process.cwd(),
+      "public",
+      "results",
+      safeSessionId,
+      "captures",
+    );
+
+    let foundFilePath: string | null = null;
+    let foundExt = "";
+
+    try {
+      await mkdir(publicOutputDir, { recursive: true });
+
+      while (Date.now() < endTime) {
+        const files = await readdir(watchDir);
+        for (const file of files) {
+          const ext = path.extname(file).toLowerCase();
+          if (allowedExtensions.includes(ext)) {
+            const filePath = path.join(watchDir, file);
+            try {
+              const stats = await stat(filePath);
+              if (stats.isFile() && stats.mtimeMs >= captureStartTime) {
+                const initialSize = stats.size;
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                const newStats = await stat(filePath);
+                if (newStats.size === initialSize && initialSize > 0) {
+                  foundFilePath = filePath;
+                  foundExt = ext;
+                  break;
+                }
+              }
+            } catch (err) {
+              // ignore access errors
+            }
+          }
+        }
+        if (foundFilePath) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      if (!foundFilePath) {
+        return { ok: false, mode, error: `No new file detected before timeout (${timeoutToUse}ms)` };
+      }
+
+      const publicOutputPath = path.join(publicOutputDir, `${safeFileName}${foundExt}`);
+      await copyFile(foundFilePath, publicOutputPath);
+
+      return {
+        ok: true,
+        mode,
+        imageUrl: `/results/${safeSessionId}/captures/${safeFileName}${foundExt}`,
+        localFilePath: publicOutputPath,
+        sourceFilePath: foundFilePath,
+      };
+    } catch (err) {
+       return { ok: false, mode, error: "File copy failed or directory access error", rawOutput: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
   const captureDir = process.env.PHOBO_CAMERA_CAPTURE_DIR;
   const commandPath = process.env.PHOBO_CAMERA_COMMAND_PATH;
   const argsTemplate =
@@ -222,8 +303,8 @@ export class CameraAdapter {
     const mode = getCameraMode();
 
     return {
-      connected: mode === "mock" || Boolean(process.env.PHOBO_CAMERA_COMMAND_PATH),
-      model: mode === "mock" ? "Mock Canon 700D" : "Canon command adapter",
+      connected: mode === "mock" || mode === "eos-watch" || Boolean(process.env.PHOBO_CAMERA_COMMAND_PATH),
+      model: mode === "mock" ? "Mock Canon 600D" : mode === "eos-watch" ? "Canon 600D (EOS Utility)" : "Canon 600D (command)",
       batteryLevel: mode === "mock" ? 100 : undefined,
       lastError:
         mode === "command" && !process.env.PHOBO_CAMERA_COMMAND_PATH

@@ -19,6 +19,8 @@ type ComposeOptions = {
   applyChromaKey?: boolean;
   greenMin?: number;
   greenTolerance?: number;
+  spillReduction?: number;
+  edgeSoftness?: number;
 };
 
 function parseOptions(options: unknown): ComposeOptions {
@@ -34,6 +36,10 @@ function parseOptions(options: unknown): ComposeOptions {
     greenMin: typeof source.greenMin === "number" ? source.greenMin : undefined,
     greenTolerance:
       typeof source.greenTolerance === "number" ? source.greenTolerance : undefined,
+    spillReduction:
+      typeof source.spillReduction === "number" ? source.spillReduction : undefined,
+    edgeSoftness:
+      typeof source.edgeSoftness === "number" ? source.edgeSoftness : undefined,
   };
 }
 

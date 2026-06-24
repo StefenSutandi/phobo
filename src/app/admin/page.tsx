@@ -28,6 +28,7 @@ type CaptureResult = {
   mode?: "mock" | "command";
   imageUrl?: string;
   localFilePath?: string;
+  sourceFilePath?: string;
   error?: string;
 };
 
@@ -69,6 +70,7 @@ export default function Admin() {
     setFinalImageUrl,
     setPrintImageUrl,
     setPrintStatus,
+    setGreenScreenTuning,
   } = useSessionStore();
   const [cameraMode, setCameraMode] = useState("mock");
   const [cameraCommandConfigured, setCameraCommandConfigured] = useState(false);
@@ -228,10 +230,12 @@ export default function Admin() {
           capturedPhotos: session.capturedPhotos,
           selectedFrameId: session.selectedFrameId,
           selectedBackgroundId: session.selectedBackgroundId,
-          options: {
+          options: session.greenScreenTuning || {
             applyChromaKey: true,
-            greenMin: 110,
-            greenTolerance: 45,
+            greenMin: 90,
+            greenTolerance: 35,
+            spillReduction: 0,
+            edgeSoftness: 0,
           },
         }),
       });
@@ -429,9 +433,125 @@ export default function Admin() {
             <p>Mode: {cameraResult.mode || cameraMode}</p>
             {cameraResult.imageUrl && <p>Image URL: {cameraResult.imageUrl}</p>}
             {cameraResult.localFilePath && <p>Local file: {cameraResult.localFilePath}</p>}
+            {cameraResult.sourceFilePath && <p>Source file: {cameraResult.sourceFilePath}</p>}
             {cameraResult.error && <p>Last capture error: {cameraResult.error}</p>}
           </div>
         )}
+      </section>
+
+      <section className="admin-card">
+        <h2>Green Screen Tuning</h2>
+        <div className="admin-grid" style={{ marginBottom: "1rem" }}>
+          <div>
+            <label style={{ display: "block", marginBottom: "0.5rem" }}>
+              <input
+                type="checkbox"
+                checked={session?.greenScreenTuning?.applyChromaKey ?? true}
+                onChange={(e) => {
+                  if (session) {
+                    setGreenScreenTuning({
+                      ...session.greenScreenTuning,
+                      applyChromaKey: e.target.checked
+                    });
+                  }
+                }}
+              /> Apply Chroma Key
+            </label>
+            <p className="kiosk-message" style={{fontSize: "0.8rem"}}>Toggle whether background removal is applied.</p>
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: "0.5rem" }}>
+              Green Min (0-255): {session?.greenScreenTuning?.greenMin ?? 90}
+            </label>
+            <input
+              type="range"
+              min="0" max="255"
+              value={session?.greenScreenTuning?.greenMin ?? 90}
+              onChange={(e) => {
+                if (session) {
+                  setGreenScreenTuning({
+                    ...session.greenScreenTuning,
+                    greenMin: parseInt(e.target.value)
+                  });
+                }
+              }}
+            />
+            <p className="kiosk-message" style={{fontSize: "0.8rem"}}>Increase if subject is being erased. Decrease if green background remains.</p>
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: "0.5rem" }}>
+              Green Tolerance (0-255): {session?.greenScreenTuning?.greenTolerance ?? 35}
+            </label>
+            <input
+              type="range"
+              min="0" max="255"
+              value={session?.greenScreenTuning?.greenTolerance ?? 35}
+              onChange={(e) => {
+                if (session) {
+                  setGreenScreenTuning({
+                    ...session.greenScreenTuning,
+                    greenTolerance: parseInt(e.target.value)
+                  });
+                }
+              }}
+            />
+            <p className="kiosk-message" style={{fontSize: "0.8rem"}}>Increase if too much green remains. Decrease if subject edges are damaged.</p>
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: "0.5rem" }}>
+              Spill Reduction (0-100) <small>(TODO/Experimental)</small>: {session?.greenScreenTuning?.spillReduction ?? 0}
+            </label>
+            <input
+              type="range"
+              min="0" max="100"
+              value={session?.greenScreenTuning?.spillReduction ?? 0}
+              onChange={(e) => {
+                if (session) {
+                  setGreenScreenTuning({
+                    ...session.greenScreenTuning,
+                    spillReduction: parseInt(e.target.value)
+                  });
+                }
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: "0.5rem" }}>
+              Edge Softness (0-20) <small>(TODO/Experimental)</small>: {session?.greenScreenTuning?.edgeSoftness ?? 0}
+            </label>
+            <input
+              type="range"
+              min="0" max="20"
+              value={session?.greenScreenTuning?.edgeSoftness ?? 0}
+              onChange={(e) => {
+                if (session) {
+                  setGreenScreenTuning({
+                    ...session.greenScreenTuning,
+                    edgeSoftness: parseInt(e.target.value)
+                  });
+                }
+              }}
+            />
+          </div>
+        </div>
+        <button
+          type="button"
+          className="admin-action"
+          onClick={() => {
+            if (session) {
+              setGreenScreenTuning({
+                applyChromaKey: true,
+                greenMin: 90,
+                greenTolerance: 35,
+                spillReduction: 0,
+                edgeSoftness: 0,
+              });
+              addOperatorLog("Reset Green Screen Defaults");
+            }
+          }}
+        >
+          Reset Green Screen Defaults
+        </button>
       </section>
 
       <section className="admin-card">

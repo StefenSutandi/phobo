@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { KioskSession, PaymentStatus, PrintStatus } from "./session-types";
+import type { KioskSession, PaymentStatus, PrintStatus, GreenScreenTuning } from "./session-types";
 
 const SESSION_STORAGE_KEY = "phobo.activeSession";
 
@@ -29,6 +29,7 @@ type SessionContextValue = {
   setPrintImageUrl: (url: string) => void;
   setDriveUrl: (url: string) => void;
   setPrintStatus: (status: PrintStatus) => void;
+  setGreenScreenTuning: (tuning: GreenScreenTuning) => void;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -49,6 +50,13 @@ function createSession(): KioskSession {
     paymentStatus: "idle",
     capturedPhotos: [],
     printStatus: "idle",
+    greenScreenTuning: {
+      applyChromaKey: true,
+      greenMin: 90,
+      greenTolerance: 35,
+      spillReduction: 0,
+      edgeSoftness: 0,
+    },
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -220,6 +228,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const setGreenScreenTuning = useCallback((tuning: GreenScreenTuning) => {
+    setSession((current) =>
+      updateSession(current, (activeSession) => ({
+        ...activeSession,
+        greenScreenTuning: tuning,
+      })),
+    );
+  }, []);
+
   const value = useMemo<SessionContextValue>(
     () => ({
       session,
@@ -237,6 +254,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setPrintImageUrl,
       setDriveUrl,
       setPrintStatus,
+      setGreenScreenTuning,
     }),
     [
       session,
@@ -254,6 +272,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setPrintImageUrl,
       setDriveUrl,
       setPrintStatus,
+      setGreenScreenTuning,
     ],
   );
 

@@ -1,6 +1,6 @@
 # Phobo Photobox Kiosk System
 
-Phobo is a Next.js and TypeScript photobox kiosk MVP for a Mini PC controller, Android TV + infrared touch screen panel, Canon 700D camera, and Canon SELPHY CP1500 printer.
+Phobo is a Next.js and TypeScript photobox kiosk MVP for a Mini PC controller, Android TV + infrared touch screen panel, Canon 600D camera, and Canon SELPHY CP1500 printer.
 
 Current status: the app has mock-safe defaults plus env-gated foundations for camera capture and Windows printing. The kiosk UI, session flow, local result storage, QR sharing, photo compositing, MVP green screen processing, 4R print file generation, and mock print flow are implemented. Real Canon capture, real SELPHY printing, Google Drive upload, and payment gateway integration are not enabled by default.
 
@@ -70,7 +70,7 @@ The checklist covers:
 
 - Mini PC readiness
 - Android TV + IR touch panel setup
-- Canon 700D OS/tooling tests
+- Canon 600D OS/tooling tests
 - Canon SELPHY CP1500 OS print tests
 - Network and QR result access
 - Next integration decision tree
@@ -138,4 +138,30 @@ Do not add secrets to `.env.example`.
 
 ## Integration Warning
 
-Do not assume Canon 700D capture or Canon SELPHY CP1500 printing works from the app yet. First verify each device through the operating system or vendor/test tooling, then add real adapter modes behind explicit environment flags in a future checkpoint.
+Do not assume Canon 600D capture or Canon SELPHY CP1500 printing works from the app yet. First verify each device through the operating system or vendor/test tooling, then add real adapter modes behind explicit environment flags in a future checkpoint.
+
+## Green Screen Testing
+See [docs/GREEN_SCREEN_TESTING.md](docs/GREEN_SCREEN_TESTING.md) for physical setup and software tuning guidelines.
+
+## Real Hardware Pipeline
+1. User selects package/frame/background through touch UI.
+2. Countdown runs on Phobo UI.
+3. Phobo captures photo through /api/camera/capture.
+4. In command mode, Phobo calls an external command with a deterministic output filename.
+5. In eos-watch mode, EOS Utility 2 saves a file and Phobo detects the new file from the configured watch folder.
+6. Captured photo is copied to public/results/{sessionId}/captures/.
+7. /api/results/compose generates final_screen.png for QR/download and final_print.jpg for SELPHY 4R print.
+8. /api/printer/print sends final_print.jpg to printer adapter.
+9. UI shows result/printing status while backend handles the print request.
+
+## EOS Utility 2 Folder-Watch Setup
+- Connect Canon 600D to mini PC via USB.
+- Open EOS Utility 2 -> Remote Shooting.
+- Set save folder to: C:\PhoboCameraIncoming
+- Set .env.local variables (see .env.example).
+- Start Phobo: npm run dev
+- Open: http://localhost:3000/admin
+- Click Test Camera Capture.
+- Trigger capture in EOS Utility 2.
+Expected: Phobo detects the new file and copies it.
+Limitation: EOS Utility 2 folder-watch mode does not directly trigger the Canon 600D shutter. For fully automatic shutter triggering from Phobo’s SHOOT button, use command mode with a command-line capture tool such as digiCamControl.

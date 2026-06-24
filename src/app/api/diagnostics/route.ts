@@ -11,6 +11,8 @@ export function GET() {
     env: {
       cameraMode: env.cameraMode,
       cameraCaptureDir: env.cameraCaptureDir,
+      eosWatchDir: env.eosWatchDir,
+      eosAllowedExtensions: env.eosAllowedExtensions,
       cameraCommandConfigured: env.cameraCommandConfigured,
       cameraTimeoutMs: env.cameraTimeoutMs,
       printerMode: env.printerMode,

@@ -18,8 +18,8 @@
 
 ## Pending Hardware Validations
 
-- Canon 700D command-line capture with the selected Windows capture tool.
-- Canon 700D save path, latency, focus, power stability, and USB reliability.
+- Canon 600D command-line capture with the selected Windows capture tool.
+- Canon 600D save path, latency, focus, power stability, and USB reliability.
 - SELPHY CP1500 silent or operator-safe Windows printing from `final_print.jpg`.
 - 4R output crop behavior on real postcard paper.
 - Android TV overscan/scaling on the final install location.
@@ -34,7 +34,7 @@
 4. Complete one full mock session and confirm `final_screen.png` plus `final_print.jpg`.
 5. Confirm QR result opens on the Mini PC and a phone on the same network.
 6. Confirm manual Windows printing of `final_print.jpg` to SELPHY CP1500.
-7. Validate Canon 700D capture command outside Phobo.
+7. Validate Canon 600D capture command outside Phobo.
 8. Enable `PHOBO_CAMERA_MODE=command` only after the command works manually.
 9. Validate Windows print adapter only after manual SELPHY printing is stable.
 10. Return to mock modes immediately if real hardware behavior is unreliable.

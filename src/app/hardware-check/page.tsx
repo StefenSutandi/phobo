@@ -4,6 +4,8 @@ import { getPhoboEnv } from "@/lib/config/phobo-env";
 import { camera } from "@/lib/hardware/camera-adapter";
 import { printer } from "@/lib/hardware/printer-adapter";
 import { storage } from "@/lib/hardware/storage-adapter";
+import { access } from "node:fs/promises";
+import { constants } from "node:fs";
 
 function ModeBadge({ value }: { value: string }) {
   return <span className="mock-badge">{value.toUpperCase()}</span>;
@@ -37,6 +39,16 @@ export default async function HardwareCheck() {
   ]);
   const env = getPhoboEnv();
   const appMode = "mock-safe MVP";
+
+  let eosWatchDirExists = false;
+  if (env.eosWatchDir) {
+    try {
+      await access(env.eosWatchDir, constants.F_OK);
+      eosWatchDirExists = true;
+    } catch {
+      eosWatchDirExists = false;
+    }
+  }
 
   return (
     <main className="admin-page">
@@ -94,6 +106,13 @@ export default async function HardwareCheck() {
         {env.cameraMode === "mock" && <span className="mock-badge">MOCK</span>}
         <p>Camera mode: {env.cameraMode}</p>
         <p>Capture directory: {env.cameraCaptureDir}</p>
+        {env.cameraMode === "eos-watch" && (
+          <>
+            <p>EOS Watch directory: {env.eosWatchDir}</p>
+            <p>EOS Watch directory exists: {eosWatchDirExists ? "yes" : "no"}</p>
+            <p>EOS Allowed extensions: {env.eosAllowedExtensions.join(", ")}</p>
+          </>
+        )}
         <p>Command configured: {env.cameraCommandConfigured ? "yes" : "no"}</p>
         <p>Timeout: {env.cameraTimeoutMs}ms</p>
       </section>

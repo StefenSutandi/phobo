@@ -46,10 +46,12 @@ export default function Preview() {
           capturedPhotos: session.capturedPhotos,
           selectedFrameId: session.selectedFrameId,
           selectedBackgroundId: session.selectedBackgroundId,
-          options: {
+          options: session.greenScreenTuning || {
             applyChromaKey: true,
-            greenMin: 110,
-            greenTolerance: 45,
+            greenMin: 90,
+            greenTolerance: 35,
+            spillReduction: 0,
+            edgeSoftness: 0,
           },
         }),
       });

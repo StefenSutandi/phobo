@@ -2,6 +2,14 @@ export type PaymentStatus = "idle" | "pending" | "confirmed" | "failed" | "timeo
 
 export type PrintStatus = "idle" | "queued" | "printed" | "failed";
 
+export type GreenScreenTuning = {
+  applyChromaKey: boolean;
+  greenMin: number;
+  greenTolerance: number;
+  spillReduction: number;
+  edgeSoftness: number;
+};
+
 export type KioskSession = {
   sessionId: string;
   selectedPackageId?: string;
@@ -13,6 +21,7 @@ export type KioskSession = {
   printImageUrl?: string;
   driveUrl?: string;
   printStatus: PrintStatus;
+  greenScreenTuning: GreenScreenTuning;
   createdAt: string;
   updatedAt: string;
 };

@@ -1,6 +1,6 @@
 # CRCS Hardware Bring-Up Checklist
 
-This document is for the first on-site Phobo hardware test at CRCS ITB. The current app uses mock-safe defaults with env-gated camera and printer adapter foundations. Use this checklist to identify what the Mini PC, Android TV, IR touch panel, Canon 700D, and Canon SELPHY CP1500 can do before real hardware modes are enabled.
+This document is for the first on-site Phobo hardware test at CRCS ITB. The current app uses mock-safe defaults with env-gated camera and printer adapter foundations. Use this checklist to identify what the Mini PC, Android TV, IR touch panel, Canon 600D, and Canon SELPHY CP1500 can do before real hardware modes are enabled.
 
 ## Hardware Inventory
 
@@ -9,8 +9,8 @@ This document is for the first on-site Phobo hardware test at CRCS ITB. The curr
 | Main controller | Mini PC | [ ] |  |
 | Display | Android TV | [ ] |  |
 | Touch input | Infrared touch screen panel | [ ] |  |
-| Camera | Canon 700D | [ ] |  |
-| Camera power | Canon 700D dummy battery | [ ] |  |
+| Camera | Canon 600D | [ ] |  |
+| Camera power | Canon 600D dummy battery | [ ] |  |
 | Printer | Canon SELPHY CP1500 | [ ] |  |
 | Network | WiFi or Ethernet | [ ] |  |
 | Cables | HDMI, USB camera, USB touch, power | [ ] |  |
@@ -20,7 +20,7 @@ This document is for the first on-site Phobo hardware test at CRCS ITB. The curr
 - Android TV and IR touch panel work.
 - SELPHY CP1500 can print manually from Windows.
 - Mini PC has no Wi-Fi/Bluetooth; LAN is OK for app/network access.
-- Canon 700D command capture validation is deferred until the camera and capture tool are available.
+- Canon 600D command capture validation is deferred until the camera and capture tool are available.
 
 ## Mini PC Checklist
 
@@ -52,9 +52,9 @@ This document is for the first on-site Phobo hardware test at CRCS ITB. The curr
 | Browser fullscreen works | [ ] Pass / [ ] Fail | Use F11 or kiosk launch flag |
 | On-screen keyboard behavior acceptable | [ ] Pass / [ ] Fail | Admin/debug only |
 
-## Canon 700D Checklist
+## Canon 600D Checklist
 
-Do not connect the Canon 700D to the Phobo app as a real capture source yet. This section is only for OS/software bring-up.
+Do not connect the Canon 600D to the Phobo app as a real capture source yet. This section is only for OS/software bring-up.
 
 | Check | Result | Notes |
 | --- | --- | --- |
@@ -68,9 +68,9 @@ Do not connect the Canon 700D to the Phobo app as a real capture source yet. Thi
 | Capture latency notes |  | Time from trigger to file available |
 | Failure notes |  | USB dropouts, battery, focus, permissions |
 
-## Future Canon 700D command-mode validation
+## Future Canon 600D command-mode validation
 
-Real validation is pending until the Canon 700D and capture command-line tool are available. Keep `PHOBO_CAMERA_MODE=mock` if the command fails.
+Real validation is pending until the Canon 600D and capture command-line tool are available. Keep `PHOBO_CAMERA_MODE=mock` if the command fails.
 
 Set `.env.local`:
 
@@ -103,7 +103,7 @@ Expected:
 
 - Captured image is saved under `public/results/{sessionId}/captures/`.
 - The image link opens in the browser.
-- If command capture fails, switch back to `PHOBO_CAMERA_MODE=mock` until the Canon 700D and capture tool can be validated manually.
+- If command capture fails, switch back to `PHOBO_CAMERA_MODE=mock` until the Canon 600D and capture tool can be validated manually.
 
 ## Canon SELPHY CP1500 Checklist
 
@@ -193,8 +193,8 @@ Future Windows print adapter validation:
 | --- | --- | --- | --- | --- |
 |  |  | Mini PC |  |  |
 |  |  | Display/touch |  |  |
-|  |  | Canon 700D OS detection |  |  |
-|  |  | Canon 700D capture test |  |  |
+|  |  | Canon 600D OS detection |  |  |
+|  |  | Canon 600D capture test |  |  |
 |  |  | SELPHY OS detection |  |  |
 |  |  | SELPHY test print |  |  |
 |  |  | Kiosk MVP flow |  |  |
@@ -202,7 +202,7 @@ Future Windows print adapter validation:
 
 ## Known Risks
 
-- Canon 700D remote capture support depends on OS, driver, USB mode, and available tooling.
+- Canon 600D remote capture support depends on OS, driver, USB mode, and available tooling.
 - Live view may require different tooling than still capture.
 - Dummy battery instability can look like camera integration failure.
 - SELPHY CP1500 print behavior may differ between USB and WiFi modes.
@@ -220,7 +220,7 @@ Future Windows print adapter validation:
 2. Does Android TV + IR touch work as a stable kiosk input?
    - No: fix display resolution, overscan, and touch calibration.
    - Yes: continue.
-3. Can the Canon 700D save a captured file to the Mini PC using any external test tool?
+3. Can the Canon 600D save a captured file to the Mini PC using any external test tool?
    - No: do not code integration yet; resolve camera OS/tooling.
    - Yes: define the capture command/API boundary and add a controlled adapter mode.
 4. Can the SELPHY print a local result file from the OS without dialogs?

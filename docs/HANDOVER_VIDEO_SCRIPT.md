@@ -7,7 +7,7 @@ Target length: 5-8 minutes.
 - Show the Windows Mini PC.
 - Show Android TV as the display.
 - Show IR touch panel input.
-- Show Canon 700D and SELPHY CP1500 as future hardware integration points.
+- Show Canon 600D and SELPHY CP1500 as future hardware integration points.
 - State that current event-safe mode is mock camera and mock printer unless real modes have been validated.
 
 ## 2. Starting App

@@ -7,10 +7,14 @@ export function getPhoboEnv() {
   const printHeightPx = Number.parseInt(process.env.PHOBO_PRINT_HEIGHT_PX || "1181", 10);
 
   return {
-    cameraMode: process.env.PHOBO_CAMERA_MODE || "mock",
+    cameraMode: (process.env.PHOBO_CAMERA_MODE === "command" || process.env.PHOBO_CAMERA_MODE === "eos-watch")
+      ? process.env.PHOBO_CAMERA_MODE
+      : "mock",
     cameraCaptureDir: process.env.PHOBO_CAMERA_CAPTURE_DIR || "C:\\PhoboCameraCaptures",
+    eosWatchDir: process.env.PHOBO_EOS_WATCH_DIR || "C:\\PhoboCameraIncoming",
+    eosAllowedExtensions: (process.env.PHOBO_EOS_ALLOWED_EXTENSIONS || ".jpg,.jpeg,.png").split(",").map(ext => ext.trim().toLowerCase()),
     cameraCommandConfigured: Boolean(process.env.PHOBO_CAMERA_COMMAND_PATH),
-    cameraTimeoutMs: Number.isFinite(cameraTimeoutMs) ? cameraTimeoutMs : 15000,
+    cameraTimeoutMs: Number.isFinite(cameraTimeoutMs) ? cameraTimeoutMs : 20000,
     printerMode: process.env.PHOBO_PRINTER_MODE || "mock",
     printerNameConfigured: Boolean(process.env.PHOBO_PRINTER_NAME),
     printCommandMode: process.env.PHOBO_PRINT_COMMAND_MODE || "powershell-printto",
