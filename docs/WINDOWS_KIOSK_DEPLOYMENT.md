@@ -76,15 +76,17 @@ PHOBO_DRIVE_ENABLED=false
 PHOBO_RESULTS_DIR=public/results
 ```
 
-Future Canon command mode:
+Recommended final Canon command mode:
 
 ```env
 PHOBO_CAMERA_MODE=command
 PHOBO_CAMERA_CAPTURE_DIR=C:\PhoboCameraCaptures
-PHOBO_CAMERA_CAPTURE_TIMEOUT_MS=15000
-PHOBO_CAMERA_COMMAND_PATH=C:\Program Files\digiCamControl\CameraControlCmd.exe
+PHOBO_CAMERA_CAPTURE_TIMEOUT_MS=20000
+PHOBO_CAMERA_COMMAND_PATH=C:\Program Files (x86)\digiCamControl\CameraControlCmd.exe
 PHOBO_CAMERA_COMMAND_ARGS_TEMPLATE=/filename "{output}" /capture
 ```
+
+**Note:** After changing `.env.local`, you must restart the dev or production server for changes to take effect.
 
 Future SELPHY Windows print mode:
 

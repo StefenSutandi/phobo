@@ -15,16 +15,23 @@
 - Windows SELPHY print adapter foundation behind `PHOBO_PRINTER_MODE`.
 - Hardware check and diagnostics pages.
 - Windows kiosk deployment, operator, maintenance, and handover documentation.
+- Canon 600D command-line capture validated on Windows using digiCamControl (`CameraControlCmd.exe`).
 
 ## Pending Hardware Validations
 
-- Canon 600D command-line capture with the selected Windows capture tool.
-- Canon 600D save path, latency, focus, power stability, and USB reliability.
 - SELPHY CP1500 silent or operator-safe Windows printing from `final_print.jpg`.
 - 4R output crop behavior on real postcard paper.
 - Android TV overscan/scaling on the final install location.
 - IR touch alignment after final TV placement.
 - LAN access for QR result downloads from guest phones.
+
+## Camera Status
+
+- Canon 600D command capture via digiCamControl has been manually validated.
+- Confirmed command path: `C:\Program Files (x86)\digiCamControl\CameraControlCmd.exe`
+- Confirmed output: `C:\PhoboCameraCaptures\test.jpg`
+- Recommended final camera mode: `PHOBO_CAMERA_MODE=command`
+- Fallback camera mode: `PHOBO_CAMERA_MODE=eos-watch` with EOS Utility 2 folder-watch.
 
 ## Next Test Order
 
@@ -34,7 +41,6 @@
 4. Complete one full mock session and confirm `final_screen.png` plus `final_print.jpg`.
 5. Confirm QR result opens on the Mini PC and a phone on the same network.
 6. Confirm manual Windows printing of `final_print.jpg` to SELPHY CP1500.
-7. Validate Canon 600D capture command outside Phobo.
-8. Enable `PHOBO_CAMERA_MODE=command` only after the command works manually.
-9. Validate Windows print adapter only after manual SELPHY printing is stable.
-10. Return to mock modes immediately if real hardware behavior is unreliable.
+7. Validate Windows print adapter only after manual SELPHY printing is stable.
+8. Enable `PHOBO_CAMERA_MODE=command` for fully automatic photobox tests.
+9. Return to mock modes immediately if real hardware behavior is unreliable.

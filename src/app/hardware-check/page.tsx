@@ -115,6 +115,11 @@ export default async function HardwareCheck() {
         )}
         <p>Command configured: {env.cameraCommandConfigured ? "yes" : "no"}</p>
         <p>Timeout: {env.cameraTimeoutMs}ms</p>
+        {env.cameraMode === "command" && (
+          <p className="kiosk-message" style={{fontSize: "0.8rem", marginTop: "0.5rem"}}>
+            <em>Note: The recommended validated path is C:\Program Files (x86)\digiCamControl\CameraControlCmd.exe</em>
+          </p>
+        )}
       </section>
 
       <section className="admin-card">

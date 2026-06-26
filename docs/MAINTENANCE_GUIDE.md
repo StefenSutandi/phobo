@@ -63,16 +63,24 @@ Mock camera:
 PHOBO_CAMERA_MODE=mock
 ```
 
-Future Canon command mode:
+Validated Canon command mode (digiCamControl):
 
 ```env
 PHOBO_CAMERA_MODE=command
 PHOBO_CAMERA_CAPTURE_DIR=C:\PhoboCameraCaptures
-PHOBO_CAMERA_COMMAND_PATH=C:\Program Files\digiCamControl\CameraControlCmd.exe
+PHOBO_CAMERA_COMMAND_PATH=C:\Program Files (x86)\digiCamControl\CameraControlCmd.exe
 PHOBO_CAMERA_COMMAND_ARGS_TEMPLATE=/filename "{output}" /capture
 ```
 
-If command mode fails, switch back to mock mode.
+### Camera Troubleshooting
+
+- **If command mode says command path missing**: Verify the path exists in PowerShell:
+  `Test-Path "C:\Program Files (x86)\digiCamControl\CameraControlCmd.exe"`
+- **If camera does not trigger**: Close EOS Utility 2 and any other camera apps that might be locking the connection.
+- **If capture times out**: Check USB cable connection, camera power/dummy battery, camera auto-sleep settings, and digiCamControl hardware detection.
+- **If test.jpg is not created**: Test the raw PowerShell command first outside of Phobo.
+- **If command capture works manually but not in Phobo**: Check `.env.local` for typos and restart the Next.js server.
+- **Fallback**: If command mode remains unreliable, switch back to mock mode or use `eos-watch` mode with EOS Utility 2 folder-watching.
 
 ## Switch Printer Modes
 

@@ -20,7 +20,7 @@ This document is for the first on-site Phobo hardware test at CRCS ITB. The curr
 - Android TV and IR touch panel work.
 - SELPHY CP1500 can print manually from Windows.
 - Mini PC has no Wi-Fi/Bluetooth; LAN is OK for app/network access.
-- Canon 600D command capture validation is deferred until the camera and capture tool are available.
+- Canon 600D command capture via digiCamControl is validated.
 
 ## Mini PC Checklist
 
@@ -68,18 +68,40 @@ Do not connect the Canon 600D to the Phobo app as a real capture source yet. Thi
 | Capture latency notes |  | Time from trigger to file available |
 | Failure notes |  | USB dropouts, battery, focus, permissions |
 
-## Future Canon 600D command-mode validation
+## Canon 600D Command-Mode Validation
 
-Real validation is pending until the Canon 600D and capture command-line tool are available. Keep `PHOBO_CAMERA_MODE=mock` if the command fails.
+Canon 600D command capture has been manually validated using digiCamControl (`CameraControlCmd.exe`).
 
-Set `.env.local`:
+**Important Note:** Ensure EOS Utility 2 and any other camera software are **closed** when testing or using `digiCamControl` command mode to avoid camera lock or conflicts.
+
+Manual PowerShell test used:
+```powershell
+& "C:\Program Files (x86)\digiCamControl\CameraControlCmd.exe" /filename "C:\PhoboCameraCaptures\test.jpg" /capture
+```
+
+Observed output:
+```text
+digiCamControl command line utility running
+New Camera is connected ! Driver :Canon EOS 600D
+Canon event 520
+Photo transfer begin.
+Transfer started :C:\PhoboCameraCaptures\test.jpg
+Transfer done :C:\PhoboCameraCaptures\test.jpg
+Photo transfer done.
+```
+
+Set `.env.local` for automatic capture:
 
 ```txt
 PHOBO_CAMERA_MODE=command
 PHOBO_CAMERA_CAPTURE_DIR=C:\PhoboCameraCaptures
-PHOBO_CAMERA_COMMAND_PATH=C:\Program Files\digiCamControl\CameraControlCmd.exe
+PHOBO_CAMERA_CAPTURE_TIMEOUT_MS=20000
+PHOBO_CAMERA_COMMAND_PATH=C:\Program Files (x86)\digiCamControl\CameraControlCmd.exe
 PHOBO_CAMERA_COMMAND_ARGS_TEMPLATE=/filename "{output}" /capture
 ```
+
+Fallback Mode:
+If command mode fails or is unreliable, you can fall back to the semi-automatic `eos-watch` mode using EOS Utility 2 folder-watch (`PHOBO_CAMERA_MODE=eos-watch`).
 
 Start app:
 

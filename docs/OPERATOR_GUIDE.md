@@ -33,6 +33,8 @@ http://localhost:3000/hardware-check
 4. Select frame.
 5. Select background.
 6. Shoot.
+   - **Automatic Mode (`command`)**: The operator only needs to press SHOOT in Phobo. Phobo will call digiCamControl, trigger the Canon 600D, copy the captured image into the session, then continue automatically to preview/compositing.
+   - **Fallback Mode (`eos-watch`)**: If command mode fails, switch to `eos-watch` mode and use EOS Utility 2 to manually save the photo during the capture timeout window.
 7. Preview.
 8. Result QR.
 9. Generate or print 4R from Result/Admin controls.
