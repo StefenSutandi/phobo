@@ -243,10 +243,18 @@ export function BackgroundPicker({
   );
 }
 
-export function PreviewComposer() {
+type PreviewComposerProps = {
+  photoUrl?: string;
+};
+
+export function PreviewComposer({ photoUrl }: PreviewComposerProps) {
   return (
     <RoundedPanel className="preview-composer">
-      <div className="preview-frame" aria-label="Frame preview placeholder" />
+      {photoUrl ? (
+        <img src={photoUrl} alt="Preview" className="preview-frame" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "20px" }} />
+      ) : (
+        <div className="preview-frame" aria-label="Frame preview placeholder" />
+      )}
     </RoundedPanel>
   );
 }

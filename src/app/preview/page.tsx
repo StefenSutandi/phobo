@@ -78,7 +78,7 @@ export default function Preview() {
 
   return (
     <KioskStage>
-      <PreviewComposer />
+      <PreviewComposer photoUrl={session?.capturedPhotos?.[0]} />
       <PhotoResultStrip photos={session?.capturedPhotos ?? []} />
       <StickerPicker />
       <KioskButton onClick={finishPreview} className="preview-next">

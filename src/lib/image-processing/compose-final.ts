@@ -17,6 +17,7 @@ export type ComposeFinalRequest = {
 export type ComposedFinalImages = {
   finalScreenPng: Buffer;
   processedPhotoDataUrls: string[];
+  warnings: string[];
 };
 
 function hexToRgb(color: string) {
@@ -41,13 +42,17 @@ function escapeXml(value: string) {
     .replaceAll('"', "&quot;");
 }
 
-async function createScreenBackground(background: BackgroundData) {
+async function createScreenBackground(background: BackgroundData, warnings: string[]) {
   if (background.imageUrl) {
-    return normalizeImageBuffer(background.imageUrl, {
-      width: FINAL_SCREEN_WIDTH_PX,
-      height: FINAL_SCREEN_HEIGHT_PX,
-      fit: "cover",
-    });
+    try {
+      return await normalizeImageBuffer(background.imageUrl, {
+        width: FINAL_SCREEN_WIDTH_PX,
+        height: FINAL_SCREEN_HEIGHT_PX,
+        fit: "cover",
+      });
+    } catch (error) {
+      warnings.push(`Background image failed to load, falling back to color. Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   const { r, g, b } = hexToRgb(background.color);
@@ -73,7 +78,7 @@ async function createPlaceholder(slot: PhotoSlot, index: number) {
     </svg>
   `;
 
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  return sharp(Buffer.from(svg), { unlimited: true, limitInputPixels: false, density: 300 }).png().toBuffer();
 }
 
 async function processPhoto({
@@ -123,49 +128,65 @@ export async function composeFinalImages({
   selectedBackgroundId,
   options = {},
 }: ComposeFinalRequest): Promise<ComposedFinalImages> {
+  const warnings: string[] = [];
   const frame = getFrameById(selectedFrameId);
   const background = getBackgroundById(selectedBackgroundId);
-  const screenBackground = await createScreenBackground(background);
+  const screenBackground = await createScreenBackground(background, warnings);
   const processedPhotos = await Promise.all(
-    capturedPhotos.slice(0, Math.max(frame.requiredPhotos, frame.photoSlots.length)).map((photoUrl) =>
-      processPhoto({
-        photoUrl,
-        background,
-        options,
-      }),
-    ),
-  );
-  const composites = await Promise.all(
-    frame.photoSlots.map(async (slot, index) => {
-      const source = processedPhotos.length
-        ? processedPhotos[index % processedPhotos.length]
-        : await createPlaceholder(slot, index);
-      const input = await normalizeImageBuffer(source, {
-        width: slot.width,
-        height: slot.height,
-        fit: "cover",
-      });
-
-      return {
-        input,
-        left: slot.x,
-        top: slot.y,
-      };
+    capturedPhotos.slice(0, Math.max(frame.requiredPhotos, frame.photoSlots.length)).map(async (photoUrl) => {
+      try {
+        return await processPhoto({
+          photoUrl,
+          background,
+          options,
+        });
+      } catch (error) {
+        warnings.push(`Failed to process photo ${photoUrl}: ${error instanceof Error ? error.message : String(error)}`);
+        return await createPlaceholder(frame.photoSlots[0] || { x: 0, y: 0, width: 400, height: 400 }, 0);
+      }
     }),
   );
+  const composites = (await Promise.all(
+    frame.photoSlots.map(async (slot, index) => {
+      try {
+        const source = processedPhotos.length
+          ? processedPhotos[index % processedPhotos.length]
+          : await createPlaceholder(slot, index);
+        const input = await normalizeImageBuffer(source, {
+          width: slot.width,
+          height: slot.height,
+          fit: "cover",
+        });
+
+        return {
+          input,
+          left: slot.x,
+          top: slot.y,
+        };
+      } catch (error) {
+        warnings.push(`Failed to compose slot ${index}: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      }
+    }),
+  )).filter((c): c is { input: Buffer; left: number; top: number } => c !== null);
+  
   const overlay = Buffer.from(frameOverlaySvg({
     frameName: frame.name,
     backgroundName: background.name,
     slots: frame.photoSlots,
   }));
+  
+  const compositePipeline = [
+    { input: overlay, left: 0, top: 0, limitInputPixels: false },
+    ...composites,
+    { input: overlay, left: 0, top: 0, limitInputPixels: false },
+  ];
+
   const finalScreenPng = await sharp(screenBackground)
-    .composite([
-      { input: overlay, left: 0, top: 0 },
-      ...composites,
-      { input: overlay, left: 0, top: 0 },
-    ])
+    .composite(compositePipeline as any) // sharp options allowed in overlay
     .png()
     .toBuffer();
+    
   const processedPhotoDataUrls = await Promise.all(
     processedPhotos.map((photo) => bufferToDataUrl(photo)),
   );
@@ -173,5 +194,6 @@ export async function composeFinalImages({
   return {
     finalScreenPng,
     processedPhotoDataUrls,
+    warnings
   };
 }

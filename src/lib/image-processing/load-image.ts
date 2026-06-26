@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import sharp from "sharp";
+import sharp, { type FitEnum } from "sharp";
 import { parseDataUrl } from "@/lib/results/result-storage";
 
 const mimeByExtension: Record<string, string> = {
@@ -11,6 +11,11 @@ const mimeByExtension: Record<string, string> = {
   ".svg": "image/svg+xml",
   ".webp": "image/webp",
 };
+
+function isSvg(buffer: Buffer): boolean {
+  return buffer.slice(0, 100).toString("utf-8").toLowerCase().includes("<svg") ||
+         buffer.slice(0, 100).toString("utf-8").toLowerCase().includes("<?xml");
+}
 
 export type LoadedImage = {
   buffer: Buffer;
@@ -56,6 +61,9 @@ export async function loadImage(source: string): Promise<LoadedImage> {
 
   const buffer = await readFile(resolvedPath);
 
+  const signature = buffer.slice(0, Math.min(80, buffer.length)).toString('hex');
+  console.log(`[loadImage] Loaded asset: ${resolvedPath} | ext: ${extension} | size: ${buffer.length} bytes | sig: ${signature}`);
+
   return {
     buffer,
     mimeType,
@@ -65,19 +73,34 @@ export async function loadImage(source: string): Promise<LoadedImage> {
 
 export async function normalizeImageBuffer(
   source: string | Buffer,
-  options: { width?: number; height?: number; fit?: keyof sharp.FitEnum } = {},
+  options: { width?: number; height?: number; fit?: keyof FitEnum } = {},
 ) {
-  const input = typeof source === "string" ? (await loadImage(source)).buffer : source;
-  const pipeline = sharp(input).rotate();
+  let input: Buffer;
+  let sourceName = "buffer";
 
-  if (options.width && options.height) {
-    pipeline.resize(options.width, options.height, {
-      fit: options.fit ?? "cover",
-      position: "center",
-    });
+  if (typeof source === "string") {
+    sourceName = source;
+    input = (await loadImage(source)).buffer;
+  } else {
+    input = source;
   }
 
-  return pipeline.png().toBuffer();
+  try {
+    const isSvgBuffer = isSvg(input);
+    const sharpOptions = isSvgBuffer ? { unlimited: true, limitInputPixels: false, density: 300 } : {};
+    const pipeline = sharp(input, sharpOptions).rotate();
+
+    if (options.width && options.height) {
+      pipeline.resize(options.width, options.height, {
+        fit: options.fit ?? "cover",
+        position: "center",
+      });
+    }
+
+    return await pipeline.png().toBuffer();
+  } catch (error) {
+    throw new Error(`Failed to process image (${sourceName}): ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 export async function bufferToDataUrl(buffer: Buffer, mimeType = "image/png") {

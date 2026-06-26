@@ -201,7 +201,7 @@ export async function generate4RPrintTemplate({
     </svg>
   `;
 
-  return sharp(Buffer.from(svg))
+  return sharp(Buffer.from(svg), { unlimited: true, limitInputPixels: false, density: 300 })
     .resize(PRINT_WIDTH_PX, PRINT_HEIGHT_PX, { fit: "fill" })
     .jpeg({ quality: 92, mozjpeg: true })
     .toBuffer();

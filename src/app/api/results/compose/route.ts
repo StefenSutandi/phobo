@@ -99,6 +99,13 @@ export async function POST(request: Request) {
     const capturedPhotos = body.capturedPhotos.filter(
       (photoUrl): photoUrl is string => typeof photoUrl === "string" && photoUrl.length > 0,
     );
+
+    console.log(`[Compose API] Starting compose for session: ${safeSessionId}`);
+    console.log(`[Compose API] Captured photos: ${capturedPhotos.join(", ")}`);
+    console.log(`[Compose API] Selected frame: ${body.selectedFrameId}`);
+    console.log(`[Compose API] Selected background: ${body.selectedBackgroundId}`);
+    console.log(`[Compose API] Stage: composeFinalImages`);
+
     const composed = await composeFinalImages({
       sessionId: body.sessionId,
       capturedPhotos,
@@ -116,6 +123,8 @@ export async function POST(request: Request) {
     const finalScreenPath = path.join(outputDirectory, "final_screen.png");
     const finalPrintPath = path.join(outputDirectory, "final_print.jpg");
 
+    console.log(`[Compose API] Stage: saving files to ${outputDirectory}`);
+    
     await mkdir(outputDirectory, { recursive: true });
     await writeFile(finalScreenPath, composed.finalScreenPng);
     await writeFile(finalPrintPath, printBuffer);
@@ -124,12 +133,15 @@ export async function POST(request: Request) {
       ok: true,
       finalImageUrl: `/results/${safeSessionId}/final_screen.png`,
       printImageUrl: `/results/${safeSessionId}/final_print.jpg`,
+      warnings: composed.warnings
     });
   } catch (error) {
+    console.error(`[Compose API] Error:`, error);
     return NextResponse.json(
       {
         ok: false,
         error: error instanceof Error ? error.message : "Failed to compose result",
+        details: error instanceof Error ? error.stack : undefined
       },
       { status: 500 },
     );
