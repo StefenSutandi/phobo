@@ -29,6 +29,13 @@ export type CapturePhotoResult = {
   error?: string;
   rawOutput?: string;
   sourceFilePath?: string;
+  commandPath?: string;
+  args?: string[];
+  targetOutputPath?: string;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number | null;
+  signal?: string | null;
 };
 
 function getCameraMode(): CameraMode {
@@ -58,13 +65,12 @@ function sanitizeFileName(fileName?: string) {
 }
 
 function splitArgsTemplate(template: string, outputPath: string) {
-  const replaced = template.replaceAll("{output}", outputPath);
   const args: string[] = [];
   let current = "";
   let quote: '"' | "'" | null = null;
 
-  for (let index = 0; index < replaced.length; index += 1) {
-    const character = replaced[index];
+  for (let index = 0; index < template.length; index += 1) {
+    const character = template[index];
 
     if ((character === '"' || character === "'") && !quote) {
       quote = character;
@@ -91,7 +97,7 @@ function splitArgsTemplate(template: string, outputPath: string) {
     args.push(current);
   }
 
-  return args;
+  return args.map(arg => arg.replaceAll("{output}", outputPath));
 }
 
 async function fileExists(filePath: string) {
@@ -237,60 +243,115 @@ export async function capturePhoto({
 
   const captureDir = process.env.PHOBO_CAMERA_CAPTURE_DIR;
   const commandPath = process.env.PHOBO_CAMERA_COMMAND_PATH;
-  const argsTemplate =
-    process.env.PHOBO_CAMERA_COMMAND_ARGS_TEMPLATE || '/filename "{output}" /capture';
-  const timeoutMs = Number.parseInt(
-    process.env.PHOBO_CAMERA_CAPTURE_TIMEOUT_MS || "15000",
-    10,
-  );
+  const argsTemplate = process.env.PHOBO_CAMERA_COMMAND_ARGS_TEMPLATE || '/filename {output} /capture';
+  const timeoutMs = Number.parseInt(process.env.PHOBO_CAMERA_CAPTURE_TIMEOUT_MS || "20000", 10);
+  const timeoutToUse = Number.isFinite(timeoutMs) ? timeoutMs : 20000;
+
+  console.log(`[CameraAdapter] command mode started`);
+  console.log(`[CameraAdapter] commandPath: ${commandPath}`);
+  console.log(`[CameraAdapter] captureDir: ${captureDir}`);
+  console.log(`[CameraAdapter] timeout: ${timeoutToUse}ms`);
 
   if (!captureDir) {
-    return {
-      ok: false,
-      mode,
-      error: "PHOBO_CAMERA_CAPTURE_DIR is required when PHOBO_CAMERA_MODE=command",
-    };
+    return { ok: false, mode, error: "PHOBO_CAMERA_CAPTURE_DIR is required when PHOBO_CAMERA_MODE=command" };
+  }
+  if (!commandPath) {
+    return { ok: false, mode, error: "PHOBO_CAMERA_COMMAND_PATH is required when PHOBO_CAMERA_MODE=command" };
   }
 
-  if (!commandPath) {
-    return {
-      ok: false,
-      mode,
-      error: "PHOBO_CAMERA_COMMAND_PATH is required when PHOBO_CAMERA_MODE=command",
-    };
+  const commandExists = await fileExists(commandPath);
+  console.log(`[CameraAdapter] command exists: ${commandExists}`);
+  if (!commandExists) {
+    return { ok: false, mode, error: `Camera command not found: ${commandPath}`, commandPath };
   }
 
   const safeFileName = sanitizeFileName(fileName);
   const commandOutputDir = path.join(captureDir, safeSessionId);
   const commandOutputPath = path.join(commandOutputDir, `${safeFileName}.jpg`);
-  const publicOutputDir = path.join(
-    process.cwd(),
-    "public",
-    "results",
-    safeSessionId,
-    "captures",
-  );
+  const publicOutputDir = path.join(process.cwd(), "public", "results", safeSessionId, "captures");
   const publicOutputPath = path.join(publicOutputDir, `${safeFileName}.jpg`);
+
+  const args = splitArgsTemplate(argsTemplate, commandOutputPath);
+  console.log(`[CameraAdapter] args template: ${argsTemplate}`);
+  console.log(`[CameraAdapter] resolved args: ${JSON.stringify(args)}`);
+  console.log(`[CameraAdapter] target output path: ${commandOutputPath}`);
+
+  const runCommand = async (attempt: number) => {
+    console.log(`[CameraAdapter] Running command attempt ${attempt}...`);
+    try {
+      const { stdout, stderr } = await execFileAsync(commandPath, args, {
+        timeout: timeoutToUse,
+        windowsHide: true,
+        maxBuffer: 1024 * 1024,
+      });
+      return { stdout: stdout.toString(), stderr: stderr.toString(), error: null, exitCode: 0, signal: null };
+    } catch (err: any) {
+      return { 
+        stdout: err.stdout?.toString() || "", 
+        stderr: err.stderr?.toString() || "", 
+        error: err,
+        exitCode: err.code ?? null,
+        signal: err.signal ?? null
+      };
+    }
+  };
+
+  const waitForFile = async (filePath: string, timeout: number) => {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      if (await fileExists(filePath)) {
+        try {
+          const stats1 = await stat(filePath);
+          if (stats1.size > 0) {
+            await new Promise(r => setTimeout(r, 500));
+            const stats2 = await stat(filePath);
+            if (stats1.size === stats2.size) {
+              return { exists: true, size: stats2.size };
+            }
+          }
+        } catch (e) {}
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    return { exists: false, size: 0 };
+  };
 
   try {
     await mkdir(commandOutputDir, { recursive: true });
     await mkdir(publicOutputDir, { recursive: true });
 
-    const args = splitArgsTemplate(argsTemplate, commandOutputPath);
-    const { stdout, stderr } = await execFileAsync(commandPath, args, {
-      timeout: Number.isFinite(timeoutMs) ? timeoutMs : 15000,
-      windowsHide: true,
-      maxBuffer: 1024 * 1024,
-    });
-    const output = rawOutput(stdout, stderr);
+    let result = await runCommand(1);
+    console.log(`[CameraAdapter] attempt 1 exitCode: ${result.exitCode}, signal: ${result.signal}`);
+    
+    let fileCheck = await waitForFile(commandOutputPath, 5000);
+    console.log(`[CameraAdapter] attempt 1 file exists: ${fileCheck.exists}, size: ${fileCheck.size}`);
 
-    if (!(await fileExists(commandOutputPath))) {
-      return {
-        ok: false,
-        mode,
-        error: `Camera command completed but output file was not created: ${commandOutputPath}`,
-        rawOutput: output,
-      };
+    if (!fileCheck.exists) {
+      console.log(`[CameraAdapter] Output missing, retrying in 1000ms...`);
+      await new Promise(r => setTimeout(r, 1000));
+      result = await runCommand(2);
+      console.log(`[CameraAdapter] attempt 2 exitCode: ${result.exitCode}, signal: ${result.signal}`);
+      fileCheck = await waitForFile(commandOutputPath, 5000);
+      console.log(`[CameraAdapter] attempt 2 file exists: ${fileCheck.exists}, size: ${fileCheck.size}`);
+    }
+
+    const { stdout, stderr, exitCode, signal } = result;
+    const combinedOutput = rawOutput(stdout, stderr);
+
+    if (!fileCheck.exists) {
+       return {
+         ok: false,
+         mode,
+         error: result.error ? "Command failed and output file not created after retry" : "Output file not created after retry",
+         rawOutput: combinedOutput,
+         commandPath,
+         args,
+         targetOutputPath: commandOutputPath,
+         stdout,
+         stderr,
+         exitCode,
+         signal
+       };
     }
 
     await copyFile(commandOutputPath, publicOutputPath);
@@ -300,26 +361,23 @@ export async function capturePhoto({
       mode,
       imageUrl: `/results/${safeSessionId}/captures/${safeFileName}.jpg`,
       localFilePath: publicOutputPath,
-      rawOutput: output || undefined,
+      rawOutput: combinedOutput,
+      commandPath,
+      args,
+      targetOutputPath: commandOutputPath,
+      stdout,
+      stderr,
+      exitCode,
+      signal
     };
-  } catch (error) {
-    const nodeError = error as NodeJS.ErrnoException & {
-      killed?: boolean;
-      signal?: NodeJS.Signals;
-      stdout?: string | Buffer;
-      stderr?: string | Buffer;
-    };
-    const output = rawOutput(nodeError.stdout, nodeError.stderr);
-    const timedOut = nodeError.killed || nodeError.signal === "SIGTERM";
-    const errorMessage = timedOut
-      ? `Camera command timed out after ${Number.isFinite(timeoutMs) ? timeoutMs : 15000}ms`
-      : nodeError.message || "Camera command failed";
-
+  } catch (error: any) {
     return {
       ok: false,
       mode,
-      error: errorMessage,
-      rawOutput: output || undefined,
+      error: error.message || "Camera command adapter encountered an unexpected error",
+      commandPath,
+      args,
+      targetOutputPath: commandOutputPath
     };
   }
 }

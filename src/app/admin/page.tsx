@@ -25,11 +25,18 @@ type DiagnosticsResponse = {
 
 type CaptureResult = {
   ok: boolean;
-  mode?: "mock" | "command";
+  mode?: "mock" | "command" | "eos-watch";
   imageUrl?: string;
   localFilePath?: string;
   sourceFilePath?: string;
   error?: string;
+  targetOutputPath?: string;
+  commandPath?: string;
+  args?: string[];
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number | null;
+  signal?: string | null;
 };
 
 type PrintTemplateResult = {
@@ -435,7 +442,26 @@ export default function Admin() {
             {cameraResult.imageUrl && <p>Image URL: {cameraResult.imageUrl}</p>}
             {cameraResult.localFilePath && <p>Local file: {cameraResult.localFilePath}</p>}
             {cameraResult.sourceFilePath && <p>Source file: {cameraResult.sourceFilePath}</p>}
+            {cameraResult.targetOutputPath && <p>Target output: {cameraResult.targetOutputPath}</p>}
             {cameraResult.error && <p>Last capture error: {cameraResult.error}</p>}
+            {cameraResult.commandPath && (
+              <div style={{ marginTop: "1rem", fontSize: "0.85rem" }}>
+                <strong>Command Debug:</strong>
+                <p>Path: {cameraResult.commandPath}</p>
+                <p>Args: {cameraResult.args?.join(" ")}</p>
+                <p>Exit code: {cameraResult.exitCode ?? "-"} | Signal: {cameraResult.signal || "-"}</p>
+                {cameraResult.stdout && (
+                  <pre style={{ background: "#222", color: "#0f0", padding: "0.5rem", marginTop: "0.5rem", overflow: "auto", maxHeight: "150px", whiteSpace: "pre-wrap" }}>
+                    {cameraResult.stdout}
+                  </pre>
+                )}
+                {cameraResult.stderr && (
+                  <pre style={{ background: "#222", color: "#f55", padding: "0.5rem", marginTop: "0.5rem", overflow: "auto", maxHeight: "150px", whiteSpace: "pre-wrap" }}>
+                    {cameraResult.stderr}
+                  </pre>
+                )}
+              </div>
+            )}
           </div>
         )}
       </section>
