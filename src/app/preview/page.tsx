@@ -28,7 +28,12 @@ export default function Preview() {
   }, [hasHydrated, router, session?.capturedPhotos.length]);
 
   async function finishPreview() {
-    if (!session) {
+    if (!session || isSaving) {
+      return;
+    }
+
+    if (session.finalImageUrl && session.printImageUrl) {
+      router.push("/result");
       return;
     }
 
@@ -81,8 +86,8 @@ export default function Preview() {
       <PreviewComposer photoUrl={session?.capturedPhotos?.[0]} />
       <PhotoResultStrip photos={session?.capturedPhotos ?? []} />
       <StickerPicker />
-      <KioskButton onClick={finishPreview} className="preview-next">
-        {isSaving ? "SAVE" : "NEXT"}
+      <KioskButton onClick={finishPreview} className="preview-next" style={{ opacity: isSaving ? 0.7 : 1 }}>
+        {isSaving ? "PROCESSING..." : "NEXT"}
       </KioskButton>
       {saveError && <p className="kiosk-message">{saveError}</p>}
     </KioskStage>

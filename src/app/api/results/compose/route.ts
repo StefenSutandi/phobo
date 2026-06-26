@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, access } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { composeFinalImages } from "@/lib/image-processing/compose-final";
@@ -100,6 +100,35 @@ export async function POST(request: Request) {
       (photoUrl): photoUrl is string => typeof photoUrl === "string" && photoUrl.length > 0,
     );
 
+    const outputDirectory = path.join(process.cwd(), "public", "results", safeSessionId);
+    const finalScreenPath = path.join(outputDirectory, "final_screen.png");
+    const finalPrintPath = path.join(outputDirectory, "final_print.jpg");
+    const manifestPath = path.join(outputDirectory, "compose-manifest.json");
+
+    const payloadHash = JSON.stringify({
+      capturedPhotos,
+      selectedFrameId: body.selectedFrameId,
+      selectedBackgroundId: body.selectedBackgroundId,
+      options: body.options,
+    });
+
+    try {
+      await access(finalScreenPath);
+      await access(finalPrintPath);
+      const existingManifest = await readFile(manifestPath, "utf-8");
+      if (existingManifest === payloadHash) {
+        console.log(`[Compose API] Inputs unchanged, skipping compose for ${safeSessionId}`);
+        return NextResponse.json({
+          ok: true,
+          finalImageUrl: `/results/${safeSessionId}/final_screen.png`,
+          printImageUrl: `/results/${safeSessionId}/final_print.jpg`,
+          warnings: []
+        });
+      }
+    } catch {
+      // files missing or manifest mismatch, proceed to compose
+    }
+
     console.log(`[Compose API] Starting compose for session: ${safeSessionId}`);
     console.log(`[Compose API] Captured photos: ${capturedPhotos.join(", ")}`);
     console.log(`[Compose API] Selected frame: ${body.selectedFrameId}`);
@@ -119,15 +148,12 @@ export async function POST(request: Request) {
       selectedFrameId: body.selectedFrameId,
       selectedBackgroundId: body.selectedBackgroundId,
     });
-    const outputDirectory = path.join(process.cwd(), "public", "results", safeSessionId);
-    const finalScreenPath = path.join(outputDirectory, "final_screen.png");
-    const finalPrintPath = path.join(outputDirectory, "final_print.jpg");
-
     console.log(`[Compose API] Stage: saving files to ${outputDirectory}`);
     
     await mkdir(outputDirectory, { recursive: true });
     await writeFile(finalScreenPath, composed.finalScreenPng);
     await writeFile(finalPrintPath, printBuffer);
+    await writeFile(manifestPath, payloadHash);
 
     return NextResponse.json({
       ok: true,
