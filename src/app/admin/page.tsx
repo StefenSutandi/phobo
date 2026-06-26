@@ -55,6 +55,7 @@ type ComposeResult = {
 };
 
 type OperatorLogEntry = {
+  id: string;
   timestamp: string;
   message: string;
 };
@@ -85,22 +86,22 @@ export default function Admin() {
   const [isGeneratingPrint, setIsGeneratingPrint] = useState(false);
   const [isTestingPrint, setIsTestingPrint] = useState(false);
   const [showResultsFolderInstruction, setShowResultsFolderInstruction] = useState(false);
-  const [operatorLog, setOperatorLog] = useState<OperatorLogEntry[]>([
-    {
-      timestamp: new Date().toLocaleTimeString(),
-      message: "Admin dashboard opened",
-    },
-  ]);
+  const [operatorLog, setOperatorLog] = useState<OperatorLogEntry[]>([]);
 
   function addOperatorLog(message: string) {
     setOperatorLog((current) => [
       {
+        id: crypto.randomUUID(),
         timestamp: new Date().toLocaleTimeString(),
         message,
       },
       ...current,
     ].slice(0, 8));
   }
+
+  useEffect(() => {
+    addOperatorLog("Admin dashboard opened");
+  }, []);
 
   useEffect(() => {
     async function loadDiagnostics() {
@@ -380,7 +381,7 @@ export default function Admin() {
         <div className="admin-result">
           <strong>Status / Error Log</strong>
           {operatorLog.map((entry) => (
-            <p key={`${entry.timestamp}-${entry.message}`}>
+            <p key={entry.id}>
               {entry.timestamp}: {entry.message}
             </p>
           ))}

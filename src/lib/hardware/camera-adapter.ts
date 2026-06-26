@@ -136,15 +136,23 @@ export async function capturePhoto({
     const timeoutMs = Number.parseInt(process.env.PHOBO_CAMERA_CAPTURE_TIMEOUT_MS || "20000", 10);
     const timeoutToUse = Number.isFinite(timeoutMs) ? timeoutMs : 20000;
 
+    console.log(`[CameraAdapter] eos-watch started`);
+    console.log(`[CameraAdapter] watchDir: ${watchDir}`);
+    console.log(`[CameraAdapter] timeout: ${timeoutToUse}ms`);
+    console.log(`[CameraAdapter] allowedExtensions: ${allowedExtensions.join(", ")}`);
+
     if (!watchDir) {
       return { ok: false, mode, error: "PHOBO_EOS_WATCH_DIR is required when PHOBO_CAMERA_MODE=eos-watch" };
     }
 
-    if (!(await fileExists(watchDir))) {
+    const dirExists = await fileExists(watchDir);
+    console.log(`[CameraAdapter] watchDir exists: ${dirExists}`);
+    if (!dirExists) {
       return { ok: false, mode, error: "EOS watch folder does not exist" };
     }
 
     const captureStartTime = Date.now();
+    console.log(`[CameraAdapter] captureStartTime: ${captureStartTime}`);
     const endTime = captureStartTime + timeoutToUse;
     const safeFileName = sanitizeFileName(fileName);
     const publicOutputDir = path.join(
@@ -157,6 +165,7 @@ export async function capturePhoto({
 
     let foundFilePath: string | null = null;
     let foundExt = "";
+    const loggedFiles = new Set<string>();
 
     try {
       await mkdir(publicOutputDir, { recursive: true });
@@ -169,18 +178,32 @@ export async function capturePhoto({
             const filePath = path.join(watchDir, file);
             try {
               const stats = await stat(filePath);
-              if (stats.isFile() && stats.mtimeMs >= captureStartTime) {
-                const initialSize = stats.size;
-                await new Promise((resolve) => setTimeout(resolve, 500));
-                const newStats = await stat(filePath);
-                if (newStats.size === initialSize && initialSize > 0) {
-                  foundFilePath = filePath;
-                  foundExt = ext;
-                  break;
+              if (stats.isFile()) {
+                if (stats.mtimeMs >= captureStartTime) {
+                  if (!loggedFiles.has(file)) {
+                    console.log(`[CameraAdapter] Found candidate: ${file} (mtimeMs: ${stats.mtimeMs} >= ${captureStartTime})`);
+                    loggedFiles.add(file);
+                  }
+                  const initialSize = stats.size;
+                  await new Promise((resolve) => setTimeout(resolve, 500));
+                  const newStats = await stat(filePath);
+                  if (newStats.size === initialSize && initialSize > 0) {
+                    console.log(`[CameraAdapter] File size stable: ${file}`);
+                    foundFilePath = filePath;
+                    foundExt = ext;
+                    break;
+                  } else {
+                    console.log(`[CameraAdapter] Ignored: ${file} (size not stable or 0, initial: ${initialSize}, new: ${newStats.size})`);
+                  }
+                } else {
+                  if (!loggedFiles.has(file)) {
+                    console.log(`[CameraAdapter] Ignored: ${file} (old file, mtimeMs: ${stats.mtimeMs} < ${captureStartTime})`);
+                    loggedFiles.add(file);
+                  }
                 }
               }
             } catch (err) {
-              // ignore access errors
+              console.error(`[CameraAdapter] Stat error for ${file}:`, err);
             }
           }
         }
@@ -191,8 +214,11 @@ export async function capturePhoto({
       }
 
       if (!foundFilePath) {
+        console.log(`[CameraAdapter] Timeout reached (${timeoutToUse}ms). Current time: ${Date.now()}, endTime: ${endTime}`);
         return { ok: false, mode, error: `No new file detected before timeout (${timeoutToUse}ms)` };
       }
+
+      console.log(`[CameraAdapter] Successfully detected file: ${foundFilePath}, copying to ${publicOutputDir}`);
 
       const publicOutputPath = path.join(publicOutputDir, `${safeFileName}${foundExt}`);
       await copyFile(foundFilePath, publicOutputPath);
