@@ -335,8 +335,8 @@
     "templateUrl": "/assets/frames/7.png",
     "width": 1200,
     "height": 1800,
-    "requiredPhotos": 3,
-    "layout": "triple-strip",
+    "requiredPhotos": 6,
+    "layout": "six-slot",
     "photoSlots": [
       {
         "x": 64,
@@ -382,8 +382,8 @@
     "templateUrl": "/assets/frames/8.png",
     "width": 1200,
     "height": 1800,
-    "requiredPhotos": 3,
-    "layout": "triple-strip",
+    "requiredPhotos": 6,
+    "layout": "six-slot",
     "photoSlots": [
       {
         "x": 116,
@@ -488,7 +488,7 @@
     "templateUrl": "/assets/frames/10.png",
     "width": 1200,
     "height": 1800,
-    "requiredPhotos": 2,
+    "requiredPhotos": 4,
     "layout": "quad-grid",
     "photoSlots": [
       {
