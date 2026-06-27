@@ -250,9 +250,16 @@ export function BackgroundPicker({
 type PreviewComposerProps = { frame: FrameData; photoUrls: string[] };
 
 export function PreviewComposer({ frame, photoUrls }: PreviewComposerProps) {
-    return <RoundedPanel className="preview-composer"><div className="preview-frame" aria-label={`${frame.name} preview`}>
-      {frame.photoSlots.map((photoSlot,index) => { const photoUrl=photoUrls[index % Math.max(1, photoUrls.length)]; return <div className="preview-frame__slot" key={`${photoSlot.x}-${photoSlot.y}-${index}`} style={{zIndex: 1, left:`${photoSlot.x/frame.width*100}%`,top:`${photoSlot.y/frame.height*100}%`,width:`${photoSlot.width/frame.width*100}%`,height:`${photoSlot.height/frame.height*100}%`,transform:photoSlot.rotation?`rotate(${photoSlot.rotation}deg)`:undefined}}>{photoUrl&&<img src={photoUrl} alt={`Selected photo ${(index%Math.max(1, photoUrls.length))+1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}</div>;})}
-      <img src={frame.templateUrl} alt={frame.name} className="preview-frame__template" style={{ position: "relative", zIndex: 10, pointerEvents: "none" }} />
+    return <RoundedPanel className="preview-composer"><div className="preview-frame" aria-label={`${frame.name} preview`} style={{ position: "relative" }}>
+      {frame.photoSlots.map((photoSlot, index) => { 
+        const photoUrl = photoUrls.length > 0 ? photoUrls[index % photoUrls.length] : null; 
+        return (
+          <div className="preview-frame__slot" key={`${photoSlot.x}-${photoSlot.y}-${index}`} style={{zIndex: 1, left:`${photoSlot.x/frame.width*100}%`,top:`${photoSlot.y/frame.height*100}%`,width:`${photoSlot.width/frame.width*100}%`,height:`${photoSlot.height/frame.height*100}%`,transform:photoSlot.rotation?`rotate(${photoSlot.rotation}deg)`:undefined}}>
+            {photoUrl && <img src={photoUrl} alt={`Selected photo ${(index % Math.max(1, photoUrls.length)) + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+          </div>
+        );
+      })}
+      <img src={frame.templateUrl} alt={frame.name} className="preview-frame__template" style={{ position: "absolute", zIndex: 10, pointerEvents: "none", width: "100%", height: "100%", top: 0, left: 0 }} />
     </div></RoundedPanel>;
   }
 type PhotoResultStripProps = {
