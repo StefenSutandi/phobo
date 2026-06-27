@@ -29,6 +29,11 @@ export type PrintJobResult = {
   localFilePath?: string;
   error?: string;
   rawOutput?: string;
+  command?: string;
+  filePath?: string;
+  printerName?: string;
+  stdout?: string;
+  stderr?: string;
 };
 
 function getPrinterMode(): PrinterMode {
@@ -128,22 +133,36 @@ export class PrinterAdapter {
       };
     }
 
+    let localFilePath = "";
+    let command = "";
+
     try {
-      const localFilePath = await resolvePrintUrlToLocalFilePath(printUrl);
-      const command = [
-        "$file = $args[0]",
-        "$printer = $args[1]",
-        "Start-Process -FilePath $file -Verb PrintTo -ArgumentList $printer -WindowStyle Hidden",
+      localFilePath = await resolvePrintUrlToLocalFilePath(printUrl);
+      const escapedFilePath = localFilePath.replace(/'/g, "''");
+      const escapedPrinterName = printerName.replace(/'/g, "''");
+      
+      command = [
+        `$file = '${escapedFilePath}'`,
+        `$printer = '${escapedPrinterName}'`,
+        `if (-not (Test-Path -LiteralPath $file)) { throw "Print file not found: $file" }`,
+        `Start-Process -FilePath $file -Verb PrintTo -ArgumentList "\`"$printer\`"" -WindowStyle Hidden`
       ].join("; ");
+
+      console.log(`[Printer] Mode: ${mode} | Printer: ${printerName}`);
+      console.log(`[Printer] File: ${localFilePath}`);
+      console.log(`[Printer] Command: ${command}`);
+
       const { stdout, stderr } = await execFileAsync(
         "powershell.exe",
-        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command, localFilePath, printerName],
+        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
         {
           timeout: 15000,
           windowsHide: true,
           maxBuffer: 1024 * 1024,
         },
       );
+      
+      console.log(`[Printer] Success. Stdout: ${stdout.trim() || 'none'}, Stderr: ${stderr.trim() || 'none'}`);
 
       return {
         ok: true,
@@ -152,18 +171,37 @@ export class PrinterAdapter {
         jobId: `windows-${sessionId}-${Date.now()}`,
         localFilePath,
         rawOutput: rawOutput(stdout, stderr) || undefined,
+        command,
+        filePath: localFilePath,
+        printerName,
+        stdout: stdout.toString(),
+        stderr: stderr.toString()
       };
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException & {
         stdout?: string | Buffer;
         stderr?: string | Buffer;
+        code?: number;
       };
+      
+      const outStr = nodeError.stdout?.toString() || "";
+      const errStr = nodeError.stderr?.toString() || "";
+
+      console.error(`[Printer] Error: ${nodeError.message}`);
+      console.error(`[Printer] Exit code: ${nodeError.code}`);
+      console.error(`[Printer] Stdout: ${outStr}`);
+      console.error(`[Printer] Stderr: ${errStr}`);
 
       return {
         ok: false,
         mode,
         error: nodeError.message || "Windows print command failed",
         rawOutput: rawOutput(nodeError.stdout, nodeError.stderr) || undefined,
+        command,
+        filePath: localFilePath || undefined,
+        printerName,
+        stdout: outStr,
+        stderr: errStr
       };
     }
   }
