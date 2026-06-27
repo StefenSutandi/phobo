@@ -79,6 +79,7 @@ export default function Admin() {
     setPrintImageUrl,
     setPrintStatus,
     setGreenScreenTuning,
+    createNewSession,
   } = useSessionStore();
   const [cameraMode, setCameraMode] = useState("mock");
   const [cameraCommandConfigured, setCameraCommandConfigured] = useState(false);
@@ -308,6 +309,15 @@ export default function Admin() {
     setPrintTemplateResult(null);
     setPrintResult(null);
     addOperatorLog("Current session cleared");
+  }
+
+  function startNewSession() {
+    const newSession = createNewSession();
+    setCameraResult(null);
+    setComposeResult(null);
+    setPrintTemplateResult(null);
+    setPrintResult(null);
+    addOperatorLog(`Started new session: ${newSession.sessionId}`);
   }
 
   function clearFinalOutput() {
@@ -603,6 +613,13 @@ export default function Admin() {
             }}
           >
             Fail Payment
+          </button>
+          <button
+            type="button"
+            className="admin-action"
+            onClick={startNewSession}
+          >
+            Start New Session
           </button>
           <button
             type="button"

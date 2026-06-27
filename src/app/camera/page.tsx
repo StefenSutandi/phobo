@@ -26,8 +26,11 @@ export default function Camera() {
     hasHydrated,
     selectBackground,
     addCapturedPhoto,
+    clearCapturedPhotos,
+    clearFinalResult,
   } = useSessionStore();
   const liveViewRef = useRef<CameraLiveViewHandle>(null);
+  const isFirstShoot = useRef(true);
   const [message, setMessage] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
   const [cameraMode, setCameraMode] = useState<string>("mock");
@@ -60,7 +63,14 @@ export default function Camera() {
     if (!session.selectedBackgroundId) {
       selectBackground(backgrounds[0].id);
     }
-  }, [hasHydrated, router, selectBackground, session?.selectedBackgroundId, session?.selectedFrameId]);
+    
+    // If the session was already completed (final image generated), wipe the slate clean for a fresh run
+    // in case the operator is reusing the session ID for testing.
+    if (session.finalImageUrl || session.printImageUrl) {
+      clearCapturedPhotos();
+      clearFinalResult();
+    }
+  }, [hasHydrated, router, selectBackground, session?.selectedBackgroundId, session?.selectedFrameId, session?.finalImageUrl, session?.printImageUrl, clearCapturedPhotos, clearFinalResult]);
 
   async function shoot() {
     if (!session?.sessionId || !session.selectedBackgroundId) {
@@ -73,6 +83,18 @@ export default function Camera() {
       if (liveStatus !== "active") {
         setMessage("Start live view first.");
         return;
+      }
+    }
+
+    if (isFirstShoot.current) {
+      isFirstShoot.current = false;
+      // If we are starting a fresh shoot but the session already has old photos 
+      // (and we didn't just intentionally return from preview to retake), clear them.
+      // Since we just cleared completed sessions on mount, any remaining photos here 
+      // might be from an abandoned test. If they want to keep them, we assume it's a multi-shot flow.
+      // But for current 1-shot flow, we always clear to prevent accumulation.
+      if (session.capturedPhotos.length > 0) {
+        clearCapturedPhotos();
       }
     }
 
