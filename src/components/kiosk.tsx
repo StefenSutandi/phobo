@@ -331,7 +331,7 @@ export function LandingBrand() {
         width={2381}
         height={1501}
         priority
-        sizes="460px"
+        sizes="560px"
         className="landing-brand__image"
       />
     </div>

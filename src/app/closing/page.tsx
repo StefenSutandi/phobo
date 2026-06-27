@@ -16,28 +16,30 @@ export default function Closing() {
   }, [resetSession, router]);
 
   const links: [string, string | undefined][] = [
-    ["Feedback", process.env.NEXT_PUBLIC_FEEDBACK_URL],
-    ["Frame Request", process.env.NEXT_PUBLIC_FRAME_REQUEST_URL],
-    ["Event Registration", process.env.NEXT_PUBLIC_EVENT_REGISTRATION_URL],
+    ["FEEDBACK", process.env.NEXT_PUBLIC_FEEDBACK_URL],
+    ["FRAME REQUEST", process.env.NEXT_PUBLIC_FRAME_REQUEST_URL],
+    ["EVENT REGISTRATION", process.env.NEXT_PUBLIC_EVENT_REGISTRATION_URL],
   ];
 
   return (
     <KioskStage>
-      <OptionalAsset
-        src="/assets/figma/illustrations/closing.png"
-        alt=""
-        className="closing-illustration"
-      />
-      <div className="closing-qr-column">
-        {links.map(([label, url]) => (
-          <div key={label}>
-            <ResultQrCode value={url || `https://phobo.local/${label.toLowerCase().replaceAll(" ", "-")}`} />
-            <span>{label}</span>
-          </div>
-        ))}
+      <div className="closing-screen">
+        <OptionalAsset
+          src="/assets/figma/illustrations/closing.png"
+          alt=""
+          className="closing-illustration"
+        />
+        <div className="closing-qr-column">
+          {links.map(([label, url]) => (
+            <div className="closing-qr-row" key={label}>
+              <ResultQrCode value={url || `https://phobo.local/${label.toLowerCase().replaceAll(" ", "-")}`} />
+              <span>{label}</span>
+            </div>
+          ))}
+        </div>
+        <h1 className="closing-title">SEE U LATER</h1>
+        <button className="closing-home" onClick={() => { resetSession(); router.push("/"); }}>HOME</button>
       </div>
-      <h1 className="closing-title">SEE U LATER</h1>
-      <button className="closing-home" onClick={() => { resetSession(); router.push("/"); }}>HOME</button>
     </KioskStage>
   );
 }
