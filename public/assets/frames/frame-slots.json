@@ -619,40 +619,40 @@
     "layout": "six-slot",
     "photoSlots": [
       {
-        "x": 103,
-        "y": 30,
-        "width": 168,
-        "height": 88
+        "x": 0,
+        "y": 26,
+        "width": 382,
+        "height": 386
       },
       {
-        "x": 103,
-        "y": 517,
-        "width": 168,
-        "height": 88
+        "x": 0,
+        "y": 513,
+        "width": 382,
+        "height": 387
       },
       {
-        "x": 599,
-        "y": 517,
-        "width": 169,
-        "height": 88
+        "x": 497,
+        "y": 513,
+        "width": 381,
+        "height": 387
       },
       {
-        "x": 94,
-        "y": 933,
-        "width": 168,
-        "height": 88
+        "x": 0,
+        "y": 929,
+        "width": 373,
+        "height": 386
       },
       {
-        "x": 94,
-        "y": 1420,
-        "width": 168,
-        "height": 88
+        "x": 0,
+        "y": 1416,
+        "width": 373,
+        "height": 384
       },
       {
-        "x": 590,
-        "y": 1420,
-        "width": 168,
-        "height": 88
+        "x": 487,
+        "y": 1391,
+        "width": 383,
+        "height": 409
       }
     ]
   },
@@ -666,10 +666,10 @@
     "layout": "single",
     "photoSlots": [
       {
-        "x": 379,
-        "y": 541,
-        "width": 445,
-        "height": 447
+        "x": 380,
+        "y": 572,
+        "width": 444,
+        "height": 416
       }
     ]
   },
@@ -683,22 +683,22 @@
     "layout": "triple-strip",
     "photoSlots": [
       {
-        "x": 393,
-        "y": 142,
-        "width": 117,
-        "height": 224
+        "x": 0,
+        "y": 5,
+        "width": 515,
+        "height": 509
       },
       {
-        "x": 1043,
-        "y": 142,
-        "width": 117,
-        "height": 224
+        "x": 650,
+        "y": 5,
+        "width": 515,
+        "height": 509
       },
       {
-        "x": 393,
-        "y": 803,
-        "width": 117,
-        "height": 225
+        "x": 0,
+        "y": 667,
+        "width": 515,
+        "height": 509
       }
     ]
   },
@@ -712,28 +712,28 @@
     "layout": "quad-grid",
     "photoSlots": [
       {
-        "x": 188,
-        "y": 554,
-        "width": 198,
-        "height": 104
+        "x": 0,
+        "y": 549,
+        "width": 583,
+        "height": 455
       },
       {
-        "x": 804,
-        "y": 554,
-        "width": 198,
-        "height": 104
+        "x": 617,
+        "y": 549,
+        "width": 583,
+        "height": 455
       },
       {
-        "x": 188,
-        "y": 1083,
-        "width": 198,
-        "height": 103
+        "x": 0,
+        "y": 1078,
+        "width": 583,
+        "height": 455
       },
       {
-        "x": 804,
-        "y": 1083,
-        "width": 198,
-        "height": 103
+        "x": 617,
+        "y": 1078,
+        "width": 583,
+        "height": 455
       }
     ]
   }
