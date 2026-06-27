@@ -26,7 +26,7 @@ export type FrameData = {
   width: number;
   height: number;
   requiredPhotos: number;
-  layout: "single" | "triple-strip" | "quad-grid" | "eight-slot";
+  layout: "single" | "triple-strip" | "quad-grid" | "eight-slot" | "four-slot" | "six-slot";
   photoSlots: PhotoSlot[];
 };
 
