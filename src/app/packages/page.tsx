@@ -16,23 +16,23 @@ export default function Packages() {
       <h1 className="packages-title">PILIHAN PAKET FOTO</h1>
       <div className="package-row">
         {packages.map((item, index) => (
-          <article className={`product-card product-card--${item.color}`} key={item.id}>
-            <div className="package-art">
+          <article className={`package-card package-card--${item.color}`} key={item.id}>
+            <div className="package-illustration-wrap">
               <OptionalAsset
                 src={`/assets/figma/illustrations/${packageIllustrations[index]}`}
                 alt=""
-                className="package-art__image"
+                className="package-illustration"
                 fallback={<span aria-hidden="true">PHOTO</span>}
               />
             </div>
-            <h2>{item.name}</h2>
-            <div className="product-details">
-              <span>{item.frameCount} Frame</span>
-              <span>{item.printCount}x Cetak</span>
-              <span>{item.maxShots} Shoot</span>
-              <span>{item.durationMinutes} menit</span>
+            <h2 className="package-title">{item.name}</h2>
+            <div className="package-details-grid">
+              <div>{item.frameCount} Frame</div>
+              <div>{item.printCount}x Cetak</div>
+              <div>{item.maxShots} Shoot</div>
+              <div>{item.durationMinutes} menit</div>
             </div>
-            <strong>Rp. {item.price.toLocaleString("id-ID")},00</strong>
+            <div className="package-price">Rp. {item.price.toLocaleString("id-ID")},00</div>
             <button onClick={() => { selectPackage(item.id); router.push("/payment"); }}>
               SELECT
             </button>
