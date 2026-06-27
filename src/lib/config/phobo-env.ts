@@ -7,7 +7,7 @@ export function getPhoboEnv() {
   const printHeightPx = Number.parseInt(process.env.PHOBO_PRINT_HEIGHT_PX || "1181", 10);
 
   return {
-    cameraMode: (process.env.PHOBO_CAMERA_MODE === "command" || process.env.PHOBO_CAMERA_MODE === "eos-watch")
+    cameraMode: (process.env.PHOBO_CAMERA_MODE === "command" || process.env.PHOBO_CAMERA_MODE === "eos-watch" || process.env.PHOBO_CAMERA_MODE === "browser-video")
       ? process.env.PHOBO_CAMERA_MODE
       : "mock",
     cameraCaptureDir: process.env.PHOBO_CAMERA_CAPTURE_DIR || "C:\\PhoboCameraCaptures",

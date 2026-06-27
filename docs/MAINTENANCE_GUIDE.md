@@ -57,11 +57,16 @@ PHOBO_DRIVE_ENABLED=false
 
 ## Switch Camera Modes
 
-Mock camera:
-
 ```env
 PHOBO_CAMERA_MODE=mock
 ```
+
+Browser Video (USB Video / webcam):
+
+```env
+PHOBO_CAMERA_MODE=browser-video
+```
+*Note: This mode captures high-quality frames directly from the USB video stream in the browser. Any overlays (like Canon focus boxes) visible in the HDMI output will be captured. This mode is simpler and more stable than command capture when live view/capture conflicts occur.*
 
 Validated Canon command mode (digiCamControl):
 

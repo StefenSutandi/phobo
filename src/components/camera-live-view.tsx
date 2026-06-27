@@ -5,6 +5,8 @@ import { RoundedPanel } from "@/components/kiosk";
 
 export type CameraLiveViewHandle = {
   stopLiveView: () => void;
+  captureFrame: () => { imageDataUrl: string; width: number; height: number };
+  getStatus: () => "inactive" | "starting" | "active" | "failed";
 };
 
 export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
@@ -30,7 +32,34 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
 
   useImperativeHandle(ref, () => ({
     stopLiveView,
-  }));
+    getStatus: () => status,
+    captureFrame: () => {
+      if (status !== "active" || !videoRef.current) {
+        throw new Error("Live view must be active before browser-video capture.");
+      }
+      const video = videoRef.current;
+      if (!video.videoWidth || !video.videoHeight) {
+        throw new Error("Video dimensions are not available yet.");
+      }
+      
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        throw new Error("Could not get 2d context for capture.");
+      }
+      
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+      
+      return {
+        imageDataUrl,
+        width: canvas.width,
+        height: canvas.height
+      };
+    }
+  }), [status]);
 
   const loadDevices = async () => {
     try {
