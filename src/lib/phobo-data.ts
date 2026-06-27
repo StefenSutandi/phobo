@@ -1,6 +1,11 @@
 export type PackageData = {
   id: string;
   title: string;
+  frameCount?: number;
+  printCount?: number;
+  maxShots?: number;
+  durationMinutes?: number;
+  price?: number;
   color: "orange" | "brown" | "purple";
 };
 
@@ -105,3 +110,4 @@ export function getFrameById(frameId?: string) {
 export function getBackgroundById(backgroundId?: string) {
   return backgrounds.find((background) => background.id === backgroundId) ?? backgrounds[0];
 }
+

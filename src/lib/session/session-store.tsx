@@ -49,6 +49,7 @@ function createSession(): KioskSession {
     sessionId: `session-${randomId}`,
     paymentStatus: "idle",
     capturedPhotos: [],
+    selectedPhotoIndices: [],
     printStatus: "idle",
     greenScreenTuning: {
       applyChromaKey: true,
@@ -120,6 +121,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         selectedFrameId: undefined,
         selectedBackgroundId: undefined,
         capturedPhotos: [],
+        selectedPhotoIndices: [],
         finalImageUrl: undefined,
         printImageUrl: undefined,
         driveUrl: undefined,
@@ -174,6 +176,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       updateSession(current, (activeSession) => ({
         ...activeSession,
         capturedPhotos: [],
+        selectedPhotoIndices: [],
         finalImageUrl: undefined,
         printImageUrl: undefined,
       })),

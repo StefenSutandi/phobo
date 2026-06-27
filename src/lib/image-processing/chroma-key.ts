@@ -116,6 +116,8 @@ export async function applyChromaKey(
     height,
   });
 
+  console.log(`[Chroma Key] Applied with greenMin=${greenMin}, tolerance=${greenTolerance}, dominance=${greenDominance}`);
+
   return sharp(backgroundBuffer)
     .composite([{ input: keyedPhoto, left: 0, top: 0 }])
     .png()

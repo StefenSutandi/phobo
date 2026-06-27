@@ -13,10 +13,19 @@ export type GreenScreenTuning = {
 export type KioskSession = {
   sessionId: string;
   selectedPackageId?: string;
+  packageId?: string;
+  packageName?: string;
+  frameCount?: number;
+  printCount?: number;
+  maxShots?: number;
+  durationMinutes?: number;
+  price?: number;
   paymentStatus: PaymentStatus;
   selectedFrameId?: string;
   selectedBackgroundId?: string;
   capturedPhotos: string[];
+  selectedPhotoIndices: number[];
+  selectedStickerId?: string;
   finalImageUrl?: string;
   printImageUrl?: string;
   driveUrl?: string;
@@ -25,3 +34,4 @@ export type KioskSession = {
   createdAt: string;
   updatedAt: string;
 };
+
