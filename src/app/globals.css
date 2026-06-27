@@ -121,7 +121,10 @@ button {
 }
 
 .landing-brand {
+  align-items: center;
+  display: flex;
   height: 210px;
+  justify-content: center;
   left: 145px;
   overflow: hidden;
   position: absolute;
@@ -130,10 +133,13 @@ button {
 }
 
 .landing-brand__image {
-  height: 100% !important;
+  display: block;
+  height: auto;
+  max-height: 210px;
+  max-width: 460px;
   object-fit: contain;
   object-position: center;
-  width: 100% !important;
+  width: auto;
 }
 
 .landing-cta {

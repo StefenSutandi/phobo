@@ -20,7 +20,7 @@ export function KioskStage({ children, background = "main" }: KioskStageProps) {
       const padding = 36;
       const availableWidth = Math.max(window.innerWidth - padding, 1);
       const availableHeight = Math.max(window.innerHeight - padding, 1);
-      setScale(Math.min(availableWidth / 750, availableHeight / 440));
+      setScale(Math.min(1, availableWidth / 750, availableHeight / 440));
     }
 
     updateScale();
@@ -326,11 +326,12 @@ export function LandingBrand() {
   return (
     <div className="landing-brand" aria-hidden="true">
       <Image
-        src="/assets/brand/phobo-hero-clean.png"
+        src="/assets/figma/illustrations/opening.png"
         alt=""
-        fill
+        width={2381}
+        height={1501}
         priority
-        sizes="508px"
+        sizes="460px"
         className="landing-brand__image"
       />
     </div>
