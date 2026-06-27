@@ -11,9 +11,9 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [isActive, setIsActive] = useState(false);
+  const [status, setStatus] = useState<"inactive" | "starting" | "active" | "failed">("inactive");
   const [error, setError] = useState("");
+  const [videoDimensions, setVideoDimensions] = useState("");
   const streamRef = useRef<MediaStream | null>(null);
 
   const stopLiveView = () => {
@@ -24,31 +24,37 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
-    setIsActive(false);
+    setStatus("inactive");
+    setVideoDimensions("");
   };
 
   useImperativeHandle(ref, () => ({
     stopLiveView,
   }));
 
-  useEffect(() => {
-    async function loadDevices() {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoInputs = devices.filter((device) => device.kind === "videoinput");
-        setDevices(videoInputs);
-        const savedId = window.localStorage.getItem("phobo.liveViewDeviceId");
-        if (savedId && videoInputs.some((d) => d.deviceId === savedId)) {
-          setSelectedDeviceId(savedId);
-        } else if (videoInputs.length > 0) {
-          setSelectedDeviceId(videoInputs[0].deviceId);
-        }
-      } catch (err) {
-        console.error("Could not enumerate devices:", err);
+  const loadDevices = async () => {
+    try {
+      const allDevices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = allDevices.filter((device) => device.kind === "videoinput");
+      console.log("[LiveView] Enumerated video inputs:", videoInputs.map(d => ({ label: d.label, id: d.deviceId })));
+      
+      setDevices(videoInputs);
+      
+      const savedId = window.localStorage.getItem("phobo.liveViewDeviceId");
+      if (savedId && videoInputs.some((d) => d.deviceId === savedId)) {
+        setSelectedDeviceId(savedId);
+      } else if (videoInputs.length > 0) {
+        setSelectedDeviceId(videoInputs[0].deviceId);
+      } else {
+        setSelectedDeviceId("");
       }
+    } catch (err) {
+      console.error("[LiveView] Could not enumerate devices:", err);
     }
+  };
+
+  useEffect(() => {
     loadDevices();
-    
     return () => {
       stopLiveView();
     };
@@ -59,56 +65,124 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
     setSelectedDeviceId(newId);
     window.localStorage.setItem("phobo.liveViewDeviceId", newId);
     
-    if (isActive) {
+    if (status === "active" || status === "starting") {
       stopLiveView();
     }
   };
 
-  const startLiveView = async () => {
+  const attemptGetUserMedia = async (constraints: MediaStreamConstraints, attemptName: string) => {
+    console.log(`[LiveView] Attempt ${attemptName} with constraints:`, JSON.stringify(constraints));
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log(`[LiveView] Attempt ${attemptName} SUCCESS. Track label:`, stream.getVideoTracks()[0]?.label);
+      return stream;
+    } catch (err) {
+      console.warn(`[LiveView] Attempt ${attemptName} FAILED:`, err);
+      throw err;
+    }
+  };
+
+  const startLiveView = async (useGeneric = false) => {
     setError("");
     stopLiveView();
+    setStatus("starting");
 
+    let stream: MediaStream | null = null;
+    
     try {
-      const constraints: MediaStreamConstraints = {
-        video: selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : true,
-      };
+      if (useGeneric) {
+        stream = await attemptGetUserMedia({ video: true, audio: false }, "Generic");
+      } else {
+        try {
+          stream = await attemptGetUserMedia(
+            { video: { deviceId: { exact: selectedDeviceId } }, audio: false },
+            "A (exact deviceId)"
+          );
+        } catch (e1) {
+          try {
+            stream = await attemptGetUserMedia(
+              {
+                video: {
+                  deviceId: { exact: selectedDeviceId },
+                  width: { ideal: 640 },
+                  height: { ideal: 480 },
+                  frameRate: { ideal: 15, max: 30 }
+                },
+                audio: false
+              },
+              "B (ideal constraints)"
+            );
+          } catch (e2) {
+            stream = await attemptGetUserMedia({ video: true, audio: false }, "C (fallback any video)");
+          }
+        }
+      }
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (!stream) {
+        throw new Error("Failed to acquire stream from all attempts");
+      }
+
       streamRef.current = stream;
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setIsActive(true);
-        setHasPermission(true);
-        
-        // Refresh device list to get true labels if they were blank before permission
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        setDevices(devices.filter((device) => device.kind === "videoinput"));
+      if (!videoRef.current) {
+        throw new Error("Video element ref is null");
       }
+
+      videoRef.current.srcObject = stream;
+      
+      videoRef.current.onloadedmetadata = () => {
+        console.log(`[LiveView] onloadedmetadata fired. Dimensions: ${videoRef.current?.videoWidth}x${videoRef.current?.videoHeight}`);
+        setVideoDimensions(`${videoRef.current?.videoWidth}x${videoRef.current?.videoHeight}`);
+      };
+
+      await videoRef.current.play();
+      console.log("[LiveView] video.play() resolved successfully.");
+      setStatus("active");
+      
+      // Refresh devices to get accurate labels post-permission
+      await loadDevices();
+
     } catch (err) {
-      console.error("Failed to start live view:", err);
-      setHasPermission(false);
-      if (err instanceof Error) {
-        setError(err.message);
+      console.error("[LiveView] Final start failure:", err);
+      setStatus("failed");
+      const errName = err instanceof Error ? err.name : "UnknownError";
+      const errMsg = err instanceof Error ? err.message : String(err);
+      
+      if (errName === "AbortError" || errName === "NotReadableError") {
+        setError(`${errName}: Device detected but failed to start. Close other camera apps, reconnect USB Video, then press Refresh Devices. (${errMsg})`);
       } else {
-        setError("Camera permission denied or device unavailable.");
+        setError(`${errName}: ${errMsg}`);
       }
     }
   };
 
   return (
     <RoundedPanel className="camera-panel" style={{ position: "relative", overflow: "hidden" }}>
-      {isActive ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }}
+      {/* ALWAYS render video so ref is never null, just hide it when not active */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          borderRadius: "inherit",
+          display: status === "active" ? "block" : "none",
+          position: "absolute",
+          top: 0,
+          left: 0,
+          zIndex: 1
+        }}
+      />
+      
+      {status !== "active" && (
+        <div 
+          className="camera-live" 
+          aria-label="Camera preview placeholder" 
+          style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0, zIndex: 0 }} 
         />
-      ) : (
-        <div className="camera-live" aria-label="Camera preview placeholder" style={{ width: "100%", height: "100%" }} />
       )}
       
       <div
@@ -117,7 +191,7 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
           position: "absolute",
           top: "10px",
           left: "10px",
-          background: "rgba(0,0,0,0.6)",
+          background: "rgba(0,0,0,0.7)",
           padding: "10px",
           borderRadius: "8px",
           color: "white",
@@ -126,16 +200,19 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
           flexDirection: "column",
           gap: "8px",
           fontSize: "12px",
-          maxWidth: "300px"
+          maxWidth: "320px",
+          border: "1px solid #555"
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <strong>Browser Live View</strong>
-          {isActive ? (
-            <span style={{ color: "lightgreen", marginLeft: "8px" }}>● ACTIVE</span>
-          ) : (
-            <span style={{ color: "orange", marginLeft: "8px" }}>INACTIVE</span>
-          )}
+          <span style={{ 
+            color: status === "active" ? "lightgreen" : status === "starting" ? "yellow" : status === "failed" ? "pink" : "orange", 
+            marginLeft: "8px",
+            fontWeight: "bold"
+          }}>
+            {status.toUpperCase()}
+          </span>
         </div>
         
         {devices.length > 0 ? (
@@ -154,27 +231,70 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
           <div style={{ color: "pink" }}>No video devices found</div>
         )}
         
-        {!isActive && devices.length > 0 && (
+        <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+          {status !== "active" && devices.length > 0 && (
+            <button 
+              type="button" 
+              onClick={() => startLiveView(false)}
+              disabled={status === "starting"}
+              style={{ 
+                padding: "6px", 
+                background: "#6b46c1", 
+                color: "white", 
+                border: "none", 
+                borderRadius: "4px", 
+                cursor: "pointer",
+                flex: 1
+              }}
+            >
+              START
+            </button>
+          )}
+          
           <button 
             type="button" 
-            onClick={startLiveView}
+            onClick={loadDevices}
             style={{ 
               padding: "6px", 
-              background: "#6b46c1", 
+              background: "#444", 
               color: "white", 
               border: "none", 
               borderRadius: "4px", 
-              cursor: "pointer" 
+              cursor: "pointer",
+              flex: 1
             }}
           >
-            START LIVE VIEW
+            REFRESH
           </button>
+          
+          {status !== "active" && (
+            <button 
+              type="button" 
+              onClick={() => startLiveView(true)}
+              disabled={status === "starting"}
+              style={{ 
+                padding: "6px", 
+                background: "#993333", 
+                color: "white", 
+                border: "none", 
+                borderRadius: "4px", 
+                cursor: "pointer",
+                flex: "1 1 100%"
+              }}
+            >
+              TEST GENERIC CAMERA
+            </button>
+          )}
+        </div>
+        
+        {videoDimensions && status === "active" && (
+          <div style={{ fontSize: "11px", color: "lightgray" }}>Res: {videoDimensions}</div>
         )}
         
-        {error && <div style={{ color: "pink", fontSize: "11px" }}>{error}</div>}
+        {error && <div style={{ color: "pink", fontSize: "11px", wordWrap: "break-word" }}>{error}</div>}
         
         <div style={{ fontSize: "10px", opacity: 0.8, marginTop: "4px" }}>
-          Note: Final photo uses Canon command.
+          Devices detected: {devices.length}
         </div>
       </div>
     </RoundedPanel>
