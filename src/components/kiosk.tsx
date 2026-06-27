@@ -261,9 +261,11 @@ export function PreviewComposer({ photoUrl }: PreviewComposerProps) {
 
 type PhotoResultStripProps = {
   photos?: string[];
+  selectedIndices?: number[];
+  onTogglePhoto?: (index: number) => void;
 };
 
-export function PhotoResultStrip({ photos = [] }: PhotoResultStripProps) {
+export function PhotoResultStrip({ photos = [], selectedIndices = [], onTogglePhoto }: PhotoResultStripProps) {
   const visiblePhotos = photos.length > 0 ? photos : Array.from({ length: 4 }, () => "");
 
   return (
@@ -271,7 +273,7 @@ export function PhotoResultStrip({ photos = [] }: PhotoResultStripProps) {
       <p className="strip-title">HASIL FOTO</p>
       <div className="strip-scroll">
         {visiblePhotos.map((photoUrl, index) => (
-          <button type="button" className="strip-photo" key={`${photoUrl}-${index}`} aria-label={`Photo result ${index + 1}`}>
+          <button type="button" className={`strip-photo ${selectedIndices.includes(index) ? "is-selected" : ""}`} key={`${photoUrl}-${index}`} aria-label={`Photo result ${index + 1}`} onClick={() => onTogglePhoto?.(index)}>
             {photoUrl && <img src={photoUrl} alt="" className="strip-photo__image" />}
           </button>
         ))}
@@ -280,13 +282,13 @@ export function PhotoResultStrip({ photos = [] }: PhotoResultStripProps) {
   );
 }
 
-export function StickerPicker() {
+export function StickerPicker({ selectedStickerId, onSelectSticker }: { selectedStickerId?: string; onSelectSticker?: (id: string) => void }) {
   return (
     <RoundedPanel className="sticker-picker">
       <p className="sticker-title">STICKER</p>
       <div className="sticker-scroll">
         {Array.from({ length: 16 }, (_, index) => (
-          <button type="button" className="sticker-choice" key={index} aria-label={`Sticker ${index + 1}`} />
+          <button type="button" className={`sticker-choice ${selectedStickerId === `sticker-${index + 1}` ? "is-selected" : ""}`} key={index} aria-label={`Sticker ${index + 1}`} onClick={() => onSelectSticker?.(`sticker-${index + 1}`)} />
         ))}
       </div>
     </RoundedPanel>
@@ -307,3 +309,4 @@ export function LandingBrand() {
     </div>
   );
 }
+

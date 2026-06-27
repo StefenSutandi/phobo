@@ -9,13 +9,17 @@ export type CameraLiveViewHandle = {
   getStatus: () => "inactive" | "starting" | "active" | "failed";
 };
 
-export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
+export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boolean }>(({ compact = false }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [status, setStatus] = useState<"inactive" | "starting" | "active" | "failed">("inactive");
   const [error, setError] = useState("");
   const [videoDimensions, setVideoDimensions] = useState("");
+  const [selectedResolution, setSelectedResolution] = useState<string>("auto");
+  const [zoom, setZoom] = useState<number>(1.0);
+  const [offsetX, setOffsetX] = useState<number>(0);
+  const [offsetY, setOffsetY] = useState<number>(0);
   const streamRef = useRef<MediaStream | null>(null);
 
   const stopLiveView = () => {
@@ -42,15 +46,30 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
         throw new Error("Video dimensions are not available yet.");
       }
       
+      const sourceWidth = video.videoWidth;
+      const sourceHeight = video.videoHeight;
+      
+      const targetWidth = sourceWidth / zoom;
+      const targetHeight = sourceHeight / zoom;
+      
+      const maxOffsetX = (sourceWidth - targetWidth) / 2;
+      const maxOffsetY = (sourceHeight - targetHeight) / 2;
+      
+      const centerSrcX = sourceWidth / 2 + (offsetX / 50) * maxOffsetX;
+      const centerSrcY = sourceHeight / 2 + (offsetY / 50) * maxOffsetY;
+      
+      const srcX = centerSrcX - targetWidth / 2;
+      const srcY = centerSrcY - targetHeight / 2;
+
       const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = sourceWidth;
+      canvas.height = sourceHeight;
       const ctx = canvas.getContext("2d");
       if (!ctx) {
         throw new Error("Could not get 2d context for capture.");
       }
       
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, srcX, srcY, targetWidth, targetHeight, 0, 0, canvas.width, canvas.height);
       const imageDataUrl = canvas.toDataURL("image/jpeg", 0.92);
       
       return {
@@ -59,7 +78,7 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
         height: canvas.height
       };
     }
-  }), [status]);
+  }), [status, zoom, offsetX, offsetY]);
 
   const loadDevices = async () => {
     try {
@@ -84,6 +103,19 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
 
   useEffect(() => {
     loadDevices();
+    
+    const savedRes = window.localStorage.getItem("phobo.liveViewResolution");
+    if (savedRes) setSelectedResolution(savedRes);
+    
+    const savedZoom = window.localStorage.getItem("phobo.liveViewZoom");
+    if (savedZoom) setZoom(parseFloat(savedZoom));
+    
+    const savedOffsetX = window.localStorage.getItem("phobo.liveViewOffsetX");
+    if (savedOffsetX) setOffsetX(parseFloat(savedOffsetX));
+    
+    const savedOffsetY = window.localStorage.getItem("phobo.liveViewOffsetY");
+    if (savedOffsetY) setOffsetY(parseFloat(savedOffsetY));
+
     return () => {
       stopLiveView();
     };
@@ -97,6 +129,34 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
     if (status === "active" || status === "starting") {
       stopLiveView();
     }
+  };
+
+  const handleResolutionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const res = e.target.value;
+    setSelectedResolution(res);
+    window.localStorage.setItem("phobo.liveViewResolution", res);
+    
+    if (status === "active" || status === "starting") {
+      stopLiveView();
+    }
+  };
+
+  const handleZoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setZoom(val);
+    window.localStorage.setItem("phobo.liveViewZoom", val.toString());
+  };
+
+  const handleOffsetXChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setOffsetX(val);
+    window.localStorage.setItem("phobo.liveViewOffsetX", val.toString());
+  };
+
+  const handleOffsetYChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setOffsetY(val);
+    window.localStorage.setItem("phobo.liveViewOffsetY", val.toString());
   };
 
   const attemptGetUserMedia = async (constraints: MediaStreamConstraints, attemptName: string) => {
@@ -122,27 +182,40 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
       if (useGeneric) {
         stream = await attemptGetUserMedia({ video: true, audio: false }, "Generic");
       } else {
-        try {
-          stream = await attemptGetUserMedia(
-            { video: { deviceId: { exact: selectedDeviceId } }, audio: false },
-            "A (exact deviceId)"
-          );
-        } catch (e1) {
+        const tryRes = async (width: number, height: number, name: string) => {
+          return await attemptGetUserMedia({
+            video: {
+              deviceId: { exact: selectedDeviceId },
+              width: { ideal: width },
+              height: { ideal: height },
+              frameRate: { ideal: 30 }
+            },
+            audio: false
+          }, name);
+        };
+
+        if (selectedResolution !== "auto") {
+          const [w, h] = selectedResolution.split("x").map(Number);
           try {
-            stream = await attemptGetUserMedia(
-              {
-                video: {
-                  deviceId: { exact: selectedDeviceId },
-                  width: { ideal: 640 },
-                  height: { ideal: 480 },
-                  frameRate: { ideal: 15, max: 30 }
-                },
-                audio: false
-              },
-              "B (ideal constraints)"
-            );
-          } catch (e2) {
-            stream = await attemptGetUserMedia({ video: true, audio: false }, "C (fallback any video)");
+            stream = await tryRes(w, h, `Selected (${w}x${h})`);
+          } catch (e) {
+            console.warn("[LiveView] Failed selected resolution, falling back to auto");
+          }
+        }
+        
+        if (!stream) {
+          try {
+            stream = await tryRes(1920, 1080, "Auto 1080p");
+          } catch (e1) {
+            try {
+              stream = await tryRes(1280, 720, "Auto 720p");
+            } catch (e2) {
+              try {
+                stream = await tryRes(640, 480, "Auto 480p");
+              } catch (e3) {
+                stream = await attemptGetUserMedia({ video: true, audio: false }, "Fallback any video");
+              }
+            }
           }
         }
       }
@@ -185,6 +258,9 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
     }
   };
 
+  const tx = -offsetX * (1 - 1 / zoom);
+  const ty = -offsetY * (1 - 1 / zoom);
+
   return (
     <RoundedPanel className="camera-panel" style={{ position: "relative", overflow: "hidden" }}>
       {/* ALWAYS render video so ref is never null, just hide it when not active */}
@@ -202,7 +278,9 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
           position: "absolute",
           top: 0,
           left: 0,
-          zIndex: 1
+          zIndex: 1,
+          transform: `scale(${zoom}) translate(${tx}%, ${ty}%)`,
+          transformOrigin: "center center"
         }}
       />
       
@@ -225,7 +303,7 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
           borderRadius: "8px",
           color: "white",
           zIndex: 10,
-          display: "flex",
+          display: compact && status === "active" ? "none" : "flex",
           flexDirection: "column",
           gap: "8px",
           fontSize: "12px",
@@ -245,17 +323,34 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
         </div>
         
         {devices.length > 0 ? (
-          <select 
-            value={selectedDeviceId} 
-            onChange={handleDeviceChange}
-            style={{ padding: "4px", borderRadius: "4px", color: "black", maxWidth: "100%" }}
-          >
-            {devices.map((device, index) => (
-              <option key={device.deviceId || index} value={device.deviceId}>
-                {device.label || `Camera ${index + 1}`}
-              </option>
-            ))}
-          </select>
+          <>
+            <select 
+              value={selectedDeviceId} 
+              onChange={handleDeviceChange}
+              style={{ padding: "4px", borderRadius: "4px", color: "black", maxWidth: "100%" }}
+            >
+              {devices.map((device, index) => (
+                <option key={device.deviceId || index} value={device.deviceId}>
+                  {device.label || `Camera ${index + 1}`}
+                </option>
+              ))}
+            </select>
+            <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
+              <select
+                value={selectedResolution}
+                onChange={handleResolutionChange}
+                style={{ padding: "4px", borderRadius: "4px", color: "black", flex: 1 }}
+              >
+                <option value="auto">Auto Res</option>
+                <option value="1920x1080">1920x1080</option>
+                <option value="1280x720">1280x720</option>
+                <option value="640x480">640x480</option>
+              </select>
+              {videoDimensions && status === "active" && (
+                <span style={{ fontSize: "11px", color: "lightgreen" }}>{videoDimensions}</span>
+              )}
+            </div>
+          </>
         ) : (
           <div style={{ color: "pink" }}>No video devices found</div>
         )}
@@ -315,10 +410,21 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
             </button>
           )}
         </div>
-        
-        {videoDimensions && status === "active" && (
-          <div style={{ fontSize: "11px", color: "lightgray" }}>Res: {videoDimensions}</div>
-        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" }}>
+          <label style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+            <span>Zoom: {zoom.toFixed(2)}x</span>
+            <input type="range" min="1" max="1.5" step="0.01" value={zoom} onChange={handleZoomChange} style={{ width: "120px" }} />
+          </label>
+          <label style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+            <span>Offset X: {offsetX}%</span>
+            <input type="range" min="-50" max="50" step="1" value={offsetX} onChange={handleOffsetXChange} style={{ width: "120px" }} />
+          </label>
+          <label style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+            <span>Offset Y: {offsetY}%</span>
+            <input type="range" min="-50" max="50" step="1" value={offsetY} onChange={handleOffsetYChange} style={{ width: "120px" }} />
+          </label>
+        </div>
         
         {error && <div style={{ color: "pink", fontSize: "11px", wordWrap: "break-word" }}>{error}</div>}
         
@@ -331,3 +437,4 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle>((props, ref) => {
 });
 
 CameraLiveView.displayName = "CameraLiveView";
+

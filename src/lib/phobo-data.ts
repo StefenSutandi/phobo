@@ -1,11 +1,11 @@
 export type PackageData = {
   id: string;
-  title: string;
-  frameCount?: number;
-  printCount?: number;
-  maxShots?: number;
-  durationMinutes?: number;
-  price?: number;
+  name: string;
+  frameCount: number;
+  printCount: number;
+  maxShots: number;
+  durationMinutes: number;
+  price: number;
   color: "orange" | "brown" | "purple";
 };
 
@@ -34,9 +34,9 @@ export type BackgroundData = {
 };
 
 export const packages: PackageData[] = [
-  { id: "package-1", title: "PACKAGE 1", color: "orange" },
-  { id: "package-2", title: "PACKAGE 2", color: "brown" },
-  { id: "package-3", title: "PACKAGE 3", color: "purple" },
+  { id: "basic", name: "Basic", frameCount: 1, printCount: 1, maxShots: 8, durationMinutes: 5, price: 45000, color: "orange" },
+  { id: "duo", name: "Duo", frameCount: 2, printCount: 2, maxShots: 8, durationMinutes: 7, price: 60000, color: "brown" },
+  { id: "premium", name: "Premium", frameCount: 2, printCount: 2, maxShots: 16, durationMinutes: 10, price: 65000, color: "purple" },
 ];
 
 const tripleStripSlots: PhotoSlot[] = [
@@ -111,3 +111,6 @@ export function getBackgroundById(backgroundId?: string) {
   return backgrounds.find((background) => background.id === backgroundId) ?? backgrounds[0];
 }
 
+export function getPackageById(packageId?: string) {
+  return packages.find((p) => p.id === packageId) ?? packages[0];
+}

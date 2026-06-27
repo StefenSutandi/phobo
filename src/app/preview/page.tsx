@@ -1,95 +1,14 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  KioskButton,
-  KioskStage,
-  PhotoResultStrip,
-  PreviewComposer,
-  StickerPicker,
-} from "@/components/kiosk";
+import { KioskButton, KioskStage, PhotoResultStrip, PreviewComposer, StickerPicker } from "@/components/kiosk";
+import { getFrameById } from "@/lib/phobo-data";
 import { useSessionStore } from "@/lib/session/session-store";
-
-export default function Preview() {
-  const router = useRouter();
-  const { session, hasHydrated, setFinalImageUrl, setPrintImageUrl } = useSessionStore();
-  const [saveError, setSaveError] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    if (!hasHydrated) {
-      return;
-    }
-
-    if (!session?.capturedPhotos.length) {
-      router.replace("/camera");
-    }
-  }, [hasHydrated, router, session?.capturedPhotos.length]);
-
-  async function finishPreview() {
-    if (!session || isSaving) {
-      return;
-    }
-
-    if (session.finalImageUrl && session.printImageUrl) {
-      router.push("/result");
-      return;
-    }
-
-    setIsSaving(true);
-    setSaveError("");
-
-    try {
-      const response = await fetch("/api/results/compose", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          sessionId: session.sessionId,
-          capturedPhotos: session.capturedPhotos,
-          selectedFrameId: session.selectedFrameId,
-          selectedBackgroundId: session.selectedBackgroundId,
-          options: session.greenScreenTuning || {
-            applyChromaKey: true,
-            greenMin: 90,
-            greenTolerance: 35,
-            spillReduction: 0,
-            edgeSoftness: 0,
-          },
-        }),
-      });
-      const payload = (await response.json()) as {
-        ok?: boolean;
-        finalImageUrl?: string;
-        printImageUrl?: string;
-        error?: string;
-      };
-
-      if (!response.ok || !payload.ok || !payload.finalImageUrl || !payload.printImageUrl) {
-        throw new Error(payload.error || "Failed to compose result");
-      }
-
-      setFinalImageUrl(payload.finalImageUrl);
-      setPrintImageUrl(payload.printImageUrl);
-      router.push("/result");
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Failed to compose result");
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <KioskStage>
-      <PreviewComposer photoUrl={session?.capturedPhotos?.[0]} />
-      <PhotoResultStrip photos={session?.capturedPhotos ?? []} />
-      <StickerPicker />
-      <KioskButton onClick={finishPreview} className="preview-next" style={{ opacity: isSaving ? 0.7 : 1 }}>
-        {isSaving ? "PROCESSING..." : "NEXT"}
-      </KioskButton>
-      {saveError && <p className="kiosk-message">{saveError}</p>}
-    </KioskStage>
-  );
+export default function Preview(){
+ const router=useRouter(); const {session,hasHydrated,selectPhotos,selectSticker,setFinalImageUrl,setPrintImageUrl}=useSessionStore(); const [saving,setSaving]=useState(false);const [error,setError]=useState("");
+ useEffect(()=>{if(hasHydrated&&!session?.capturedPhotos.length)router.replace("/camera");},[hasHydrated,session?.capturedPhotos.length,router]);
+ const needed=getFrameById(session?.selectedFrameId).requiredPhotos; const selected=session?.selectedPhotoIndices??[]; const chosen=selected.length?selected.map(i=>session?.capturedPhotos[i]).filter((x):x is string=>Boolean(x)):(session?.capturedPhotos??[]).slice(-needed);
+ function toggle(i:number){const next=selected.includes(i)?selected.filter(x=>x!==i):selected.length<needed?[...selected,i]:[...selected.slice(1),i];selectPhotos(next);}
+ async function next(){if(!session||saving)return;setSaving(true);setError("");try{const r=await fetch("/api/results/compose",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:session.sessionId,capturedPhotos:chosen,selectedFrameId:session.selectedFrameId,selectedBackgroundId:session.selectedBackgroundId,packageId:session.packageId,selectedStickerId:session.selectedStickerId,options:session.greenScreenTuning})});const d=await r.json();if(!r.ok||!d.ok||!d.finalImageUrl||!d.printImageUrl)throw new Error(d.error||"Failed to compose result");setFinalImageUrl(d.finalImageUrl);setPrintImageUrl(d.printImageUrl);router.push("/result");}catch(e){setError(e instanceof Error?e.message:"Failed to compose result");}finally{setSaving(false);}}
+ return <KioskStage><h1 className="preview-heading">PREVIEW FRAME</h1><PreviewComposer photoUrl={chosen[0]}/><PhotoResultStrip photos={session?.capturedPhotos??[]} selectedIndices={selected} onTogglePhoto={toggle}/><StickerPicker selectedStickerId={session?.selectedStickerId} onSelectSticker={selectSticker}/><KioskButton className="preview-next" onClick={next}>{saving?"PROCESSING...":"NEXT"}</KioskButton>{error&&<p className="kiosk-message">{error}</p>}</KioskStage>;
 }
