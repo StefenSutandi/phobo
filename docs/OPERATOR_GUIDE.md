@@ -25,6 +25,10 @@ This guide is for running Phobo during an event. Keep the app in mock mode unles
 http://localhost:3000/hardware-check
 ```
 
+7. Grant Camera Permissions:
+   - When launching the app, if prompted for Camera permission by the browser, click **Allow**.
+   - Navigate to `/camera` (via the normal flow) and select the correct webcam from the dropdown, then click **START LIVE VIEW**.
+
 ## Normal Photobox Flow
 
 1. Landing: tap `CLICK HERE TO CONTINUE`.

@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BackgroundPicker,
-  CameraPanel,
   KioskButton,
   KioskStage,
 } from "@/components/kiosk";
+import { CameraLiveView, type CameraLiveViewHandle } from "@/components/camera-live-view";
+import { useRef } from "react";
 import { backgrounds } from "@/lib/phobo-data";
 import { useSessionStore } from "@/lib/session/session-store";
 
@@ -25,6 +26,7 @@ export default function Camera() {
     selectBackground,
     addCapturedPhoto,
   } = useSessionStore();
+  const liveViewRef = useRef<CameraLiveViewHandle>(null);
   const [message, setMessage] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
 
@@ -51,6 +53,9 @@ export default function Camera() {
 
     setIsCapturing(true);
     setMessage("");
+
+    // Stop live view before hardware capture to prevent driver conflicts
+    liveViewRef.current?.stopLiveView();
 
     try {
       const response = await fetch("/api/camera/capture", {
@@ -80,7 +85,7 @@ export default function Camera() {
 
   return (
     <KioskStage>
-      <CameraPanel />
+      <CameraLiveView ref={liveViewRef} />
       <BackgroundPicker
         backgrounds={backgrounds.map((background) => background.id)}
         selectedBackgroundId={session?.selectedBackgroundId}

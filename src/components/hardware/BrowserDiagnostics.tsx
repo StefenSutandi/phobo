@@ -9,13 +9,29 @@ type BrowserInfo = {
   viewport: string;
   touchPoints: number;
   origin: string;
+  mediaDevicesSupport: boolean;
+  videoInputsCount: number;
+  savedDeviceId: string | null;
 };
 
 export function BrowserDiagnostics() {
   const [browserInfo, setBrowserInfo] = useState<BrowserInfo | null>(null);
 
   useEffect(() => {
-    function readBrowserInfo() {
+    async function readBrowserInfo() {
+      let videoInputsCount = 0;
+      let mediaDevicesSupport = false;
+
+      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        mediaDevicesSupport = true;
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          videoInputsCount = devices.filter((d) => d.kind === "videoinput").length;
+        } catch {
+          // Ignore
+        }
+      }
+
       setBrowserInfo({
         userAgent: window.navigator.userAgent,
         language: window.navigator.language,
@@ -23,6 +39,9 @@ export function BrowserDiagnostics() {
         viewport: `${window.innerWidth}x${window.innerHeight}`,
         touchPoints: window.navigator.maxTouchPoints,
         origin: window.location.origin,
+        mediaDevicesSupport,
+        videoInputsCount,
+        savedDeviceId: window.localStorage.getItem("phobo.liveViewDeviceId"),
       });
     }
 
@@ -50,6 +69,14 @@ export function BrowserDiagnostics() {
       <p>Viewport: {browserInfo.viewport}</p>
       <p>Touch points: {browserInfo.touchPoints}</p>
       <p>Current origin/base URL: {browserInfo.origin}</p>
+      
+      <h3 style={{ marginTop: "1rem" }}>Live View Capability</h3>
+      <p>Browser MediaDevices Support: {browserInfo.mediaDevicesSupport ? "Yes" : "No"}</p>
+      <p>Video Devices Detected: {browserInfo.videoInputsCount}</p>
+      <p>Selected Live View Device: {browserInfo.savedDeviceId || "None"}</p>
+      <p style={{ fontSize: "0.85rem", opacity: 0.8 }}>
+        * Note: Live view is a browser overlay. Final still capture is executed via backend Canon command mode.
+      </p>
     </section>
   );
 }

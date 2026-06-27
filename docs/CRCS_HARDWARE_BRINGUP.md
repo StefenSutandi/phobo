@@ -68,6 +68,12 @@ Do not connect the Canon 600D to the Phobo app as a real capture source yet. Thi
 | Capture latency notes |  | Time from trigger to file available |
 | Failure notes |  | USB dropouts, battery, focus, permissions |
 
+### Browser Live View vs. Canon Capture
+- **Live View** is purely browser-based via `navigator.mediaDevices.getUserMedia()`.
+- **Final Capture** is handled by backend Canon 600D command mode.
+- If using Canon/digiCamControl virtual webcam, ensure the virtual webcam appears as a Windows camera device.
+- **Important:** If browser live view conflicts with Canon command capture (e.g., driver locking the camera), use a separate USB webcam for the live preview, or disable live view completely in the browser.
+
 ## Canon 600D Command-Mode Validation
 
 Canon 600D command capture has been manually validated using digiCamControl (`CameraControlCmd.exe`).
