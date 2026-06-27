@@ -44,3 +44,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local source/reference artifacts
+/Copy of Phobo.zip
+/phobo-frame-contact-sheet.png

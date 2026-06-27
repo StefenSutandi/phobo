@@ -735,3 +735,40 @@ button {
 .preview-frame__template { display:block; height:100%; left:0; object-fit:fill; position:absolute; top:0; width:100%; z-index:1; }
 .preview-frame__slot { background:rgba(205,205,205,.35); overflow:hidden; position:absolute; transform-origin:center; z-index:2; }
 .preview-frame__slot img { display:block; height:100%; object-fit:cover; width:100%; }
+
+
+/* Optional modular Figma artwork; CSS placeholders remain when exports are absent. */
+.package-art__image {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.closing-photo-strip {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.closing-camera-corner,
+.closing-earphone {
+  object-fit: contain;
+  pointer-events: none;
+  position: absolute;
+}
+
+.closing-camera-corner {
+  bottom: 0;
+  height: 105px;
+  left: 0;
+  width: 150px;
+}
+
+.closing-earphone {
+  height: 90px;
+  right: 10px;
+  top: 8px;
+  width: 110px;
+}
+
+.closing-illustration { position: absolute; right: 3%; bottom: 8%; width: min(48%, 520px); max-height: 72%; object-fit: contain; }

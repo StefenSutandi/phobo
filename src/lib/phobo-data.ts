@@ -26,7 +26,7 @@ export type FrameData = {
   width: number;
   height: number;
   requiredPhotos: number;
-  layout: "single" | "triple-strip" | "quad-grid";
+  layout: "single" | "triple-strip" | "quad-grid" | "eight-slot";
   photoSlots: PhotoSlot[];
 };
 
@@ -38,9 +38,9 @@ export type BackgroundData = {
 };
 
 export const packages: PackageData[] = [
-  { id: "package-1", name: "PACKAGE 1", frameCount: 1, printCount: 1, maxShots: 3, durationMinutes: 10, price: 35000, color: "orange" },
-  { id: "package-2", name: "PACKAGE 2", frameCount: 2, printCount: 2, maxShots: 5, durationMinutes: 15, price: 50000, color: "brown" },
-  { id: "package-3", name: "PACKAGE 3", frameCount: 4, printCount: 4, maxShots: 8, durationMinutes: 20, price: 100000, color: "purple" },
+  { id: "basic", name: "BASIC", frameCount: 1, printCount: 1, maxShots: 8, durationMinutes: 5, price: 45000, color: "orange" },
+  { id: "duo", name: "DUO", frameCount: 2, printCount: 2, maxShots: 8, durationMinutes: 7, price: 60000, color: "brown" },
+  { id: "premium", name: "PREMIUM", frameCount: 2, printCount: 2, maxShots: 16, durationMinutes: 10, price: 65000, color: "purple" },
 ];
 
 export const frames: FrameData[] = frameSlots as FrameData[];

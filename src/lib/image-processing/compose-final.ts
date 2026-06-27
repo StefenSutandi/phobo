@@ -24,7 +24,11 @@ export async function composeFinalImages({ capturedPhotos, selectedFrameId, sele
     try { return { input:await normalizeImageBuffer(source,{width:photoSlot.width,height:photoSlot.height,fit:"cover"}),left:photoSlot.x,top:photoSlot.y }; }
     catch(error) { warnings.push(`Failed to compose slot ${index}: ${error instanceof Error?error.message:String(error)}`); return null; }
   }))).filter((item):item is {input:Buffer;left:number;top:number}=>item!==null);
-  // The supplied RGB templates are opaque bases. Photos cover their gray slots.
-  const finalScreenPng=await sharp(template).composite(composites).png().toBuffer();
+  
+  composites.push({ input: template, left: 0, top: 0 });
+
+  const finalScreenPng=await sharp({
+    create: { width: frame.width, height: frame.height, channels: 4, background: background.color }
+  }).composite(composites).png().toBuffer();
   return { finalScreenPng, processedPhotoDataUrls:await Promise.all(processedPhotos.filter((photo):photo is Buffer=>photo!==null).map(photo=>bufferToDataUrl(photo))), warnings };
 }

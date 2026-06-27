@@ -29,6 +29,9 @@ export default function FrameCalibration() {
       {/* Sidebar */}
       <div style={{ width: "350px", overflowY: "auto", background: "#222", padding: "20px", display: "flex", flexDirection: "column", gap: "20px" }}>
         <h2>Frame Calibration</h2>
+        <p style={{ color: "#aaa", fontSize: "0.9em", marginTop: "-10px" }}>
+          Transparent holes indicate photo areas. The red dashed boxes represent the slot coordinates behind the template.
+        </p>
         
         <div>
           <label>Select Frame: </label>

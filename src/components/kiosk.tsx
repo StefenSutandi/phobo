@@ -250,11 +250,11 @@ export function BackgroundPicker({
 type PreviewComposerProps = { frame: FrameData; photoUrls: string[] };
 
 export function PreviewComposer({ frame, photoUrls }: PreviewComposerProps) {
-  return <RoundedPanel className="preview-composer"><div className="preview-frame" aria-label={`${frame.name} preview`}>
-    <img src={frame.templateUrl} alt={frame.name} className="preview-frame__template" />
-    {frame.photoSlots.map((photoSlot,index) => { const photoUrl=photoUrls[index % frame.requiredPhotos]; return <div className="preview-frame__slot" key={`${photoSlot.x}-${photoSlot.y}-${index}`} style={{left:`${photoSlot.x/frame.width*100}%`,top:`${photoSlot.y/frame.height*100}%`,width:`${photoSlot.width/frame.width*100}%`,height:`${photoSlot.height/frame.height*100}%`,transform:photoSlot.rotation?`rotate(${photoSlot.rotation}deg)`:undefined}}>{photoUrl&&<img src={photoUrl} alt={`Selected photo ${(index%frame.requiredPhotos)+1}`} />}</div>;})}
-  </div></RoundedPanel>;
-}
+    return <RoundedPanel className="preview-composer"><div className="preview-frame" aria-label={`${frame.name} preview`}>
+      {frame.photoSlots.map((photoSlot,index) => { const photoUrl=photoUrls[index % Math.max(1, photoUrls.length)]; return <div className="preview-frame__slot" key={`${photoSlot.x}-${photoSlot.y}-${index}`} style={{zIndex: 1, left:`${photoSlot.x/frame.width*100}%`,top:`${photoSlot.y/frame.height*100}%`,width:`${photoSlot.width/frame.width*100}%`,height:`${photoSlot.height/frame.height*100}%`,transform:photoSlot.rotation?`rotate(${photoSlot.rotation}deg)`:undefined}}>{photoUrl&&<img src={photoUrl} alt={`Selected photo ${(index%Math.max(1, photoUrls.length))+1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}</div>;})}
+      <img src={frame.templateUrl} alt={frame.name} className="preview-frame__template" style={{ position: "relative", zIndex: 10, pointerEvents: "none" }} />
+    </div></RoundedPanel>;
+  }
 type PhotoResultStripProps = {
   photos?: string[];
   selectedIndices?: number[];
@@ -288,6 +288,30 @@ export function StickerPicker({ selectedStickerId, onSelectSticker }: { selected
         ))}
       </div>
     </RoundedPanel>
+  );
+}
+
+type OptionalAssetProps = {
+  src: string;
+  alt: string;
+  className?: string;
+  fallback?: ReactNode;
+};
+
+export function OptionalAsset({ src, alt, className = "", fallback }: OptionalAssetProps) {
+  const [missing, setMissing] = useState(false);
+
+  if (missing) {
+    return fallback ? <>{fallback}</> : null;
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => setMissing(true)}
+    />
   );
 }
 

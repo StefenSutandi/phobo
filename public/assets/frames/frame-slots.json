@@ -5,8 +5,8 @@
     "templateUrl": "/assets/frames/1.png",
     "width": 1200,
     "height": 1800,
-    "requiredPhotos": 4,
-    "layout": "quad-grid",
+    "requiredPhotos": 8,
+    "layout": "eight-slot",
     "photoSlots": [
       {
         "x": 54,
@@ -64,8 +64,8 @@
     "templateUrl": "/assets/frames/2.png",
     "width": 1200,
     "height": 1800,
-    "requiredPhotos": 4,
-    "layout": "quad-grid",
+    "requiredPhotos": 8,
+    "layout": "eight-slot",
     "photoSlots": [
       {
         "x": 54,
@@ -123,8 +123,8 @@
     "templateUrl": "/assets/frames/3.png",
     "width": 1200,
     "height": 1800,
-    "requiredPhotos": 4,
-    "layout": "quad-grid",
+    "requiredPhotos": 8,
+    "layout": "eight-slot",
     "photoSlots": [
       {
         "x": 54,
@@ -182,8 +182,8 @@
     "templateUrl": "/assets/frames/4.png",
     "width": 1200,
     "height": 1800,
-    "requiredPhotos": 4,
-    "layout": "quad-grid",
+    "requiredPhotos": 8,
+    "layout": "eight-slot",
     "photoSlots": [
       {
         "x": 54,
@@ -242,7 +242,7 @@
     "width": 1200,
     "height": 1800,
     "requiredPhotos": 8,
-    "layout": "quad-grid",
+    "layout": "eight-slot",
     "photoSlots": [
       {
         "x": 50,
@@ -417,8 +417,8 @@
     "templateUrl": "/assets/frames/9.png",
     "width": 1200,
     "height": 1800,
-    "requiredPhotos": 4,
-    "layout": "quad-grid",
+    "requiredPhotos": 8,
+    "layout": "eight-slot",
     "photoSlots": [
       {
         "x": 54,
