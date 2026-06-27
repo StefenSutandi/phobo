@@ -620,39 +620,39 @@
     "photoSlots": [
       {
         "x": 0,
-        "y": 26,
-        "width": 382,
-        "height": 386
+        "y": 0,
+        "width": 383,
+        "height": 411
       },
       {
         "x": 0,
-        "y": 513,
-        "width": 382,
-        "height": 387
+        "y": 487,
+        "width": 383,
+        "height": 411
       },
       {
-        "x": 497,
-        "y": 513,
-        "width": 381,
-        "height": 387
+        "x": 496,
+        "y": 487,
+        "width": 383,
+        "height": 411
       },
       {
         "x": 0,
-        "y": 929,
+        "y": 904,
         "width": 373,
-        "height": 386
+        "height": 411
       },
       {
         "x": 0,
-        "y": 1416,
+        "y": 1391,
         "width": 373,
-        "height": 384
+        "height": 411
       },
       {
         "x": 487,
         "y": 1391,
         "width": 383,
-        "height": 409
+        "height": 411
       }
     ]
   },
@@ -666,10 +666,10 @@
     "layout": "single",
     "photoSlots": [
       {
-        "x": 380,
-        "y": 572,
-        "width": 444,
-        "height": 416
+        "x": 379,
+        "y": 541,
+        "width": 445,
+        "height": 447
       }
     ]
   },
@@ -684,21 +684,21 @@
     "photoSlots": [
       {
         "x": 0,
-        "y": 5,
-        "width": 515,
-        "height": 509
-      },
-      {
-        "x": 650,
-        "y": 5,
-        "width": 515,
-        "height": 509
+        "y": 4,
+        "width": 550,
+        "height": 511
       },
       {
         "x": 0,
-        "y": 667,
-        "width": 515,
-        "height": 509
+        "y": 666,
+        "width": 550,
+        "height": 511
+      },
+      {
+        "x": 650,
+        "y": 4,
+        "width": 550,
+        "height": 511
       }
     ]
   },
@@ -713,27 +713,27 @@
     "photoSlots": [
       {
         "x": 0,
-        "y": 549,
-        "width": 583,
-        "height": 455
+        "y": 519,
+        "width": 584,
+        "height": 485
       },
       {
-        "x": 617,
-        "y": 549,
-        "width": 583,
-        "height": 455
+        "x": 616,
+        "y": 519,
+        "width": 584,
+        "height": 485
       },
       {
         "x": 0,
-        "y": 1078,
-        "width": 583,
-        "height": 455
+        "y": 1047,
+        "width": 584,
+        "height": 485
       },
       {
-        "x": 617,
-        "y": 1078,
-        "width": 583,
-        "height": 455
+        "x": 616,
+        "y": 1047,
+        "width": 584,
+        "height": 485
       }
     ]
   }
