@@ -1,0 +1,692 @@
+[
+  {
+    "id": "frame-1",
+    "name": "Frame 1",
+    "templateUrl": "/assets/frames/1.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 4,
+    "layout": "quad-grid",
+    "photoSlots": [
+      {
+        "x": 54,
+        "y": 198,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 54,
+        "y": 585,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 54,
+        "y": 972,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 54,
+        "y": 1358,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 664,
+        "y": 198,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 664,
+        "y": 585,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 664,
+        "y": 972,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 664,
+        "y": 1358,
+        "width": 482,
+        "height": 361
+      }
+    ]
+  },
+  {
+    "id": "frame-2",
+    "name": "Frame 2",
+    "templateUrl": "/assets/frames/2.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 4,
+    "layout": "quad-grid",
+    "photoSlots": [
+      {
+        "x": 54,
+        "y": 198,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 54,
+        "y": 585,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 54,
+        "y": 972,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 54,
+        "y": 1358,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 664,
+        "y": 198,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 664,
+        "y": 585,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 664,
+        "y": 972,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 664,
+        "y": 1358,
+        "width": 482,
+        "height": 361
+      }
+    ]
+  },
+  {
+    "id": "frame-3",
+    "name": "Frame 3",
+    "templateUrl": "/assets/frames/3.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 4,
+    "layout": "quad-grid",
+    "photoSlots": [
+      {
+        "x": 54,
+        "y": 198,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 54,
+        "y": 585,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 54,
+        "y": 972,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 54,
+        "y": 1358,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 664,
+        "y": 198,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 664,
+        "y": 585,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 664,
+        "y": 972,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 664,
+        "y": 1358,
+        "width": 482,
+        "height": 361
+      }
+    ]
+  },
+  {
+    "id": "frame-4",
+    "name": "Frame 4",
+    "templateUrl": "/assets/frames/4.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 4,
+    "layout": "quad-grid",
+    "photoSlots": [
+      {
+        "x": 54,
+        "y": 198,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 54,
+        "y": 585,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 54,
+        "y": 972,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 54,
+        "y": 1358,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 664,
+        "y": 198,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 664,
+        "y": 585,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 664,
+        "y": 972,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 664,
+        "y": 1358,
+        "width": 482,
+        "height": 361
+      }
+    ]
+  },
+  {
+    "id": "frame-5",
+    "name": "Frame 5 (Wisuda)",
+    "templateUrl": "/assets/frames/5.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 8,
+    "layout": "quad-grid",
+    "photoSlots": [
+      {
+        "x": 50,
+        "y": 200,
+        "width": 480,
+        "height": 360
+      },
+      {
+        "x": 50,
+        "y": 580,
+        "width": 480,
+        "height": 360
+      },
+      {
+        "x": 50,
+        "y": 960,
+        "width": 480,
+        "height": 360
+      },
+      {
+        "x": 50,
+        "y": 1340,
+        "width": 480,
+        "height": 360
+      },
+      {
+        "x": 670,
+        "y": 200,
+        "width": 480,
+        "height": 360
+      },
+      {
+        "x": 670,
+        "y": 580,
+        "width": 480,
+        "height": 360
+      },
+      {
+        "x": 670,
+        "y": 960,
+        "width": 480,
+        "height": 360
+      },
+      {
+        "x": 670,
+        "y": 1340,
+        "width": 480,
+        "height": 360
+      }
+    ]
+  },
+  {
+    "id": "frame-6",
+    "name": "Frame 6",
+    "templateUrl": "/assets/frames/6.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 1,
+    "layout": "single",
+    "photoSlots": [
+      {
+        "x": 43,
+        "y": 235,
+        "width": 518,
+        "height": 1258
+      },
+      {
+        "x": 627,
+        "y": 235,
+        "width": 518,
+        "height": 1258
+      }
+    ]
+  },
+  {
+    "id": "frame-7",
+    "name": "Frame 7",
+    "templateUrl": "/assets/frames/7.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 3,
+    "layout": "triple-strip",
+    "photoSlots": [
+      {
+        "x": 64,
+        "y": 192,
+        "width": 474,
+        "height": 521
+      },
+      {
+        "x": 64,
+        "y": 743,
+        "width": 474,
+        "height": 475
+      },
+      {
+        "x": 64,
+        "y": 1248,
+        "width": 475,
+        "height": 521
+      },
+      {
+        "x": 644,
+        "y": 190,
+        "width": 474,
+        "height": 521
+      },
+      {
+        "x": 644,
+        "y": 740,
+        "width": 474,
+        "height": 475
+      },
+      {
+        "x": 644,
+        "y": 1245,
+        "width": 474,
+        "height": 522
+      }
+    ]
+  },
+  {
+    "id": "frame-8",
+    "name": "Frame 8",
+    "templateUrl": "/assets/frames/8.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 3,
+    "layout": "triple-strip",
+    "photoSlots": [
+      {
+        "x": 116,
+        "y": 294,
+        "width": 400,
+        "height": 349
+      },
+      {
+        "x": 116,
+        "y": 768,
+        "width": 400,
+        "height": 349
+      },
+      {
+        "x": 116,
+        "y": 1268,
+        "width": 400,
+        "height": 348
+      },
+      {
+        "x": 668,
+        "y": 281,
+        "width": 400,
+        "height": 349
+      },
+      {
+        "x": 666,
+        "y": 755,
+        "width": 400,
+        "height": 350
+      },
+      {
+        "x": 666,
+        "y": 1255,
+        "width": 400,
+        "height": 350
+      }
+    ]
+  },
+  {
+    "id": "frame-9",
+    "name": "Frame 9",
+    "templateUrl": "/assets/frames/9.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 4,
+    "layout": "quad-grid",
+    "photoSlots": [
+      {
+        "x": 54,
+        "y": 198,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 54,
+        "y": 585,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 54,
+        "y": 972,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 54,
+        "y": 1358,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 664,
+        "y": 198,
+        "width": 482,
+        "height": 361
+      },
+      {
+        "x": 664,
+        "y": 585,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 664,
+        "y": 972,
+        "width": 472,
+        "height": 353
+      },
+      {
+        "x": 664,
+        "y": 1358,
+        "width": 482,
+        "height": 361
+      }
+    ]
+  },
+  {
+    "id": "frame-10",
+    "name": "Frame 10",
+    "templateUrl": "/assets/frames/10.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 2,
+    "layout": "quad-grid",
+    "photoSlots": [
+      {
+        "x": 108,
+        "y": 127,
+        "width": 419,
+        "height": 530
+      },
+      {
+        "x": 105,
+        "y": 870,
+        "width": 423,
+        "height": 534
+      },
+      {
+        "x": 674,
+        "y": 127,
+        "width": 418,
+        "height": 534
+      },
+      {
+        "x": 674,
+        "y": 874,
+        "width": 419,
+        "height": 533
+      }
+    ]
+  },
+  {
+    "id": "frame-11",
+    "name": "Frame 11",
+    "templateUrl": "/assets/frames/11.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 1,
+    "layout": "single",
+    "photoSlots": [
+      {
+        "x": 80,
+        "y": 413,
+        "width": 1040,
+        "height": 1284
+      }
+    ]
+  },
+  {
+    "id": "frame-12",
+    "name": "Frame 12",
+    "templateUrl": "/assets/frames/12.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 2,
+    "layout": "quad-grid",
+    "photoSlots": [
+      {
+        "x": 483,
+        "y": 546,
+        "width": 647,
+        "height": 641
+      },
+      {
+        "x": 72,
+        "y": 1245,
+        "width": 370,
+        "height": 435
+      }
+    ]
+  },
+  {
+    "id": "frame-13",
+    "name": "Frame 13",
+    "templateUrl": "/assets/frames/13.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 1,
+    "layout": "single",
+    "photoSlots": [
+      {
+        "x": 59,
+        "y": 739,
+        "width": 1083,
+        "height": 884
+      }
+    ]
+  },
+  {
+    "id": "frame-14",
+    "name": "Frame 14",
+    "templateUrl": "/assets/frames/14.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 1,
+    "layout": "single",
+    "photoSlots": [
+      {
+        "x": 0,
+        "y": 249,
+        "width": 1200,
+        "height": 994
+      }
+    ]
+  },
+  {
+    "id": "frame-15",
+    "name": "Frame 15",
+    "templateUrl": "/assets/frames/15.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 3,
+    "layout": "triple-strip",
+    "photoSlots": [
+      {
+        "x": 0,
+        "y": 359,
+        "width": 383,
+        "height": 543
+      },
+      {
+        "x": 496,
+        "y": 487,
+        "width": 383,
+        "height": 413
+      },
+      {
+        "x": 931,
+        "y": 361,
+        "width": 269,
+        "height": 538
+      }
+    ]
+  },
+  {
+    "id": "frame-16",
+    "name": "Frame 16",
+    "templateUrl": "/assets/frames/16.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 1,
+    "layout": "single",
+    "photoSlots": [
+      {
+        "x": 258,
+        "y": 288,
+        "width": 680,
+        "height": 946
+      }
+    ]
+  },
+  {
+    "id": "frame-17",
+    "name": "Frame 17",
+    "templateUrl": "/assets/frames/17.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 3,
+    "layout": "triple-strip",
+    "photoSlots": [
+      {
+        "x": 78,
+        "y": 4,
+        "width": 472,
+        "height": 511
+      },
+      {
+        "x": 78,
+        "y": 666,
+        "width": 472,
+        "height": 511
+      },
+      {
+        "x": 728,
+        "y": 4,
+        "width": 471,
+        "height": 511
+      }
+    ]
+  },
+  {
+    "id": "frame-18",
+    "name": "Frame 18",
+    "templateUrl": "/assets/frames/18.png",
+    "width": 1200,
+    "height": 1800,
+    "requiredPhotos": 4,
+    "layout": "quad-grid",
+    "photoSlots": [
+      {
+        "x": 0,
+        "y": 519,
+        "width": 584,
+        "height": 361
+      },
+      {
+        "x": 616,
+        "y": 519,
+        "width": 584,
+        "height": 341
+      },
+      {
+        "x": 0,
+        "y": 1047,
+        "width": 584,
+        "height": 361
+      },
+      {
+        "x": 616,
+        "y": 1047,
+        "width": 584,
+        "height": 341
+      }
+    ]
+  }
+]

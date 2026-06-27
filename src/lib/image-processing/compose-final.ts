@@ -19,7 +19,7 @@ export async function composeFinalImages({ capturedPhotos, selectedFrameId, sele
     catch(error) { warnings.push(`Failed to process photo ${photoUrl}: ${error instanceof Error?error.message:String(error)}`); return null; }
   }));
   const composites=(await Promise.all(frame.photoSlots.map(async (photoSlot,index)=>{
-    const source=processedPhotos[index%frame.requiredPhotos];
+    const source=processedPhotos[index%Math.max(1, processedPhotos.length)];
     if(!source) return null;
     try { return { input:await normalizeImageBuffer(source,{width:photoSlot.width,height:photoSlot.height,fit:"cover"}),left:photoSlot.x,top:photoSlot.y }; }
     catch(error) { warnings.push(`Failed to compose slot ${index}: ${error instanceof Error?error.message:String(error)}`); return null; }
