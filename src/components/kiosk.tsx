@@ -43,6 +43,7 @@ type KioskButtonProps = {
   children: ReactNode;
   href?: string;
   onClick?: () => void;
+  disabled?: boolean;
   className?: string;
   style?: CSSProperties;
   variant?: "orange" | "purple" | "brown";
@@ -53,6 +54,7 @@ export function KioskButton({
   children,
   href,
   onClick,
+  disabled = false,
   className = "",
   style,
   variant = "purple",
@@ -80,6 +82,7 @@ export function KioskButton({
       className={classes}
       style={style}
       onClick={onClick}
+      disabled={disabled}
       aria-label={ariaLabel}
     >
       <span className="kiosk-button__label">{children}</span>
@@ -309,4 +312,3 @@ export function LandingBrand() {
     </div>
   );
 }
-
