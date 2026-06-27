@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { composeFinalImages } from "@/lib/image-processing/compose-final";
 import { generate4RPrintTemplate } from "@/lib/print/print-template";
 import { sanitizeSessionId } from "@/lib/results/result-storage";
+import { bufferToDataUrl } from "@/lib/image-processing/load-image";
 
 export const runtime = "nodejs";
 
@@ -144,7 +145,7 @@ export async function POST(request: Request) {
     });
     const printBuffer = await generate4RPrintTemplate({
       sessionId: body.sessionId,
-      capturedPhotos: composed.processedPhotoDataUrls,
+      finalImageUrl: await bufferToDataUrl(composed.finalScreenPng),
       selectedFrameId: body.selectedFrameId,
       selectedBackgroundId: body.selectedBackgroundId,
     });

@@ -40,7 +40,7 @@ export default function Frames() {
       <h1 className="frames-title">FRAME</h1>
       <RoundedPanel className="frame-panel" />
       <FrameGridScroller
-        frames={frames.map((frame) => frame.id)}
+        frames={frames}
         selectedFrameId={session?.selectedFrameId}
         onSelectFrame={(frameId) => {
           selectFrame(frameId);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { CountdownTimer } from "./kiosk/CountdownTimer";
+import type { FrameData } from "@/lib/phobo-data";
 
 type KioskStageProps = {
   children: ReactNode;
@@ -178,13 +179,13 @@ export function QrScreen({
 }
 
 type FrameGridScrollerProps = {
-  frames?: string[];
+  frames: FrameData[];
   selectedFrameId?: string;
   onSelectFrame?: (frameId: string) => void;
 };
 
 export function FrameGridScroller({
-  frames = Array.from({ length: 18 }, (_, index) => `frame-${index + 1}`),
+  frames,
   selectedFrameId,
   onSelectFrame,
 }: FrameGridScrollerProps) {
@@ -192,16 +193,16 @@ export function FrameGridScroller({
   return (
     <div className="frame-scroller" aria-label="Frame thumbnails">
       <div className="frame-grid">
-        {frames.map((frameId) => (
+        {frames.map((frame) => (
           <button
             type="button"
-            className={`frame-choice ${selectedFrameId === frameId ? "is-selected" : ""}`}
-            key={frameId}
-            aria-label={frameId}
-            onClick={() => onSelectFrame?.(frameId)}
+            className={`frame-choice ${selectedFrameId === frame.id ? "is-selected" : ""}`}
+            key={frame.id}
+            aria-label={`Select ${frame.name}`} aria-pressed={selectedFrameId === frame.id}
+            onClick={() => onSelectFrame?.(frame.id)}
           >
-            <span className="frame-choice__top" />
-            <span className="frame-choice__bottom" />
+            <img src={frame.templateUrl} alt="" className="frame-choice__image" />
+            <span className="frame-choice__label">{frame.name}</span>
           </button>
         ))}
       </div>
@@ -246,22 +247,14 @@ export function BackgroundPicker({
   );
 }
 
-type PreviewComposerProps = {
-  photoUrl?: string;
-};
+type PreviewComposerProps = { frame: FrameData; photoUrls: string[] };
 
-export function PreviewComposer({ photoUrl }: PreviewComposerProps) {
-  return (
-    <RoundedPanel className="preview-composer">
-      {photoUrl ? (
-        <img src={photoUrl} alt="Preview" className="preview-frame" style={{ objectFit: "contain", borderRadius: "20px" }} />
-      ) : (
-        <div className="preview-frame" aria-label="Frame preview placeholder" />
-      )}
-    </RoundedPanel>
-  );
+export function PreviewComposer({ frame, photoUrls }: PreviewComposerProps) {
+  return <RoundedPanel className="preview-composer"><div className="preview-frame" aria-label={`${frame.name} preview`}>
+    <img src={frame.templateUrl} alt={frame.name} className="preview-frame__template" />
+    {frame.photoSlots.map((photoSlot,index) => { const photoUrl=photoUrls[index % frame.requiredPhotos]; return <div className="preview-frame__slot" key={`${photoSlot.x}-${photoSlot.y}-${index}`} style={{left:`${photoSlot.x/frame.width*100}%`,top:`${photoSlot.y/frame.height*100}%`,width:`${photoSlot.width/frame.width*100}%`,height:`${photoSlot.height/frame.height*100}%`,transform:photoSlot.rotation?`rotate(${photoSlot.rotation}deg)`:undefined}}>{photoUrl&&<img src={photoUrl} alt={`Selected photo ${(index%frame.requiredPhotos)+1}`} />}</div>;})}
+  </div></RoundedPanel>;
 }
-
 type PhotoResultStripProps = {
   photos?: string[];
   selectedIndices?: number[];

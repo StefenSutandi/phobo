@@ -163,6 +163,20 @@ export async function generate4RPrintTemplate({
   selectedBackgroundId,
   showSafeGuide = false,
 }: Generate4RPrintTemplateRequest): Promise<Buffer> {
+  if (finalImageUrl) {
+    const dataUrl = await publicImageUrlToDataUrl(finalImageUrl);
+    if (!dataUrl) throw new Error("Final frame image could not be loaded for print");
+    const source = parseDataUrl(dataUrl).buffer;
+    const copyHeight = PRINT_HEIGHT_PX - 80;
+    const copyWidth = Math.round(copyHeight * 2 / 3);
+    const copy = await sharp(source).resize(copyWidth, copyHeight, { fit: "fill" }).jpeg({ quality: 94 }).toBuffer();
+    const gap = 48;
+    const left = Math.round((PRINT_WIDTH_PX - copyWidth * 2 - gap) / 2);
+    return sharp({ create: { width: PRINT_WIDTH_PX, height: PRINT_HEIGHT_PX, channels: 3, background: "white" } })
+      .composite([{ input: copy, left, top: 40 }, { input: copy, left: left + copyWidth + gap, top: 40 }])
+      .jpeg({ quality: 92, mozjpeg: true })
+      .toBuffer();
+  }
   const images = await resolveTemplateImages({ capturedPhotos, finalImageUrl });
   const safeMargin = 90;
   const stripGap = 68;
