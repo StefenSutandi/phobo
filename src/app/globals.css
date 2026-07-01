@@ -931,12 +931,15 @@ button {
 
 .closing-art {
   position: absolute;
-  right: 40px;
+  right: 0;
   top: 0;
   width: 850px;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: 70% center;
   z-index: 1;
+  -webkit-mask-image: radial-gradient(ellipse 75% 90% at 65% 50%, black 40%, transparent 100%);
+  mask-image: radial-gradient(ellipse 75% 90% at 65% 50%, black 40%, transparent 100%);
 }
 
 .closing-qr-list {
