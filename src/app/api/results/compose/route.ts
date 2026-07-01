@@ -155,11 +155,38 @@ export async function POST(request: Request) {
     await writeFile(finalScreenPath, composed.finalScreenPng);
     await writeFile(finalPrintPath, printBuffer);
     await writeFile(manifestPath, payloadHash);
+    
+    let driveUrl = undefined;
+    
+    if (process.env.PHOBO_DRIVE_ENABLED === "true") {
+      const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+      if (folderId) {
+        try {
+          const { uploadFileToGoogleDrive } = await import("@/lib/storage/google-drive");
+          const uploadResult = await uploadFileToGoogleDrive({
+            filePath: finalScreenPath,
+            fileName: `phobo_${safeSessionId}.png`,
+            mimeType: "image/png",
+            folderId: folderId
+          });
+          driveUrl = uploadResult.webViewLink;
+          console.log(`[Compose API] Drive upload success for ${safeSessionId}: ${driveUrl}`);
+        } catch (uploadError) {
+          console.error(`[Compose API] Drive upload failed for ${safeSessionId}:`, uploadError);
+          // Fallback, don't throw
+        }
+      } else {
+        console.warn(`[Compose API] PHOBO_DRIVE_ENABLED is true but GOOGLE_DRIVE_FOLDER_ID is missing.`);
+      }
+    } else {
+      console.log(`[Compose API] Google Drive upload disabled for ${safeSessionId}.`);
+    }
 
     return NextResponse.json({
       ok: true,
       finalImageUrl: `/results/${safeSessionId}/final_screen.png`,
       printImageUrl: `/results/${safeSessionId}/final_print.jpg`,
+      driveUrl: driveUrl,
       warnings: composed.warnings
     });
   } catch (error) {
