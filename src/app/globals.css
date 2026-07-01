@@ -901,87 +901,86 @@ button {
   width: 110px;
 }
 
-.closing-screen {
-  background: #2f3434;
-  inset: 0;
+.closing-page {
+  width: 100%;
+  min-height: 100vh;
+  background: #1f2727;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
-  position: absolute;
 }
 
-.closing-illustration {
-  display: block;
-  height: 543px;
-  right: 50px;
-  object-fit: contain;
+.closing-stage {
+  width: 1366px;
+  height: 768px;
+  position: relative;
+  overflow: hidden;
+  background: #344140;
+}
+
+.closing-art {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 972px;
+  right: 90px;
+  top: 65px;
+  width: 860px;
+  height: auto;
+  object-fit: contain;
   z-index: 1;
 }
 
-.closing-qr-column {
+.closing-qr-list {
+  position: absolute;
+  left: 95px;
+  top: 95px;
   display: flex;
   flex-direction: column;
-  gap: 40px;
-  left: 60px;
-  position: absolute;
-  top: 50%;
-  transform: translateY(-40%);
-  width: 320px;
+  gap: 34px;
   z-index: 2;
 }
 
 .closing-qr-row {
+  display: flex;
   align-items: center;
-  display: grid;
-  gap: 15px;
-  grid-template-columns: 100px 1fr;
-  height: 100px;
+  gap: 22px;
 }
 
-.closing-qr-row .qr-image {
-  display: block;
-  height: 100px;
-  object-fit: contain;
-  width: 100px;
-  background: #fff;
+.closing-qr {
+  width: 110px;
+  height: 110px;
+  background: white;
   padding: 8px;
-  border-radius: 12px;
+  border-radius: 0;
 }
 
-.closing-qr-row span {
-  color: var(--white);
-  font-size: 22px;
-  font-weight: 700;
+.closing-qr .qr-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.closing-label {
+  color: white;
+  font-weight: 900;
+  font-size: 18px;
   line-height: 1.1;
-  text-align: left;
+  text-transform: uppercase;
+  white-space: pre-line;
 }
 
-.closing-title {
-  color: var(--white);
-  font-size: 72px;
-  font-weight: 800;
-  left: 60px;
+.closing-home-button {
   position: absolute;
-  text-align: left;
-  top: 60px;
-  white-space: nowrap;
-  width: auto;
+  right: 150px;
+  bottom: 80px;
+  width: 190px;
+  height: 64px;
+  border-radius: 999px;
+  background: #6b1d4c;
+  color: white;
+  font-weight: 900;
+  font-size: 28px;
   z-index: 3;
-}
-
-.closing-home {
-  bottom: 50px;
-  right: 50px;
-  position: absolute;
-  z-index: 3;
-  padding: 16px 48px;
-  font-size: 24px;
-  border-radius: 50px;
-  background: var(--purple);
-  color: #fff;
   border: none;
-  font-weight: 700;
   cursor: pointer;
 }

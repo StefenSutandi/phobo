@@ -22,24 +22,29 @@ export default function Closing() {
   ];
 
   return (
-    <KioskStage>
-      <div className="closing-screen">
+    <main className="closing-page">
+      <div className="closing-stage">
         <OptionalAsset
           src="/assets/figma/illustrations/closing.png"
-          alt=""
-          className="closing-illustration"
+          alt="Closing artwork"
+          className="closing-art"
         />
-        <div className="closing-qr-column">
+
+        <div className="closing-qr-list">
           {links.map(([label, url]) => (
             <div className="closing-qr-row" key={label}>
-              <ResultQrCode value={url || `https://phobo.local/${label.toLowerCase().replaceAll(" ", "-")}`} />
-              <span>{label}</span>
+              <div className="closing-qr">
+                <ResultQrCode value={url || `https://phobo.local/${label.toLowerCase().replaceAll(" ", "-")}`} />
+              </div>
+              <span className="closing-label">{label}</span>
             </div>
           ))}
         </div>
-        <h1 className="closing-title">SEE U LATER</h1>
-        <button className="closing-home" onClick={() => { resetSession(); router.push("/"); }}>HOME</button>
+
+        <button className="closing-home-button" onClick={() => { resetSession(); router.push("/"); }}>
+          HOME
+        </button>
       </div>
-    </KioskStage>
+    </main>
   );
 }
