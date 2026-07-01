@@ -5,6 +5,7 @@ import { composeFinalImages } from "@/lib/image-processing/compose-final";
 import { generate4RPrintTemplate } from "@/lib/print/print-template";
 import { sanitizeSessionId } from "@/lib/results/result-storage";
 import { bufferToDataUrl } from "@/lib/image-processing/load-image";
+import { uploadFileToGoogleDrive } from "@/lib/storage/google-drive";
 
 export const runtime = "nodejs";
 
@@ -162,7 +163,6 @@ export async function POST(request: Request) {
       const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
       if (folderId) {
         try {
-          const { uploadFileToGoogleDrive } = await import("@/lib/storage/google-drive");
           const uploadResult = await uploadFileToGoogleDrive({
             filePath: finalScreenPath,
             fileName: `phobo_${safeSessionId}.png`,
