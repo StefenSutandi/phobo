@@ -22,6 +22,13 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
   const [zoom, setZoom] = useState<number>(1.0);
   const [offsetX, setOffsetX] = useState<number>(0);
   const [offsetY, setOffsetY] = useState<number>(0);
+  
+  const [keyColor, setKeyColor] = useState<string>("#00ff00");
+  const [similarity, setSimilarity] = useState<number>(0.2);
+  const [smoothness, setSmoothness] = useState<number>(0.1);
+  const [showDebugMask, setShowDebugMask] = useState<boolean>(false);
+  const [segmentationMode, setSegmentationMode] = useState<boolean>(false);
+  
   const streamRef = useRef<MediaStream | null>(null);
 
   const stopLiveView = () => {
@@ -146,23 +153,33 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
       const bgImg = backgroundImgRef.current;
-      if (bgImg && bgImg.complete) {
-        const imgRatio = bgImg.width / bgImg.height;
-        const canvasRatio = canvas.width / canvas.height;
-        let drawWidth = canvas.width;
-        let drawHeight = canvas.height;
-        let drawX = 0;
-        let drawY = 0;
-        if (imgRatio > canvasRatio) {
-            drawWidth = canvas.height * imgRatio;
-            drawX = (canvas.width - drawWidth) / 2;
+      const drawBg = () => {
+        if (bgImg && bgImg.complete) {
+          const imgRatio = bgImg.width / bgImg.height;
+          const canvasRatio = canvas.width / canvas.height;
+          let drawWidth = canvas.width;
+          let drawHeight = canvas.height;
+          let drawX = 0;
+          let drawY = 0;
+          if (imgRatio > canvasRatio) {
+              drawWidth = canvas.height * imgRatio;
+              drawX = (canvas.width - drawWidth) / 2;
+          } else {
+              drawHeight = canvas.width / imgRatio;
+              drawY = (canvas.height - drawHeight) / 2;
+          }
+          ctx.drawImage(bgImg, drawX, drawY, drawWidth, drawHeight);
         } else {
-            drawHeight = canvas.width / imgRatio;
-            drawY = (canvas.height - drawHeight) / 2;
+          ctx.fillStyle = "#d9d9d9";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
-        ctx.drawImage(bgImg, drawX, drawY, drawWidth, drawHeight);
+      };
+
+      if (!showDebugMask) {
+        drawBg();
       } else {
-        ctx.fillStyle = "#d9d9d9";
+        // debug mode, clear to black
+        ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
       
@@ -185,14 +202,119 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
           const frame = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
           const data = frame.data;
           
+          let keyedPixels = 0;
+          const totalPixels = data.length / 4;
+          
+          // Parse hex to RGB
+          const hexMatch = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(keyColor);
+          const keyRgb = hexMatch ? {
+            r: parseInt(hexMatch[1], 16),
+            g: parseInt(hexMatch[2], 16),
+            b: parseInt(hexMatch[3], 16)
+          } : { r: 0, g: 255, b: 0 };
+          
+          const rgbToYcbcr = (r: number, g: number, b: number) => ({
+            y: 0.299 * r + 0.587 * g + 0.114 * b,
+            cb: 128 - 0.168736 * r - 0.331264 * g + 0.5 * b,
+            cr: 128 + 0.5 * r - 0.418688 * g - 0.081312 * b
+          });
+          
+          const keyYuv = rgbToYcbcr(keyRgb.r, keyRgb.g, keyRgb.b);
+          
           for (let i = 0; i < data.length; i += 4) {
             const r = data[i], g = data[i+1], b = data[i+2];
-            if (g >= 90 && g - r >= 35 && g - b >= 35 && g > r + 14 && g > b + 14) {
-              data[i+3] = 0;
+            const pxYuv = rgbToYcbcr(r, g, b);
+            
+            const cbDiff = pxYuv.cb - keyYuv.cb;
+            const crDiff = pxYuv.cr - keyYuv.cr;
+            const chromaDist = Math.sqrt(cbDiff*cbDiff + crDiff*crDiff);
+            const normalizedDist = chromaDist / 180.0;
+            
+            let alpha = 1;
+            if (normalizedDist < similarity) {
+              alpha = 0;
+              keyedPixels++;
+            } else if (normalizedDist < similarity + smoothness) {
+              alpha = (normalizedDist - similarity) / Math.max(smoothness, 0.001);
+              keyedPixels += (1 - alpha);
+            }
+            
+            if (showDebugMask) {
+              const maskVal = Math.floor(alpha * 255);
+              data[i] = maskVal;
+              data[i+1] = maskVal;
+              data[i+2] = maskVal;
+              data[i+3] = 255;
+            } else {
+              data[i+3] = Math.floor(alpha * 255);
             }
           }
           offCtx.putImageData(frame, 0, 0);
-          ctx.drawImage(offscreen, 0, 0);
+          
+          const keyedRatio = keyedPixels / totalPixels;
+          
+          if (showDebugMask) {
+            // Draw quarter-sized preview images
+            const w = canvas.width / 2;
+            const h = canvas.height / 2;
+            
+            // TL: Raw Video
+            ctx.drawImage(video, 0, 0, w, h);
+            
+            // TR: Selected Background
+            if (bgImg && bgImg.complete) {
+              ctx.drawImage(bgImg, w, 0, w, h);
+            } else {
+              ctx.fillStyle = "#888";
+              ctx.fillRect(w, 0, w, h);
+            }
+            
+            // BL: Mask
+            ctx.drawImage(offscreen, 0, h, w, h);
+            
+            // BR: Final composite
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(w, h, w, h);
+            ctx.clip();
+            ctx.translate(w, h);
+            ctx.scale(0.5, 0.5);
+            drawBg();
+            ctx.drawImage(offscreen, 0, 0);
+            ctx.restore();
+            
+            ctx.fillStyle = "white";
+            ctx.font = "20px sans-serif";
+            ctx.fillText("Raw Camera", 10, 30);
+            ctx.fillText("Background", w + 10, 30);
+            ctx.fillText(`Mask (Ratio: ${(keyedRatio * 100).toFixed(1)}%)`, 10, h + 30);
+            ctx.fillText("Final Composite", w + 10, h + 30);
+          } else {
+            ctx.drawImage(offscreen, 0, 0);
+          }
+          
+          // Status Text Overlay (if not debug mask and < 5% keyed)
+          if (!showDebugMask) {
+            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+            ctx.font = "24px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            
+            const margin = 20;
+            if (keyedRatio < 0.05) {
+              const text = "No green screen detected. Use green backdrop or enable segmentation mode.";
+              const tm = ctx.measureText(text);
+              ctx.fillRect(canvas.width / 2 - tm.width / 2 - 10, margin - 15, tm.width + 20, 30);
+              ctx.fillStyle = "white";
+              ctx.fillText(text, canvas.width / 2, margin);
+            } else {
+              const text = "Green screen detected";
+              const tm = ctx.measureText(text);
+              ctx.fillRect(canvas.width / 2 - tm.width / 2 - 10, margin - 15, tm.width + 20, 30);
+              ctx.fillStyle = "#00ff00";
+              ctx.fillText(text, canvas.width / 2, margin);
+            }
+          }
         }
       } else {
         // Draw overlay text if camera not ready
@@ -528,6 +650,30 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
           <label style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
             <span>Offset Y: {offsetY}%</span>
             <input type="range" min="-50" max="50" step="1" value={offsetY} onChange={handleOffsetYChange} style={{ width: "120px" }} />
+          </label>
+        </div>
+        
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px", borderTop: "1px solid #555", paddingTop: "4px" }}>
+          <strong>Chroma Key Tuning</strong>
+          <label style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+            <span>Key Color:</span>
+            <input type="color" value={keyColor} onChange={e => setKeyColor(e.target.value)} />
+          </label>
+          <label style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+            <span>Similarity: {similarity.toFixed(2)}</span>
+            <input type="range" min="0.01" max="1.0" step="0.01" value={similarity} onChange={e => setSimilarity(parseFloat(e.target.value))} style={{ width: "120px" }} />
+          </label>
+          <label style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+            <span>Smoothness: {smoothness.toFixed(2)}</span>
+            <input type="range" min="0" max="1.0" step="0.01" value={smoothness} onChange={e => setSmoothness(parseFloat(e.target.value))} style={{ width: "120px" }} />
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", marginTop: "4px" }}>
+            <input type="checkbox" checked={showDebugMask} onChange={e => setShowDebugMask(e.target.checked)} />
+            Show Mask Preview
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", marginTop: "4px" }}>
+            <input type="checkbox" checked={segmentationMode} onChange={e => setSegmentationMode(e.target.checked)} />
+            Segmentation Mode (TODO)
           </label>
         </div>
         
