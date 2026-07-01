@@ -185,7 +185,7 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
         const tryRes = async (width: number, height: number, name: string) => {
           return await attemptGetUserMedia({
             video: {
-              deviceId: { exact: selectedDeviceId },
+              ...(selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : {}),
               width: { ideal: width },
               height: { ideal: height },
               frameRate: { ideal: 30 }
