@@ -10,7 +10,7 @@ export type CameraLiveViewHandle = {
   getStatus: () => "inactive" | "starting" | "active" | "failed";
 };
 
-export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boolean; selectedBackgroundId?: string }>(({ compact = false, selectedBackgroundId }, ref) => {
+export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boolean; selectedBackgroundUrl?: string }>(({ compact = false, selectedBackgroundUrl }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -48,8 +48,9 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
         throw new Error("Video dimensions are not available yet.");
       }
       
-      const sourceWidth = video.videoWidth;
-      const sourceHeight = video.videoHeight;
+      const sourceElement = canvasRef.current || video;
+      const sourceWidth = sourceElement.width || video.videoWidth;
+      const sourceHeight = sourceElement.height || video.videoHeight;
       
       const targetWidth = sourceWidth / zoom;
       const targetHeight = sourceHeight / zoom;
@@ -71,7 +72,6 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
         throw new Error("Could not get 2d context for capture.");
       }
       
-      const sourceElement = canvasRef.current || video;
       ctx.drawImage(sourceElement, srcX, srcY, targetWidth, targetHeight, 0, 0, canvas.width, canvas.height);
       const imageDataUrl = canvas.toDataURL("image/jpeg", 0.92);
       
@@ -109,56 +109,29 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
   const animationFrameId = useRef<number>(0);
 
   useEffect(() => {
-    if (!selectedBackgroundId) return;
-    const bg = getBackgroundById(selectedBackgroundId);
-    if (bg.imageUrl) {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = bg.imageUrl;
-      backgroundImgRef.current = img;
-    } else {
+    if (!selectedBackgroundUrl) {
       backgroundImgRef.current = null;
+      return;
     }
-  }, [selectedBackgroundId]);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = selectedBackgroundUrl;
+    backgroundImgRef.current = img;
+  }, [selectedBackgroundUrl]);
 
   useEffect(() => {
     const drawFrame = () => {
       animationFrameId.current = requestAnimationFrame(drawFrame);
-      if (status !== "active" || !videoRef.current || !canvasRef.current) return;
-      
-      const video = videoRef.current;
       const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      if (!ctx || !video.videoWidth) return;
-
-      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-      }
-
-      if (!offscreenCanvasRef.current) {
-        offscreenCanvasRef.current = document.createElement("canvas");
-      }
-      const offscreen = offscreenCanvasRef.current;
-      if (offscreen.width !== video.videoWidth || offscreen.height !== video.videoHeight) {
-        offscreen.width = video.videoWidth;
-        offscreen.height = video.videoHeight;
-      }
-
-      const offCtx = offscreen.getContext("2d", { willReadFrequently: true });
-      if (!offCtx) return;
-
-      offCtx.drawImage(video, 0, 0);
-      const frame = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
-      const data = frame.data;
+      if (!canvas) return;
       
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i+1], b = data[i+2];
-        if (g >= 90 && g - r >= 35 && g - b >= 35 && g > r + 14 && g > b + 14) {
-          data[i+3] = 0;
-        }
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+
+      if (canvas.width !== 1280 || canvas.height !== 720) {
+        canvas.width = 1280;
+        canvas.height = 720;
       }
-      offCtx.putImageData(frame, 0, 0);
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
@@ -179,17 +152,42 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
         }
         ctx.drawImage(bgImg, drawX, drawY, drawWidth, drawHeight);
       } else {
-        const bg = getBackgroundById(selectedBackgroundId);
-        ctx.fillStyle = bg.color || "#f7f3ee";
+        ctx.fillStyle = "#d9d9d9";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
       
-      ctx.drawImage(offscreen, 0, 0);
+      const video = videoRef.current;
+      if (status === "active" && video && video.videoWidth) {
+        if (!offscreenCanvasRef.current) {
+          offscreenCanvasRef.current = document.createElement("canvas");
+        }
+        const offscreen = offscreenCanvasRef.current;
+        if (offscreen.width !== canvas.width || offscreen.height !== canvas.height) {
+          offscreen.width = canvas.width;
+          offscreen.height = canvas.height;
+        }
+
+        const offCtx = offscreen.getContext("2d", { willReadFrequently: true });
+        if (offCtx) {
+          offCtx.drawImage(video, 0, 0, offscreen.width, offscreen.height);
+          const frame = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
+          const data = frame.data;
+          
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i], g = data[i+1], b = data[i+2];
+            if (g >= 90 && g - r >= 35 && g - b >= 35 && g > r + 14 && g > b + 14) {
+              data[i+3] = 0;
+            }
+          }
+          offCtx.putImageData(frame, 0, 0);
+          ctx.drawImage(offscreen, 0, 0);
+        }
+      }
     };
 
     animationFrameId.current = requestAnimationFrame(drawFrame);
     return () => cancelAnimationFrame(animationFrameId.current);
-  }, [status, selectedBackgroundId]);
+  }, [status, selectedBackgroundUrl]);
 
   useEffect(() => {
     loadDevices();
@@ -352,19 +350,23 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
   const ty = -offsetY * (1 - 1 / zoom);
 
   return (
-    <RoundedPanel className="camera-panel" style={{ position: "relative", overflow: "hidden" }}>
-      {/* ALWAYS render video so ref is never null, just hide it when not active */}
+    <RoundedPanel className="camera-panel camera-main-panel" style={{ position: "relative", overflow: "hidden" }}>
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
+        style={{ display: "none" }}
+      />
+      <canvas
+        ref={canvasRef}
+        className="camera-preview-canvas"
         style={{
           width: "100%",
           height: "100%",
           objectFit: "cover",
           borderRadius: "inherit",
-          display: status === "active" ? "block" : "none",
+          display: "block",
           position: "absolute",
           top: 0,
           left: 0,
@@ -373,14 +375,6 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
           transformOrigin: "center center"
         }}
       />
-      
-      {status !== "active" && (
-        <div 
-          className="camera-live" 
-          aria-label="Camera preview placeholder" 
-          style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0, zIndex: 0 }} 
-        />
-      )}
       
       <div
         className="live-view-controls"

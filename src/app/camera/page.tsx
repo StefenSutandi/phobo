@@ -89,7 +89,11 @@ export default function Camera() {
   return (
     <KioskStage>
       <div className="shot-counter">Shoot {maxReached ? max : count + 1} / {max}</div>
-      <CameraLiveView ref={live} compact />
+      <CameraLiveView 
+        ref={live} 
+        compact 
+        selectedBackgroundUrl={backgrounds.find(bg => bg.id === session?.selectedBackgroundId)?.imageUrl}
+      />
       <BackgroundPicker
         backgrounds={backgrounds}
         selectedBackgroundId={session?.selectedBackgroundId}
