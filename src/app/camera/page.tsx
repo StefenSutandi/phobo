@@ -92,6 +92,7 @@ export default function Camera() {
       <CameraLiveView 
         ref={live} 
         compact 
+        autoStart
         selectedBackgroundUrl={backgrounds.find(bg => bg.id === session?.selectedBackgroundId)?.imageUrl}
       />
       <BackgroundPicker

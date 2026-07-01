@@ -10,7 +10,7 @@ export type CameraLiveViewHandle = {
   getStatus: () => "inactive" | "starting" | "active" | "failed";
 };
 
-export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boolean; selectedBackgroundUrl?: string }>(({ compact = false, selectedBackgroundUrl }, ref) => {
+export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boolean; selectedBackgroundUrl?: string; autoStart?: boolean }>(({ compact = false, selectedBackgroundUrl, autoStart = false }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -40,12 +40,10 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
     stopLiveView,
     getStatus: () => status,
     captureFrame: () => {
-      if (status !== "active" || !videoRef.current) {
-        throw new Error("Live view must be active before browser-video capture.");
-      }
       const video = videoRef.current;
-      if (!video.videoWidth || !video.videoHeight) {
-        throw new Error("Video dimensions are not available yet.");
+      const videoReady = video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0;
+      if (status !== "active" || !videoReady) {
+        throw new Error("Live view must be active and ready before browser-video capture.");
       }
       
       const sourceElement = canvasRef.current || video;
@@ -107,6 +105,18 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const backgroundImgRef = useRef<HTMLImageElement | null>(null);
   const animationFrameId = useRef<number>(0);
+  const didAutoStartRef = useRef(false);
+
+  useEffect(() => {
+    if (!autoStart) return;
+    if (didAutoStartRef.current) return;
+    didAutoStartRef.current = true;
+    startLiveView().catch((error) => {
+      console.error("[CameraLiveView] Auto-start failed:", error);
+      setStatus("failed");
+      setError("Camera failed to start. Check permission/device.");
+    });
+  }, [autoStart]);
 
   useEffect(() => {
     if (!selectedBackgroundUrl) {
@@ -157,7 +167,9 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
       }
       
       const video = videoRef.current;
-      if (status === "active" && video && video.videoWidth) {
+      const videoReady = video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0;
+      
+      if (status === "active" && videoReady) {
         if (!offscreenCanvasRef.current) {
           offscreenCanvasRef.current = document.createElement("canvas");
         }
@@ -182,6 +194,15 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
           offCtx.putImageData(frame, 0, 0);
           ctx.drawImage(offscreen, 0, 0);
         }
+      } else {
+        // Draw overlay text if camera not ready
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "white";
+        ctx.font = "32px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(status === "starting" ? "Starting camera..." : "Camera inactive", canvas.width / 2, canvas.height / 2);
       }
     };
 
