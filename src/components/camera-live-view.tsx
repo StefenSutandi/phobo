@@ -13,6 +13,8 @@ export type CameraLiveViewHandle = {
 export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boolean; selectedBackgroundUrl?: string; autoStart?: boolean }>(({ compact = false, selectedBackgroundUrl, autoStart = false }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const debugCanvasRef = useRef<HTMLCanvasElement>(null);
+  const statusOverlayRef = useRef<HTMLDivElement>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [status, setStatus] = useState<"inactive" | "starting" | "active" | "failed">("inactive");
@@ -175,12 +177,18 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
         }
       };
 
-      if (!showDebugMask) {
-        drawBg();
-      } else {
-        // debug mode, clear to black
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Always draw the clean background on the main canvas
+      drawBg();
+      
+      const debugCanvas = debugCanvasRef.current;
+      const debugCtx = debugCanvas?.getContext("2d", { willReadFrequently: true });
+      if (showDebugMask && debugCanvas && debugCtx) {
+        if (debugCanvas.width !== canvas.width || debugCanvas.height !== canvas.height) {
+          debugCanvas.width = canvas.width;
+          debugCanvas.height = canvas.height;
+        }
+        debugCtx.fillStyle = "#000";
+        debugCtx.fillRect(0, 0, debugCanvas.width, debugCanvas.height);
       }
       
       const video = videoRef.current;
@@ -253,78 +261,88 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
           
           const keyedRatio = keyedPixels / totalPixels;
           
-          if (showDebugMask) {
-            // Draw quarter-sized preview images
-            const w = canvas.width / 2;
-            const h = canvas.height / 2;
+          if (showDebugMask && debugCanvas && debugCtx) {
+            // Draw quarter-sized preview images to DEBUG canvas
+            const w = debugCanvas.width / 2;
+            const h = debugCanvas.height / 2;
             
             // TL: Raw Video
-            ctx.drawImage(video, 0, 0, w, h);
+            debugCtx.drawImage(video, 0, 0, w, h);
             
             // TR: Selected Background
             if (bgImg && bgImg.complete) {
-              ctx.drawImage(bgImg, w, 0, w, h);
+              debugCtx.drawImage(bgImg, w, 0, w, h);
             } else {
-              ctx.fillStyle = "#888";
-              ctx.fillRect(w, 0, w, h);
+              debugCtx.fillStyle = "#888";
+              debugCtx.fillRect(w, 0, w, h);
             }
             
             // BL: Mask
-            ctx.drawImage(offscreen, 0, h, w, h);
+            debugCtx.drawImage(offscreen, 0, h, w, h);
             
             // BR: Final composite
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(w, h, w, h);
-            ctx.clip();
-            ctx.translate(w, h);
-            ctx.scale(0.5, 0.5);
-            drawBg();
-            ctx.drawImage(offscreen, 0, 0);
-            ctx.restore();
+            debugCtx.save();
+            debugCtx.beginPath();
+            debugCtx.rect(w, h, w, h);
+            debugCtx.clip();
+            debugCtx.translate(w, h);
+            debugCtx.scale(0.5, 0.5);
+            if (bgImg && bgImg.complete) {
+              const imgRatio = bgImg.width / bgImg.height;
+              const canvasRatio = debugCanvas.width / debugCanvas.height;
+              let drawWidth = debugCanvas.width;
+              let drawHeight = debugCanvas.height;
+              let drawX = 0;
+              let drawY = 0;
+              if (imgRatio > canvasRatio) {
+                  drawWidth = debugCanvas.height * imgRatio;
+                  drawX = (debugCanvas.width - drawWidth) / 2;
+              } else {
+                  drawHeight = debugCanvas.width / imgRatio;
+                  drawY = (debugCanvas.height - drawHeight) / 2;
+              }
+              debugCtx.drawImage(bgImg, drawX, drawY, drawWidth, drawHeight);
+            } else {
+              debugCtx.fillStyle = "#d9d9d9";
+              debugCtx.fillRect(0, 0, debugCanvas.width, debugCanvas.height);
+            }
+            debugCtx.drawImage(offscreen, 0, 0);
+            debugCtx.restore();
             
-            ctx.fillStyle = "white";
-            ctx.font = "20px sans-serif";
-            ctx.fillText("Raw Camera", 10, 30);
-            ctx.fillText("Background", w + 10, 30);
-            ctx.fillText(`Mask (Ratio: ${(keyedRatio * 100).toFixed(1)}%)`, 10, h + 30);
-            ctx.fillText("Final Composite", w + 10, h + 30);
-          } else {
-            ctx.drawImage(offscreen, 0, 0);
+            debugCtx.fillStyle = "white";
+            debugCtx.font = "20px sans-serif";
+            debugCtx.fillText("Raw Camera", 10, 30);
+            debugCtx.fillText("Background", w + 10, 30);
+            debugCtx.fillText(`Mask (Ratio: ${(keyedRatio * 100).toFixed(1)}%)`, 10, h + 30);
+            debugCtx.fillText("Final Composite", w + 10, h + 30);
           }
           
-          // Status Text Overlay (if not debug mask and < 5% keyed)
-          if (!showDebugMask) {
-            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-            ctx.font = "24px sans-serif";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            
-            const margin = 20;
-            if (keyedRatio < 0.05) {
-              const text = "No green screen detected. Use green backdrop or enable segmentation mode.";
-              const tm = ctx.measureText(text);
-              ctx.fillRect(canvas.width / 2 - tm.width / 2 - 10, margin - 15, tm.width + 20, 30);
-              ctx.fillStyle = "white";
-              ctx.fillText(text, canvas.width / 2, margin);
+          // Always draw the clean keyed video on the main canvas
+          ctx.drawImage(offscreen, 0, 0);
+          
+          // Status Text Overlay update (DOM only)
+          if (statusOverlayRef.current) {
+            if (showDebugMask) {
+              statusOverlayRef.current.style.display = "none";
             } else {
-              const text = "Green screen detected";
-              const tm = ctx.measureText(text);
-              ctx.fillRect(canvas.width / 2 - tm.width / 2 - 10, margin - 15, tm.width + 20, 30);
-              ctx.fillStyle = "#00ff00";
-              ctx.fillText(text, canvas.width / 2, margin);
+              statusOverlayRef.current.style.display = "flex";
+              if (keyedRatio < 0.05) {
+                statusOverlayRef.current.innerText = "No green screen detected. Use green backdrop or enable segmentation mode.";
+                statusOverlayRef.current.style.color = "white";
+              } else {
+                statusOverlayRef.current.innerText = "Green screen detected";
+                statusOverlayRef.current.style.color = "#00ff00";
+              }
             }
           }
         }
       } else {
-        // Draw overlay text if camera not ready
-        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "white";
-        ctx.font = "32px sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(status === "starting" ? "Starting camera..." : "Camera inactive", canvas.width / 2, canvas.height / 2);
+        // Status Text Overlay update for camera not ready
+        if (statusOverlayRef.current) {
+          statusOverlayRef.current.style.display = "flex";
+          statusOverlayRef.current.style.color = "white";
+          statusOverlayRef.current.innerText = status === "starting" ? "Starting camera..." : "Camera inactive";
+        }
       }
     };
 
@@ -516,6 +534,43 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
           zIndex: 1,
           transform: `scale(${zoom}) translate(${tx}%, ${ty}%)`,
           transformOrigin: "center center"
+        }}
+      />
+      {showDebugMask && (
+        <canvas
+          ref={debugCanvasRef}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            borderRadius: "inherit",
+            display: "block",
+            position: "absolute",
+            top: 0,
+            left: 0,
+            zIndex: 2,
+            transform: `scale(${zoom}) translate(${tx}%, ${ty}%)`,
+            transformOrigin: "center center"
+          }}
+        />
+      )}
+      <div 
+        ref={statusOverlayRef}
+        style={{
+          position: "absolute",
+          top: "10%",
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 3,
+          backgroundColor: "rgba(0,0,0,0.6)",
+          padding: "8px 16px",
+          borderRadius: "8px",
+          color: "white",
+          fontSize: "24px",
+          fontWeight: "bold",
+          textAlign: "center",
+          pointerEvents: "none",
+          display: "none"
         }}
       />
       
