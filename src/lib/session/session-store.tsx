@@ -18,6 +18,7 @@ type Store = {
   selectPhotos: (indices: number[]) => void; selectSticker: (id: string) => void; clearFinalResult: () => void;
   setFinalImageUrl: (url: string) => void; setPrintImageUrl: (url: string) => void; setDriveUrl: (url: string) => void;
   setPrintStatus: (s: PrintStatus) => void; setGreenScreenTuning: (t: GreenScreenTuning) => void;
+  setPaymentData: (data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number }) => void;
 };
 const Context = createContext<Store | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -29,6 +30,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const selectPackage = useCallback((id: string) => { const p = getPackageById(id); if (!p) return; const s = fresh(); setSession({ ...s, selectedPackageId: id, packageId: id, packageName: p.name, frameCount: p.frameCount, printCount: p.printCount, maxShots: p.maxShots, durationMinutes: p.durationMinutes, price: p.price, paymentStatus: "pending" }); }, []);
   const patch = useCallback((value: Partial<KioskSession>) => setSession(s => update(s, value)), []);
   const setPaymentStatus = useCallback((paymentStatus: PaymentStatus) => patch({ paymentStatus }), [patch]);
+  const setPaymentData = useCallback((data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number }) => patch(data), [patch]);
   const selectFrame = useCallback((selectedFrameId: string) => patch({ selectedFrameId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const selectBackground = useCallback((selectedBackgroundId: string) => patch({ selectedBackgroundId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const addCapturedPhoto = useCallback((url: string) => setSession(s => { const active = s ?? fresh(); return active.capturedPhotos.length >= (active.maxShots ?? 8) ? active : update(active, { capturedPhotos: [...active.capturedPhotos, url], finalImageUrl: undefined, printImageUrl: undefined }); }), []);
@@ -41,7 +43,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const setDriveUrl = useCallback((driveUrl: string) => patch({ driveUrl }), [patch]);
   const setPrintStatus = useCallback((printStatus: PrintStatus) => patch({ printStatus }), [patch]);
   const setGreenScreenTuning = useCallback((greenScreenTuning: GreenScreenTuning) => patch({ greenScreenTuning }), [patch]);
-  const value = useMemo(() => ({ session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning]);
+  const value = useMemo(() => ({ session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useSessionStore() { const value = useContext(Context); if (!value) throw new Error("useSessionStore must be used within SessionProvider"); return value; }

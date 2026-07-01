@@ -21,6 +21,10 @@ export type KioskSession = {
   durationMinutes?: number;
   price?: number;
   paymentStatus: PaymentStatus;
+  paymentOrderId?: string;
+  paymentSnapToken?: string;
+  paymentRedirectUrl?: string;
+  paymentAmount?: number;
   selectedFrameId?: string;
   selectedBackgroundId?: string;
   capturedPhotos: string[];
