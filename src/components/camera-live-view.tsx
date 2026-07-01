@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import { RoundedPanel } from "@/components/kiosk";
+import { getBackgroundById } from "@/lib/phobo-data";
 
 export type CameraLiveViewHandle = {
   stopLiveView: () => void;
@@ -9,8 +10,9 @@ export type CameraLiveViewHandle = {
   getStatus: () => "inactive" | "starting" | "active" | "failed";
 };
 
-export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boolean }>(({ compact = false }, ref) => {
+export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boolean; selectedBackgroundId?: string }>(({ compact = false, selectedBackgroundId }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [status, setStatus] = useState<"inactive" | "starting" | "active" | "failed">("inactive");
@@ -69,7 +71,8 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
         throw new Error("Could not get 2d context for capture.");
       }
       
-      ctx.drawImage(video, srcX, srcY, targetWidth, targetHeight, 0, 0, canvas.width, canvas.height);
+      const sourceElement = canvasRef.current || video;
+      ctx.drawImage(sourceElement, srcX, srcY, targetWidth, targetHeight, 0, 0, canvas.width, canvas.height);
       const imageDataUrl = canvas.toDataURL("image/jpeg", 0.92);
       
       return {
@@ -100,6 +103,93 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
       console.error("[LiveView] Could not enumerate devices:", err);
     }
   };
+
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const backgroundImgRef = useRef<HTMLImageElement | null>(null);
+  const animationFrameId = useRef<number>(0);
+
+  useEffect(() => {
+    if (!selectedBackgroundId) return;
+    const bg = getBackgroundById(selectedBackgroundId);
+    if (bg.imageUrl) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = bg.imageUrl;
+      backgroundImgRef.current = img;
+    } else {
+      backgroundImgRef.current = null;
+    }
+  }, [selectedBackgroundId]);
+
+  useEffect(() => {
+    const drawFrame = () => {
+      animationFrameId.current = requestAnimationFrame(drawFrame);
+      if (status !== "active" || !videoRef.current || !canvasRef.current) return;
+      
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx || !video.videoWidth) return;
+
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
+
+      if (!offscreenCanvasRef.current) {
+        offscreenCanvasRef.current = document.createElement("canvas");
+      }
+      const offscreen = offscreenCanvasRef.current;
+      if (offscreen.width !== video.videoWidth || offscreen.height !== video.videoHeight) {
+        offscreen.width = video.videoWidth;
+        offscreen.height = video.videoHeight;
+      }
+
+      const offCtx = offscreen.getContext("2d", { willReadFrequently: true });
+      if (!offCtx) return;
+
+      offCtx.drawImage(video, 0, 0);
+      const frame = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
+      const data = frame.data;
+      
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i+1], b = data[i+2];
+        if (g >= 90 && g - r >= 35 && g - b >= 35 && g > r + 14 && g > b + 14) {
+          data[i+3] = 0;
+        }
+      }
+      offCtx.putImageData(frame, 0, 0);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      const bgImg = backgroundImgRef.current;
+      if (bgImg && bgImg.complete) {
+        const imgRatio = bgImg.width / bgImg.height;
+        const canvasRatio = canvas.width / canvas.height;
+        let drawWidth = canvas.width;
+        let drawHeight = canvas.height;
+        let drawX = 0;
+        let drawY = 0;
+        if (imgRatio > canvasRatio) {
+            drawWidth = canvas.height * imgRatio;
+            drawX = (canvas.width - drawWidth) / 2;
+        } else {
+            drawHeight = canvas.width / imgRatio;
+            drawY = (canvas.height - drawHeight) / 2;
+        }
+        ctx.drawImage(bgImg, drawX, drawY, drawWidth, drawHeight);
+      } else {
+        const bg = getBackgroundById(selectedBackgroundId);
+        ctx.fillStyle = bg.color || "#f7f3ee";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      
+      ctx.drawImage(offscreen, 0, 0);
+    };
+
+    animationFrameId.current = requestAnimationFrame(drawFrame);
+    return () => cancelAnimationFrame(animationFrameId.current);
+  }, [status, selectedBackgroundId]);
 
   useEffect(() => {
     loadDevices();
@@ -303,7 +393,7 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
           borderRadius: "8px",
           color: "white",
           zIndex: 10,
-          display: compact && status === "active" ? "none" : "flex",
+          display: process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true" ? (compact && status === "active" ? "none" : "flex") : "none",
           flexDirection: "column",
           gap: "8px",
           fontSize: "12px",

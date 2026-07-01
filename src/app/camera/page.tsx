@@ -91,7 +91,7 @@ export default function Camera() {
       <div className="shot-counter">Shoot {maxReached ? max : count + 1} / {max}</div>
       <CameraLiveView ref={live} compact />
       <BackgroundPicker
-        backgrounds={backgrounds.map((background) => background.id)}
+        backgrounds={backgrounds}
         selectedBackgroundId={session?.selectedBackgroundId}
         onSelectBackground={selectBackground}
       />

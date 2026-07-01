@@ -219,27 +219,36 @@ export function CameraPanel() {
 }
 
 type BackgroundPickerProps = {
-  backgrounds?: string[];
+  backgrounds: { id: string; name: string; imageUrl?: string; color: string }[];
   selectedBackgroundId?: string;
   onSelectBackground?: (backgroundId: string) => void;
 };
 
 export function BackgroundPicker({
-  backgrounds = Array.from({ length: 16 }, (_, index) => `background-${index + 1}`),
+  backgrounds,
   selectedBackgroundId,
   onSelectBackground,
 }: BackgroundPickerProps) {
   return (
     <RoundedPanel className="background-picker">
       <p className="background-title">PILIH BACKGROUND</p>
-      <div className="background-grid">
-        {backgrounds.map((backgroundId) => (
+      <div className="background-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", overflowY: "auto", padding: "10px" }}>
+        {backgrounds.map((bg) => (
           <button
             type="button"
-            className={`background-choice ${selectedBackgroundId === backgroundId ? "is-selected" : ""}`}
-            key={backgroundId}
-            aria-label={backgroundId}
-            onClick={() => onSelectBackground?.(backgroundId)}
+            className={`background-choice ${selectedBackgroundId === bg.id ? "is-selected" : ""}`}
+            style={{ 
+              width: "100%", 
+              aspectRatio: "3/4", 
+              borderRadius: "12px", 
+              border: selectedBackgroundId === bg.id ? "4px solid #8e44ad" : "4px solid transparent",
+              background: bg.imageUrl ? `url('${bg.imageUrl}') center/cover` : bg.color,
+              padding: 0,
+              cursor: "pointer"
+            }}
+            key={bg.id}
+            aria-label={bg.name}
+            onClick={() => onSelectBackground?.(bg.id)}
           />
         ))}
       </div>

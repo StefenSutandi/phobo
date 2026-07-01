@@ -64,11 +64,20 @@ const backgroundColors = [
   "#c8d0d2",
 ];
 
-export const backgrounds: BackgroundData[] = backgroundColors.map((color, index) => ({
-  id: `background-${index + 1}`,
-  name: `Background ${index + 1}`,
-  color,
-}));
+import backgroundsJson from "@/../public/assets/backgrounds/backgrounds.json";
+
+export const backgrounds: BackgroundData[] = backgroundsJson.length > 0 
+  ? backgroundsJson.map((bg: any) => ({
+      id: bg.id,
+      name: bg.name,
+      imageUrl: bg.src,
+      color: "#f7f3ee", // Fallback chroma key background color if needed
+    }))
+  : backgroundColors.map((color, index) => ({
+      id: `background-${index + 1}`,
+      name: `Background ${index + 1}`,
+      color,
+    }));
 
 export function getFrameById(frameId?: string) {
   return frames.find((frame) => frame.id === frameId) ?? frames[0];
