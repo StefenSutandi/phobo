@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import { normalizeImageBuffer } from "./load-image";
+import { getPhoboEnv } from "@/lib/config/phobo-env";
 
 export type ChromaKeyOptions = {
   applyChromaKey?: boolean;
@@ -116,7 +117,9 @@ export async function applyChromaKey(
     height,
   });
 
-  console.log(`[Chroma Key] Applied with greenMin=${greenMin}, tolerance=${greenTolerance}, dominance=${greenDominance}`);
+  if (getPhoboEnv().debugLogs) {
+    console.log(`[Chroma Key] Applied with greenMin=${greenMin}, tolerance=${greenTolerance}, dominance=${greenDominance}`);
+  }
 
   return sharp(backgroundBuffer)
     .composite([{ input: keyedPhoto, left: 0, top: 0 }])

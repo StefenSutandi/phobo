@@ -25,5 +25,6 @@ export function getPhoboEnv() {
     driveEnabled: process.env.PHOBO_DRIVE_ENABLED === "true",
     resultsDir: process.env.PHOBO_RESULTS_DIR || "public/results",
     publicBaseUrl: process.env.PHOBO_PUBLIC_BASE_URL || "http://localhost:3000",
+    debugLogs: process.env.PHOBO_DEBUG_LOGS === "true",
   };
 }

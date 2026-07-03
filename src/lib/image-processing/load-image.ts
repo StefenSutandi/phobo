@@ -3,6 +3,7 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import sharp, { type FitEnum } from "sharp";
 import { parseDataUrl } from "@/lib/results/result-storage";
+import { getPhoboEnv } from "@/lib/config/phobo-env";
 
 const mimeByExtension: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -62,7 +63,9 @@ export async function loadImage(source: string): Promise<LoadedImage> {
   const buffer = await readFile(resolvedPath);
 
   const signature = buffer.slice(0, Math.min(80, buffer.length)).toString('hex');
-  console.log(`[loadImage] Loaded asset: ${resolvedPath} | ext: ${extension} | size: ${buffer.length} bytes | sig: ${signature}`);
+  if (getPhoboEnv().debugLogs) {
+    console.log(`[loadImage] Loaded asset: ${resolvedPath} | ext: ${extension} | size: ${buffer.length} bytes | sig: ${signature}`);
+  }
 
   return {
     buffer,

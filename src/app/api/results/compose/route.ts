@@ -6,6 +6,7 @@ import { generate4RPrintTemplate } from "@/lib/print/print-template";
 import { sanitizeSessionId } from "@/lib/results/result-storage";
 import { bufferToDataUrl } from "@/lib/image-processing/load-image";
 import { uploadFileToGoogleDrive } from "@/lib/storage/google-drive";
+import { getPhoboEnv } from "@/lib/config/phobo-env";
 
 export const runtime = "nodejs";
 
@@ -131,11 +132,14 @@ export async function POST(request: Request) {
       // files missing or manifest mismatch, proceed to compose
     }
 
+    const env = getPhoboEnv();
     console.log(`[Compose API] Starting compose for session: ${safeSessionId}`);
-    console.log(`[Compose API] Captured photos: ${capturedPhotos.join(", ")}`);
-    console.log(`[Compose API] Selected frame: ${body.selectedFrameId}`);
-    console.log(`[Compose API] Selected background: ${body.selectedBackgroundId}`);
-    console.log(`[Compose API] Stage: composeFinalImages`);
+    if (env.debugLogs) {
+      console.log(`[Compose API] Captured photos: ${capturedPhotos.join(", ")}`);
+      console.log(`[Compose API] Selected frame: ${body.selectedFrameId}`);
+      console.log(`[Compose API] Selected background: ${body.selectedBackgroundId}`);
+      console.log(`[Compose API] Stage: composeFinalImages`);
+    }
 
     const composed = await composeFinalImages({
       sessionId: body.sessionId,
@@ -150,7 +154,9 @@ export async function POST(request: Request) {
       selectedFrameId: body.selectedFrameId,
       selectedBackgroundId: body.selectedBackgroundId,
     });
-    console.log(`[Compose API] Stage: saving files to ${outputDirectory}`);
+    if (env.debugLogs) {
+      console.log(`[Compose API] Stage: saving files to ${outputDirectory}`);
+    }
     
     await mkdir(outputDirectory, { recursive: true });
     await writeFile(finalScreenPath, composed.finalScreenPng);
@@ -172,7 +178,7 @@ export async function POST(request: Request) {
           driveUrl = uploadResult.webViewLink;
           console.log(`[Compose API] Drive upload success for ${safeSessionId}: ${driveUrl}`);
         } catch (uploadError) {
-          console.error(`[Compose API] Drive upload failed for ${safeSessionId}:`, uploadError);
+          console.error(`[Compose API] Drive upload failed for ${safeSessionId}:`, uploadError instanceof Error ? uploadError.message : String(uploadError));
           // Fallback, don't throw
         }
       } else {
