@@ -948,7 +948,7 @@ button {
   top: 90px;
   display: flex;
   flex-direction: column;
-  gap: 45px;
+  gap: 36px;
   z-index: 2;
 }
 
@@ -959,8 +959,8 @@ button {
 }
 
 .closing-qr {
-  width: 120px;
-  height: 120px;
+  width: 170px;
+  height: 170px;
   background: white;
   padding: 8px;
   border-radius: 0;
@@ -976,7 +976,7 @@ button {
 .closing-label {
   color: white;
   font-weight: 900;
-  font-size: 24px;
+  font-size: 32px;
   line-height: 1.2;
   text-transform: uppercase;
   white-space: pre-line;
