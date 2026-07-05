@@ -23,7 +23,7 @@ export async function composeFinalImages({ capturedPhotos, selectedFrameId, sele
     if(!source) return null;
     try { return { input:await normalizeImageBuffer(source,{width:photoSlot.width,height:photoSlot.height,fit:"cover"}),left:photoSlot.x,top:photoSlot.y }; }
     catch(error) { warnings.push(`Failed to compose slot ${index}: ${error instanceof Error?error.message:String(error)}`); return null; }
-  }))).filter((item):item is {input:Buffer;left:number;top:number}=>item!==null);
+  }))).filter(<T>(item: T | null): item is T => item !== null);
   
   composites.push({ input: template, left: 0, top: 0 });
 
