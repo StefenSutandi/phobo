@@ -55,3 +55,12 @@ Before the event starts, run through the complete flow to ensure everything work
 
 ## Session Reset
 If a session gets stuck, you can always reset it by navigating directly to `/admin` and clicking "Start New Session". This clears the current store state and creates a new empty session.
+
+## Operator Fallback & Troubleshooting Notes
+During a live event, rapid recovery is critical. If a component fails, use the following workarounds to keep the booth running:
+
+* **If Google Drive fails:** The system will automatically use the local URL for the QR code. You can also explicitly disable Drive by setting `PHOBO_DRIVE_ENABLED=false` and restarting the app.
+* **If Midtrans fails:** Ensure `MIDTRANS_ENABLED=false` is set in your `.env.local` and use the manual "CONFIRM PAYMENT" button to bypass the payment gateway.
+* **If Printer fails:** Change `PHOBO_PRINTER_MODE=mock`. The session will still generate and save the print file locally, allowing you to manually print the photos later from the `public/results/` folder.
+* **If Green Screen fails:** Capture without background replacement, or retune the lighting/chroma key thresholds later. Keep the line moving.
+* **If Camera fails:** Restart the browser and the app. Check USB connections and OS permissions. If the physical camera is completely dead, switch to fallback mode (`PHOBO_CAMERA_MODE=browser-video`) to use a webcam.
