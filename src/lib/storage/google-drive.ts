@@ -18,9 +18,26 @@ export async function uploadFileToGoogleDrive({
   mimeType: string;
   folderId: string;
 }): Promise<UploadResult> {
-  const auth = new google.auth.GoogleAuth({
-    scopes: ["https://www.googleapis.com/auth/drive.file"],
-  });
+  const authMode = process.env.GOOGLE_DRIVE_AUTH_MODE || "service_account";
+  let auth;
+
+  if (authMode === "oauth") {
+    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+    const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
+
+    if (!clientId || !clientSecret || !refreshToken) {
+      throw new Error("Google Drive OAuth credentials missing");
+    }
+
+    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
+    auth = oauth2Client;
+  } else {
+    auth = new google.auth.GoogleAuth({
+      scopes: ["https://www.googleapis.com/auth/drive.file"],
+    });
+  }
 
   const drive = google.drive({ version: "v3", auth });
 
@@ -37,11 +54,19 @@ export async function uploadFileToGoogleDrive({
   };
 
   // Upload the file
-  const response = await drive.files.create({
-    requestBody: fileMetadata,
-    media: media,
-    fields: "id, webViewLink, webContentLink",
-  });
+  let response;
+  try {
+    response = await drive.files.create({
+      requestBody: fileMetadata,
+      media: media,
+      fields: "id, webViewLink, webContentLink",
+    });
+  } catch (error) {
+    if (authMode !== "oauth" && error instanceof Error && error.message.toLowerCase().includes("quota")) {
+      throw new Error(`Service account cannot upload to normal My Drive. Use Shared Drive or GOOGLE_DRIVE_AUTH_MODE=oauth. Original error: ${error.message}`);
+    }
+    throw error;
+  }
 
   const fileId = response.data.id;
   if (!fileId) {

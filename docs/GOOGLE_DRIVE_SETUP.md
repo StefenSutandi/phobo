@@ -1,48 +1,83 @@
 # Google Drive Setup for Phobo
 
-This document explains how to set up Google Drive integration so that Phobo's final result QR codes point to a public Google Drive share link instead of a local file.
+This document explains how to set up Google Drive integration so that Phobo's final result QR codes point to a public Google Drive share link instead of a local file. 
 
-## 1. Create a Service Account
+There are two methods to integrate Google Drive. **Method A (OAuth)** is recommended for standard Gmail accounts ("My Drive"). **Method B (Service Account)** is recommended for Google Workspace users uploading to a Shared Drive.
+
+---
+
+## Method A: OAuth User Mode (Recommended for personal Gmail)
+
+Using OAuth allows Phobo to act on your behalf and upload files directly into your standard "My Drive" folder using your own storage quota.
+
+### 1. Create OAuth Credentials
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
 2. Create a new project or select an existing one.
 3. Go to **APIs & Services > Library** and enable the **Google Drive API**.
-4. Go to **IAM & Admin > Service Accounts** and click **Create Service Account**.
-5. Give it a name (e.g., `phobo-uploader`) and click **Create and Continue**, then **Done**.
-6. Find the newly created service account in the list, click the three dots under Actions, and select **Manage keys**.
-7. Click **Add Key > Create new key**, choose **JSON**, and click **Create**.
-8. Save this JSON file securely on your Phobo machine (e.g., `C:\Users\username\phobo-credentials.json`).
+4. Go to **APIs & Services > OAuth consent screen**. Configure the consent screen for "External" use and add your email as a test user.
+5. Go to **APIs & Services > Credentials**. Click **Create Credentials > OAuth client ID**.
+6. Select **Desktop app** (or Web application) and click **Create**.
+7. Note down your **Client ID** and **Client Secret**.
 
-## 2. Prepare the Google Drive Folder
-1. Go to your personal or workspace [Google Drive](https://drive.google.com/).
-2. Create a new folder (e.g., `Phobo Results`).
-3. Right-click the folder and select **Share**.
-4. In the "Add people and groups" field, paste the **email address of your service account** (found in the JSON file, looks like `phobo-uploader@project-id.iam.gserviceaccount.com`).
-5. Give the service account **Editor** or **Contributor** access.
-6. (Optional but recommended) Set the folder's General Access to **"Anyone with the link"** as a **Viewer**. This ensures that the generated share links open smoothly without login prompts.
+### 2. Generate a Refresh Token
+We have provided a helper script to easily generate your refresh token:
 
-## 3. Configure Phobo Environment Variables
-Open or create a `.env.local` file in the root of the Phobo project (`C:\Users\stefe\Downloads\Phobo\.env.local`):
+1. Copy `.env.example` to `.env.local` if you haven't already.
+2. Add your Client ID and Client Secret to `.env.local`:
+   ```env
+   GOOGLE_OAUTH_CLIENT_ID="your-client-id"
+   GOOGLE_OAUTH_CLIENT_SECRET="your-client-secret"
+   ```
+3. Run the helper script:
+   ```bash
+   node scripts/get-google-refresh-token.js
+   ```
+4. Follow the prompt: click the generated link, authorize the app, and paste the code back into the terminal.
+5. The script will output your `GOOGLE_OAUTH_REFRESH_TOKEN`. Add it to your `.env.local` file.
 
+### 3. Prepare the Drive Folder and Configure Environment
+1. Create a folder in your Google Drive and set the General Access to **"Anyone with the link"** as a **Viewer**.
+2. Note the Folder ID from the URL (`drive.google.com/drive/folders/<FOLDER_ID>`).
+3. Update `.env.local`:
+   ```env
+   PHOBO_DRIVE_ENABLED=true
+   GOOGLE_DRIVE_AUTH_MODE=oauth
+   GOOGLE_DRIVE_FOLDER_ID="your-folder-id"
+   GOOGLE_OAUTH_CLIENT_ID="your-client-id"
+   GOOGLE_OAUTH_CLIENT_SECRET="your-client-secret"
+   GOOGLE_OAUTH_REFRESH_TOKEN="your-refresh-token"
+   ```
+4. Restart the Phobo app: `npm run dev`.
+
+---
+
+## Method B: Service Account (Google Workspace / Shared Drives)
+
+**Important limitations:** A service account has no storage quota of its own. It **cannot** upload files into a standard "My Drive" folder. It will fail with a quota error. You must use a **Shared Drive** within a Google Workspace to use this method.
+
+### 1. Create a Service Account
+1. Go to the Google Cloud Console, enable the **Google Drive API**.
+2. Go to **IAM & Admin > Service Accounts** and create a Service Account.
+3. Generate and download a JSON key. Save it securely (e.g., `C:\Users\username\phobo-credentials.json`).
+
+### 2. Prepare the Shared Drive Folder
+1. Create a folder inside a **Shared Drive**.
+2. Share the folder with the Service Account email address, giving it **Editor** or **Contributor** access.
+3. Set the folder's General Access to **"Anyone with the link"** as a **Viewer**.
+
+### 3. Configure Environment
+Update `.env.local`:
 ```env
-# Enable the Google Drive integration
 PHOBO_DRIVE_ENABLED=true
-
-# The absolute path to your downloaded JSON key file (Windows format)
-GOOGLE_APPLICATION_CREDENTIALS="C:\Users\stefe\phobo-credentials.json"
-
-# The ID of the Drive folder you created (found in the URL: drive.google.com/drive/folders/<FOLDER_ID>)
-GOOGLE_DRIVE_FOLDER_ID="your-folder-id-here"
+GOOGLE_DRIVE_AUTH_MODE=service_account
+GOOGLE_DRIVE_FOLDER_ID="your-shared-drive-folder-id"
+GOOGLE_APPLICATION_CREDENTIALS="C:\Users\username\phobo-credentials.json"
 ```
+Restart the Phobo app: `npm run dev`.
 
-## 4. Test the Integration
-1. Restart the Phobo app: `npm run dev`
-2. Run through a normal photo session.
-3. When you reach the `PREVIEW FRAME` page and hit **NEXT**, the console should log:
-   `[Compose API] Uploading phobo_session-123.png to folder your-folder-id-here...`
-   `[Compose API] Drive upload success for session-123: https://drive.google.com/file/d/....`
-4. The QR code on the final screen will now point to the Drive link, and the UI will say `"Uploaded to Drive"`.
+---
 
 ## Fallback Behavior
-- If `PHOBO_DRIVE_ENABLED=false` or if the upload fails (e.g., no internet, invalid credentials), Phobo will gracefully log a warning in the terminal and fall back to generating a local QR code link.
+- If `PHOBO_DRIVE_ENABLED=false` or if the upload fails (e.g. invalid credentials, quota error), Phobo will gracefully log a warning in the terminal and fall back to generating a local QR code link.
 - The UI will say `"Using local result link"` or `"Drive upload failed, using local result link"`.
-- This ensures the photobooth never crashes or gets stuck just because of an upload error.
+- This ensures the photobooth never crashes or gets stuck due to an upload error.
