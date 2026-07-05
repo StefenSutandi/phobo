@@ -14,13 +14,14 @@ Using OAuth allows Phobo to act on your behalf and upload files directly into yo
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
 2. Create a new project or select an existing one.
 3. Go to **APIs & Services > Library** and enable the **Google Drive API**.
-4. Go to **APIs & Services > OAuth consent screen**. Configure the consent screen for "External" use and add your email as a test user.
-5. Go to **APIs & Services > Credentials**. Click **Create Credentials > OAuth client ID**.
-6. Select **Desktop app** (or Web application) and click **Create**.
-7. Note down your **Client ID** and **Client Secret**.
+4. Go to **APIs & Services > OAuth consent screen**. Configure the consent screen for "External" use. 
+5. Under **Test users** (or Audience), make sure to add the Google account you will use to upload the files as a Test User.
+6. Go to **APIs & Services > Credentials**. Click **Create Credentials > OAuth client ID**.
+7. Select **Desktop app** (or Web application) and click **Create**. Ensure that `http://localhost:3001/oauth2callback` is added as an authorized redirect URI if prompted (usually not needed for Desktop app type, but required for Web app).
+8. Note down your **Client ID** and **Client Secret**.
 
 ### 2. Generate a Refresh Token
-We have provided a helper script to easily generate your refresh token:
+We have provided a helper script to easily generate your refresh token. This script runs a temporary local server on port 3001 to handle the OAuth redirect securely, replacing the deprecated OOB (out-of-band) manual copy-paste flow.
 
 1. Copy `.env.example` to `.env.local` if you haven't already.
 2. Add your Client ID and Client Secret to `.env.local`:
@@ -32,8 +33,8 @@ We have provided a helper script to easily generate your refresh token:
    ```bash
    node scripts/get-google-refresh-token.js
    ```
-4. Follow the prompt: click the generated link, authorize the app, and paste the code back into the terminal.
-5. The script will output your `GOOGLE_OAUTH_REFRESH_TOKEN`. Add it to your `.env.local` file.
+4. The script will automatically open a local server on port 3001. Open the generated link in your browser, log in with the test user account, and authorize the app. Google will redirect you back to `localhost:3001`, and the script will catch the code automatically.
+5. The script will output your `GOOGLE_OAUTH_REFRESH_TOKEN` to the terminal. Add it to your `.env.local` file.
 
 ### 3. Prepare the Drive Folder and Configure Environment
 1. Create a folder in your Google Drive and set the General Access to **"Anyone with the link"** as a **Viewer**.
