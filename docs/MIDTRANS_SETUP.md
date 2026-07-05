@@ -1,53 +1,49 @@
-# Midtrans Payment Integration Setup
+# Midtrans Payment Gateway Setup
 
-This guide explains how to configure Midtrans Snap payments for the Phobo kiosk application.
+Phobo integrates with Midtrans to allow guests to pay via QRIS or other methods seamlessly during an event. This document outlines how to configure Midtrans for both Sandbox testing and live Production.
 
-## Prerequisites
-- A Midtrans account (Sandbox or Production).
-- Node.js running the Next.js server.
+## 1. Sandbox Validation
+Before using Midtrans at a real event, you must validate the integration using your Midtrans Sandbox account.
 
-## 1. Environment Variables
-Create or update your `.env.local` file at the root of the project:
+1. Create a Midtrans Sandbox account if you haven't already.
+2. In the Midtrans Dashboard, navigate to **Settings > Access Keys**.
+3. Copy your Sandbox **Server Key** and **Client Key**.
+4. In your `.env.local` file, configure the following:
 
 ```env
-# Enable or disable Midtrans payment flow
 MIDTRANS_ENABLED=true
-
-# Set to true for Production, false for Sandbox
 MIDTRANS_IS_PRODUCTION=false
-
-# Found in Midtrans Dashboard -> Settings -> Access Keys
-MIDTRANS_SERVER_KEY="SB-Mid-server-xxxxxxxxxxxxxxxxxxxxxxxx"
-NEXT_PUBLIC_MIDTRANS_CLIENT_KEY="SB-Mid-client-xxxxxxxxxxxxxxxx"
-
-# App URL for webhook testing (can be an ngrok url for local dev)
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
+MIDTRANS_SERVER_KEY=SB-Mid-server-your_sandbox_server_key
+NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=SB-Mid-client-your_sandbox_client_key
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-## 2. Notification URL (Webhook) Setup
-Midtrans needs to notify the kiosk when a payment is successful.
-Since the kiosk app uses a local server (and an in-memory store for session statuses), the webhook URL must be reachable by Midtrans.
+### Local Testing with Webhooks
+To test the full payment loop locally, Midtrans needs a way to send payment notifications (webhooks) to your local server.
+1. Run `ngrok http 3000` in your terminal.
+2. Copy the generated ngrok HTTPS domain (e.g., `https://1234-abcd.ngrok-free.app`).
+3. In the Midtrans Sandbox Dashboard, go to **Settings > Configuration**.
+4. Set the **Payment Notification URL** to: `https://your-ngrok-domain/api/payment/notification`
+5. Run your app (`npm run dev`) and complete a test transaction using the [Midtrans Simulator](https://simulator.sandbox.midtrans.com/).
 
-1. Go to Midtrans Dashboard -> Settings -> Configuration.
-2. Under **Payment Notification URL**, enter your public URL:
-   `https://your-public-url.com/api/payment/notification`
-3. If you are developing locally, you must use a tunneling service like [ngrok](https://ngrok.com/) to expose your local port 3000 to the internet.
-   - Run: `ngrok http 3000`
-   - Use the generated URL (e.g., `https://abcdef.ngrok.app/api/payment/notification`) in the Midtrans dashboard.
+## 2. Production Mode
+Production mode requires a fully approved Midtrans account.
 
-> [!WARNING]
-> If you test locally without ngrok, Midtrans cannot reach your `localhost`, and the kiosk UI will never advance automatically when a customer pays!
+1. Once approved, switch to the Production environment in the Midtrans Dashboard.
+2. Go to **Settings > Access Keys** and copy your Production **Server Key** and **Client Key**.
+3. Update your `.env.local` (and server environment variables):
 
-## 3. Production Switch Checklist
-When moving to a real production environment:
-- [ ] Change `MIDTRANS_IS_PRODUCTION=true`.
-- [ ] Replace `MIDTRANS_SERVER_KEY` with the Production Server Key.
-- [ ] Replace `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY` with the Production Client Key.
-- [ ] Update the Payment Notification URL in the Production Midtrans Dashboard.
-
-## 4. Disabling Midtrans (Manual Fallback)
-If the internet connection goes down or you want to bypass Midtrans, simply set:
 ```env
-MIDTRANS_ENABLED=false
+MIDTRANS_ENABLED=true
+MIDTRANS_IS_PRODUCTION=true
+MIDTRANS_SERVER_KEY=Mid-server-your_production_server_key
+NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=Mid-client-your_production_client_key
+# Ensure NEXT_PUBLIC_APP_URL is set to your production domain!
 ```
-The app will automatically gracefully degrade to the local manual payment confirmation mode without crashing.
+
+4. Set the **Payment Notification URL** in the Production Dashboard to your real production domain: `https://your-domain.com/api/payment/notification`.
+
+> **SECURITY WARNING**: NEVER commit `.env.local` or your Midtrans Server Keys to version control. Keep your keys strictly secure.
+
+## 3. Fallback / Manual Mode
+If Midtrans experiences downtime during an event, simply set `MIDTRANS_ENABLED=false` and restart the app. The system will fall back to manual payment confirmation mode, allowing the operator to click "CONFIRM PAYMENT" to keep the booth running smoothly.
