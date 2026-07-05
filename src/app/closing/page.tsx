@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { KioskStage, OptionalAsset } from "@/components/kiosk";
-import { ResultQrCode } from "@/components/kiosk/ResultQrCode";
+
 import { useSessionStore } from "@/lib/session/session-store";
 
 export default function Closing() {
@@ -15,10 +15,10 @@ export default function Closing() {
     return () => clearTimeout(id);
   }, [resetSession, router]);
 
-  const links: [string, string | undefined][] = [
-    ["FEEDBACK", process.env.NEXT_PUBLIC_FEEDBACK_URL],
-    ["FRAME REQUEST", process.env.NEXT_PUBLIC_FRAME_REQUEST_URL],
-    ["EVENT REGISTRATION", process.env.NEXT_PUBLIC_EVENT_REGISTRATION_URL],
+  const qrAssets = [
+    { label: "FEEDBACK", src: "/assets/qr/feedback.png" },
+    { label: "FRAME REQUEST", src: "/assets/qr/frame-request.png" },
+    { label: "EVENT REGISTRATION", src: "/assets/qr/event-registration.png" },
   ];
 
   return (
@@ -31,10 +31,18 @@ export default function Closing() {
         />
 
         <div className="closing-qr-list">
-          {links.map(([label, url]) => (
+          {qrAssets.map(({ label, src }) => (
             <div className="closing-qr-row" key={label}>
               <div className="closing-qr">
-                <ResultQrCode value={url || `https://phobo.local/${label.toLowerCase().replaceAll(" ", "-")}`} />
+                <img 
+                  src={src} 
+                  alt={`${label} QR`} 
+                  className="qr-image" 
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='12' fill='red'%3EMISSING QR%3C/text%3E%3C/svg%3E";
+                  }}
+                />
               </div>
               <span className="closing-label">{label}</span>
             </div>

@@ -51,7 +51,7 @@ Before the event starts, run through the complete flow to ensure everything work
 5. Take required photos on `/camera`. Ensure the camera works and saves files.
 6. Review photos on `/preview` and proceed.
 7. Scan the generated QR code on `/result`.
-8. Wait for the session to finish and reset via `/closing` (or manually finish).
+8. Wait for the session to finish and reset via `/closing` (or manually finish). Note that the three QR codes on the `/closing` page (Feedback, Frame Request, Event Registration) are static PNG assets loaded from `public/assets/qr/`. Ensure these image files are present for the event.
 
 ## Session Reset
 If a session gets stuck, you can always reset it by navigating directly to `/admin` and clicking "Start New Session". This clears the current store state and creates a new empty session.
