@@ -944,26 +944,26 @@ button {
 
 .closing-qr-list {
   position: absolute;
-  left: 90px;
-  top: 90px;
+  left: 60px;
+  top: 50px;
   display: flex;
   flex-direction: column;
-  gap: 36px;
+  gap: 20px;
   z-index: 2;
 }
 
 .closing-qr-row {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 16px;
 }
 
 .closing-qr {
-  width: 170px;
-  height: 170px;
+  width: 100px;
+  height: 100px;
   background: white;
   padding: 8px;
-  border-radius: 0;
+  border-radius: 4px;
 }
 
 .closing-qr .qr-image {
@@ -976,7 +976,7 @@ button {
 .closing-label {
   color: white;
   font-weight: 900;
-  font-size: 32px;
+  font-size: 24px;
   line-height: 1.2;
   text-transform: uppercase;
   white-space: pre-line;
