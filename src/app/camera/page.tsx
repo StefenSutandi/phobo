@@ -23,6 +23,7 @@ export default function Camera() {
   const [message, setMessage] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
   const [mode, setMode] = useState("mock");
+  const [countdown, setCountdown] = useState<number | string | null>(null);
 
   useEffect(() => {
     fetch("/api/diagnostics")
@@ -48,6 +49,15 @@ export default function Camera() {
 
     captureLock.current = true;
     setIsCapturing(true);
+
+    for (let i = 3; i > 0; i--) {
+      setCountdown(i);
+      await new Promise(res => setTimeout(res, 1000));
+    }
+    setCountdown("SMILE!");
+    await new Promise(res => setTimeout(res, 500));
+    setCountdown(null);
+
     setMessage("");
 
     try {
@@ -89,12 +99,31 @@ export default function Camera() {
   return (
     <KioskStage>
       <div className="shot-counter">Shoot {maxReached ? max : count + 1} / {max}</div>
-      <CameraLiveView 
-        ref={live} 
-        compact 
-        autoStart
-        selectedBackgroundUrl={backgrounds.find(bg => bg.id === session?.selectedBackgroundId)?.imageUrl}
-      />
+      <div style={{ position: "relative", flex: 1, width: "100%", display: "flex", flexDirection: "column" }}>
+        <CameraLiveView 
+          ref={live} 
+          compact 
+          autoStart
+          selectedBackgroundUrl={backgrounds.find(bg => bg.id === session?.selectedBackgroundId)?.imageUrl}
+        />
+        {countdown !== null && (
+          <div style={{
+            position: "absolute",
+            top: 0, left: 0, right: 0, bottom: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: typeof countdown === "number" ? "16rem" : "10rem",
+            fontWeight: "900",
+            color: "#ffffff",
+            textShadow: "0 8px 30px rgba(0,0,0,0.8)",
+            zIndex: 100,
+            pointerEvents: "none"
+          }}>
+            {countdown}
+          </div>
+        )}
+      </div>
       <BackgroundPicker
         backgrounds={backgrounds}
         selectedBackgroundId={session?.selectedBackgroundId}
