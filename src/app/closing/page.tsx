@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { KioskStage, OptionalAsset } from "@/components/kiosk";
 
@@ -21,9 +21,24 @@ export default function Closing() {
     { label: "EVENT REGISTRATION", src: "/assets/qr/event-registration.png" },
   ];
 
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    function updateScale() {
+      const padding = 0;
+      const availableWidth = Math.max(window.innerWidth - padding, 1);
+      const availableHeight = Math.max(window.innerHeight - padding, 1);
+      setScale(Math.min(1, availableWidth / 1366, availableHeight / 768));
+    }
+
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    return () => window.removeEventListener("resize", updateScale);
+  }, []);
+
   return (
     <main className="closing-page">
-      <div className="closing-stage">
+      <div className="closing-stage" style={{ transform: `scale(${scale})`, transformOrigin: "center" }}>
         <OptionalAsset
           src="/assets/figma/illustrations/closing.png"
           alt="Closing artwork"
