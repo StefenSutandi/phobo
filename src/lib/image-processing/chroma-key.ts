@@ -73,13 +73,11 @@ export async function applyChromaKey(
   const metadata = await sharp(photoBuffer).metadata();
   const width = metadata.width ?? 1;
   const height = metadata.height ?? 1;
-  const greenMin = clampByte(options.greenMin ?? 90);
-  const greenTolerance = clampByte(options.greenTolerance ?? 35);
-  // TODO: implement advanced real tuning for spillReduction and edgeSoftness
+  const greenMin = clampByte(options.greenMin ?? 40);
+  const greenTolerance = clampByte(options.greenTolerance ?? 30);
   const spillReduction = Math.min(100, Math.max(0, options.spillReduction ?? 0));
-  const edgeSoftness = Math.min(20, Math.max(0, options.edgeSoftness ?? 0));
+  const edgeSoftness = Math.min(20, Math.max(0, options.edgeSoftness ?? 5));
   
-  const greenDominance = clampByte(options.greenDominance ?? 35);
   const raw = await sharp(photoBuffer)
     .rotate()
     .ensureAlpha()
@@ -90,16 +88,29 @@ export async function applyChromaKey(
     const red = raw[index];
     const green = raw[index + 1];
     const blue = raw[index + 2];
-    const isGreen =
-      green >= greenMin &&
-      green - red >= greenDominance &&
-      green - blue >= greenDominance &&
-      green > red + greenTolerance * 0.4 &&
-      green > blue + greenTolerance * 0.4;
+    
+    const maxRB = Math.max(red, blue);
+    const diff = green - maxRB;
+    const threshold = greenTolerance * 0.5;
 
-    if (isGreen) {
-      raw[index + 3] = 0;
+    let alpha = 255;
+    if (green >= greenMin && diff > threshold && green > maxRB * 1.1) {
+      if (edgeSoftness > 0 && diff < threshold + edgeSoftness * 2) {
+        alpha = Math.floor(255 * (1 - (diff - threshold) / (edgeSoftness * 2)));
+      } else {
+        alpha = 0;
+      }
     }
+    
+    // Spill reduction: if it's not fully keyed, but it's very green, reduce green channel
+    if (alpha > 0 && spillReduction > 0) {
+      if (green > maxRB) {
+        const spillAmount = (green - maxRB) * (spillReduction / 100);
+        raw[index + 1] = clampByte(green - spillAmount);
+      }
+    }
+
+    raw[index + 3] = alpha;
   }
 
   const keyedPhoto = await sharp(raw, {
@@ -118,7 +129,7 @@ export async function applyChromaKey(
   });
 
   if (getPhoboEnv().debugLogs) {
-    console.log(`[Chroma Key] Applied with greenMin=${greenMin}, tolerance=${greenTolerance}, dominance=${greenDominance}`);
+    console.log(`[Chroma Key] Applied with greenMin=${greenMin}, tolerance=${greenTolerance}, edgeSoftness=${edgeSoftness}`);
   }
 
   return sharp(backgroundBuffer)

@@ -104,6 +104,7 @@ export default function Camera() {
         compact 
         autoStart
         selectedBackgroundUrl={backgrounds.find(bg => bg.id === session?.selectedBackgroundId)?.imageUrl}
+        tuning={session?.greenScreenTuning}
       />
       {countdown !== null && (
         <div style={{

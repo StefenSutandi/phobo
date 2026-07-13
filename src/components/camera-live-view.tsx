@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import { RoundedPanel } from "@/components/kiosk";
 import { getBackgroundById } from "@/lib/phobo-data";
+import type { GreenScreenTuning } from "@/lib/session/session-types";
 
 export type CameraLiveViewHandle = {
   stopLiveView: () => void;
@@ -10,7 +11,7 @@ export type CameraLiveViewHandle = {
   getStatus: () => "inactive" | "starting" | "active" | "failed";
 };
 
-export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boolean; selectedBackgroundUrl?: string; autoStart?: boolean }>(({ compact = false, selectedBackgroundUrl, autoStart = false }, ref) => {
+export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boolean; selectedBackgroundUrl?: string; autoStart?: boolean; tuning?: GreenScreenTuning }>(({ compact = false, selectedBackgroundUrl, autoStart = false, tuning }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const debugCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -55,9 +56,13 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
         throw new Error("Live view must be active and ready before browser-video capture.");
       }
       
-      const sourceElement = canvasRef.current || video;
+      const sourceElement = video;
       const sourceWidth = sourceElement.width || video.videoWidth;
       const sourceHeight = sourceElement.height || video.videoHeight;
+      
+      if (process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+        console.log(`[CameraLiveView Capture] Captured photo comes from: raw video`);
+      }
       
       const targetWidth = sourceWidth / zoom;
       const targetHeight = sourceHeight / zoom;
@@ -131,6 +136,9 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
     if (!selectedBackgroundUrl) {
       backgroundImgRef.current = null;
       return;
+    }
+    if (process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+      console.log(`[CameraLiveView] Selected background URL: ${selectedBackgroundUrl || "none"}`);
     }
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -213,48 +221,41 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
           let keyedPixels = 0;
           const totalPixels = data.length / 4;
           
-          // Parse hex to RGB
-          const hexMatch = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(keyColor);
-          const keyRgb = hexMatch ? {
-            r: parseInt(hexMatch[1], 16),
-            g: parseInt(hexMatch[2], 16),
-            b: parseInt(hexMatch[3], 16)
-          } : { r: 0, g: 255, b: 0 };
+          const greenMin = tuning?.greenMin ?? 40;
+          const greenTolerance = tuning?.greenTolerance ?? 30;
+          const edgeSoftness = tuning?.edgeSoftness ?? 5;
+          const applyChromaKey = tuning?.applyChromaKey ?? true;
           
-          const rgbToYcbcr = (r: number, g: number, b: number) => ({
-            y: 0.299 * r + 0.587 * g + 0.114 * b,
-            cb: 128 - 0.168736 * r - 0.331264 * g + 0.5 * b,
-            cr: 128 + 0.5 * r - 0.418688 * g - 0.081312 * b
-          });
-          
-          const keyYuv = rgbToYcbcr(keyRgb.r, keyRgb.g, keyRgb.b);
-          
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i], g = data[i+1], b = data[i+2];
-            const pxYuv = rgbToYcbcr(r, g, b);
-            
-            const cbDiff = pxYuv.cb - keyYuv.cb;
-            const crDiff = pxYuv.cr - keyYuv.cr;
-            const chromaDist = Math.sqrt(cbDiff*cbDiff + crDiff*crDiff);
-            const normalizedDist = chromaDist / 180.0;
-            
-            let alpha = 1;
-            if (normalizedDist < similarity) {
-              alpha = 0;
-              keyedPixels++;
-            } else if (normalizedDist < similarity + smoothness) {
-              alpha = (normalizedDist - similarity) / Math.max(smoothness, 0.001);
-              keyedPixels += (1 - alpha);
-            }
-            
-            if (showDebugMask) {
-              const maskVal = Math.floor(alpha * 255);
-              data[i] = maskVal;
-              data[i+1] = maskVal;
-              data[i+2] = maskVal;
-              data[i+3] = 255;
-            } else {
-              data[i+3] = Math.floor(alpha * 255);
+          if (applyChromaKey) {
+            for (let i = 0; i < data.length; i += 4) {
+              const r = data[i], g = data[i+1], b = data[i+2];
+              
+              const maxRB = Math.max(r, b);
+              const diff = g - maxRB;
+              const threshold = greenTolerance * 0.5;
+
+              let alpha = 1;
+              if (g >= greenMin && diff > threshold && g > maxRB * 1.1) {
+                if (edgeSoftness > 0 && diff < threshold + edgeSoftness * 2) {
+                  alpha = 1 - (diff - threshold) / (edgeSoftness * 2);
+                } else {
+                  alpha = 0;
+                }
+              }
+              
+              if (alpha < 1) {
+                keyedPixels += (1 - alpha);
+              }
+              
+              if (showDebugMask) {
+                const maskVal = Math.floor(alpha * 255);
+                data[i] = maskVal;
+                data[i+1] = maskVal;
+                data[i+2] = maskVal;
+                data[i+3] = 255;
+              } else {
+                data[i+3] = Math.floor(alpha * 255);
+              }
             }
           }
           offCtx.putImageData(frame, 0, 0);
@@ -265,6 +266,16 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
             // Draw quarter-sized preview images to DEBUG canvas
             const w = debugCanvas.width / 2;
             const h = debugCanvas.height / 2;
+            
+            if (process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+              // Rate limit console logs
+              if (Math.random() < 0.02) {
+                console.log(`[CameraLiveView] Chroma key enabled: ${applyChromaKey}`);
+                console.log(`[CameraLiveView] Tuning: greenMin=${greenMin}, greenTolerance=${greenTolerance}, edgeSoftness=${edgeSoftness}`);
+                console.log(`[CameraLiveView] Keyed pixel ratio: ${(keyedRatio * 100).toFixed(2)}%`);
+                console.log(`[CameraLiveView] Output canvas rendered`);
+              }
+            }
             
             // TL: Raw Video
             debugCtx.drawImage(video, 0, 0, w, h);
@@ -320,17 +331,16 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
           // Always draw the clean keyed video on the main canvas
           ctx.drawImage(offscreen, 0, 0);
           
-          // Status Text Overlay update (DOM only)
           if (statusOverlayRef.current) {
-            if (showDebugMask) {
+            if (process.env.NEXT_PUBLIC_CAMERA_DEBUG !== "true") {
               statusOverlayRef.current.style.display = "none";
             } else {
               statusOverlayRef.current.style.display = "flex";
               if (keyedRatio < 0.05) {
-                statusOverlayRef.current.innerText = "No green screen detected. Use green backdrop or enable segmentation mode.";
+                statusOverlayRef.current.innerText = "No green screen detected.";
                 statusOverlayRef.current.style.color = "white";
               } else {
-                statusOverlayRef.current.innerText = "Green screen detected";
+                statusOverlayRef.current.innerText = `Green screen detected: ${(keyedRatio * 100).toFixed(0)}%`;
                 statusOverlayRef.current.style.color = "#00ff00";
               }
             }
