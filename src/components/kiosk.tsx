@@ -259,11 +259,15 @@ export function BackgroundPicker({
 type PreviewComposerProps = { frame: FrameData; photoUrls: string[] };
 
 export function PreviewComposer({ frame, photoUrls }: PreviewComposerProps) {
-    return <RoundedPanel className="preview-composer"><div className="preview-frame" aria-label={`${frame.name} preview`} style={{ position: "relative" }}>
+    return <RoundedPanel className="preview-composer"><div className="preview-frame" aria-label={`${frame.name} preview`} style={{ 
+      aspectRatio: `${frame.width} / ${frame.height}`,
+      width: frame.width >= frame.height ? '100%' : 'auto',
+      height: frame.height >= frame.width ? '100%' : 'auto' 
+    }}>
       {frame.photoSlots.map((photoSlot, index) => { 
         const photoUrl = photoUrls.length > 0 ? photoUrls[index % photoUrls.length] : null; 
         return (
-          <div className="preview-frame__slot" key={`${photoSlot.x}-${photoSlot.y}-${index}`} style={{zIndex: 1, left:`${photoSlot.x/frame.width*100}%`,top:`${photoSlot.y/frame.height*100}%`,width:`${photoSlot.width/frame.width*100}%`,height:`${photoSlot.height/frame.height*100}%`,transform:photoSlot.rotation?`rotate(${photoSlot.rotation}deg)`:undefined}}>
+          <div className="preview-frame__slot" key={`${photoSlot.x}-${photoSlot.y}-${index}`} style={{zIndex: 1, left:`${photoSlot.x/frame.width*100}%`,top:`${photoSlot.y/frame.height*100}%`,width:`${photoSlot.width/frame.width*100}%`,height:`${photoSlot.height/frame.height*100}%`,position:'absolute',transform:photoSlot.rotation?`rotate(${photoSlot.rotation}deg)`:undefined}}>
             {photoUrl && <img src={photoUrl} alt={`Selected photo ${(index % Math.max(1, photoUrls.length)) + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
           </div>
         );

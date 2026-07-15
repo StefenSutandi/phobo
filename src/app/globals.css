@@ -425,11 +425,13 @@ button {
 
 .preview-frame {
   background: var(--placeholder);
-  height: 81.72%;
-  left: 12.01%;
   position: absolute;
-  top: 9.14%;
-  width: 74.2%;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 85%;
+  max-height: 85%;
+  overflow: hidden;
 }
 
 .photo-strip {
