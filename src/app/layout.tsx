@@ -1,12 +1,6 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
 import { SessionProvider } from "@/lib/session/session-store";
 import "./globals.css";
-
-const jomhuria = localFont({
-  src: "../../public/fonts/jomhuria.woff2",
-  weight: "400",
-});
 
 export const metadata: Metadata = {
   title: "Phobo Photobox Kiosk",
@@ -20,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={jomhuria.className}>
+      <body>
         <SessionProvider>{children}</SessionProvider>
       </body>
     </html>
