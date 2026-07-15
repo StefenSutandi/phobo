@@ -7,7 +7,7 @@ import type { GreenScreenTuning } from "@/lib/session/session-types";
 
 export type CameraLiveViewHandle = {
   stopLiveView: () => void;
-  captureFrame: () => { imageDataUrl: string; width: number; height: number };
+  captureFrame: () => { rawImageDataUrl: string; displayImageDataUrl: string; width: number; height: number };
   getStatus: () => "inactive" | "starting" | "active" | "failed";
 };
 
@@ -85,15 +85,52 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
       }
       
       ctx.drawImage(sourceElement, srcX, srcY, targetWidth, targetHeight, 0, 0, canvas.width, canvas.height);
-      const imageDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+      const rawImageDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+      
+      const displayCanvas = document.createElement("canvas");
+      displayCanvas.width = sourceWidth;
+      displayCanvas.height = sourceHeight;
+      const dCtx = displayCanvas.getContext("2d");
+      
+      if (dCtx) {
+          const bgImg = backgroundImgRef.current;
+          if (bgImg && bgImg.complete) {
+            const imgRatio = bgImg.width / bgImg.height;
+            const canvasRatio = displayCanvas.width / displayCanvas.height;
+            let drawWidth = displayCanvas.width;
+            let drawHeight = displayCanvas.height;
+            let drawX = 0;
+            let drawY = 0;
+            if (imgRatio > canvasRatio) {
+                drawWidth = displayCanvas.height * imgRatio;
+                drawX = (displayCanvas.width - drawWidth) / 2;
+            } else {
+                drawHeight = displayCanvas.width / imgRatio;
+                drawY = (displayCanvas.height - drawHeight) / 2;
+            }
+            dCtx.drawImage(bgImg, drawX, drawY, drawWidth, drawHeight);
+          } else {
+            dCtx.fillStyle = "#d9d9d9";
+            dCtx.fillRect(0, 0, displayCanvas.width, displayCanvas.height);
+          }
+          
+          if (offscreenCanvasRef.current && tuning?.applyChromaKey !== false) {
+            dCtx.drawImage(offscreenCanvasRef.current, srcX, srcY, targetWidth, targetHeight, 0, 0, displayCanvas.width, displayCanvas.height);
+          } else {
+            dCtx.drawImage(sourceElement, srcX, srcY, targetWidth, targetHeight, 0, 0, displayCanvas.width, displayCanvas.height);
+          }
+      }
+      
+      const displayImageDataUrl = displayCanvas.toDataURL("image/jpeg", 0.92);
       
       return {
-        imageDataUrl,
+        rawImageDataUrl,
+        displayImageDataUrl,
         width: canvas.width,
         height: canvas.height
       };
     }
-  }), [status, zoom, offsetX, offsetY]);
+  }), [status, zoom, offsetX, offsetY, tuning]);
 
   const loadDevices = async () => {
     try {

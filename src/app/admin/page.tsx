@@ -378,12 +378,14 @@ export default function Admin() {
         {session?.capturedPhotos.length ? (
           <div className="admin-result">
             <strong>Captured Photos</strong>
-            {session.capturedPhotos.map((photoUrl, index) => (
-              <p key={`${photoUrl}-${index}`}>
-                {index + 1}: {photoUrl.slice(0, 96)}
-                {photoUrl.length > 96 ? "..." : ""}
+            {session.capturedPhotos.map((photoObj, index) => {
+              const url = typeof photoObj === 'string' ? photoObj : photoObj.raw;
+              return (
+              <p key={`${url}-${index}`}>
+                {index + 1}: {url.slice(0, 96)}
+                {url.length > 96 ? "..." : ""}
               </p>
-            ))}
+            )})}
           </div>
         ) : null}
       </section>

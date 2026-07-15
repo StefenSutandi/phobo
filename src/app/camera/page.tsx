@@ -11,6 +11,7 @@ type CaptureResponse = {
   ok: boolean;
   imageUrl?: string;
   capturedPhotoUrl?: string;
+  displayPhotoUrl?: string;
   error?: string;
 };
 
@@ -69,7 +70,7 @@ export default function Camera() {
         response = await fetch("/api/camera/browser-frame", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: session.sessionId, imageDataUrl: frame.imageDataUrl }),
+          body: JSON.stringify({ sessionId: session.sessionId, imageDataUrl: frame.rawImageDataUrl, displayImageDataUrl: frame.displayImageDataUrl }),
         });
       } else {
         live.current?.stopLiveView();
@@ -82,11 +83,12 @@ export default function Camera() {
 
       const data = (await response.json()) as CaptureResponse;
       const url = data.capturedPhotoUrl || data.imageUrl;
+      const displayUrl = data.displayPhotoUrl || url;
       if (!response.ok || !data.ok || !url) throw new Error(data.error || "CAMERA CAPTURE GAGAL");
 
       if (shotCount.current >= max) return;
       shotCount.current += 1;
-      addCapturedPhoto(url);
+      addCapturedPhoto({ raw: url, display: displayUrl as string });
       setMessage(`FOTO ${shotCount.current} TERSIMPAN`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "CAMERA CAPTURE GAGAL");

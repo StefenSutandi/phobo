@@ -6,7 +6,7 @@ import { getPhoboEnv } from "@/lib/config/phobo-env";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { sessionId, imageDataUrl } = body;
+    const { sessionId, imageDataUrl, displayImageDataUrl } = body;
 
     if (!sessionId || typeof sessionId !== "string") {
       return NextResponse.json({ ok: false, error: "Missing or invalid sessionId" }, { status: 400 });
@@ -36,13 +36,35 @@ export async function POST(request: Request) {
     // Ensure directories exist
     await mkdir(captureDir, { recursive: true });
     
-    // Save to disk
+    // Save raw to disk
     await writeFile(filePath, buffer);
+    if (process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+      console.log(`[BrowserFrameAPI DIAGNOSTICS] capture stored raw photo: yes`);
+    }
+
+    let displayPhotoUrl = `/results/${sessionId}/captures/${captureFileName}`;
+    let storedPreview = false;
+    if (displayImageDataUrl && typeof displayImageDataUrl === "string") {
+      const displayMatches = displayImageDataUrl.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/);
+      if (displayMatches && displayMatches.length === 3) {
+        const displayBuffer = Buffer.from(displayMatches[2], "base64");
+        const displayFileName = `capture-${Date.now()}-display.jpg`;
+        const displayFilePath = path.join(captureDir, displayFileName);
+        await writeFile(displayFilePath, displayBuffer);
+        displayPhotoUrl = `/results/${sessionId}/captures/${displayFileName}`;
+        storedPreview = true;
+      }
+    }
+    
+    if (process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+      console.log(`[BrowserFrameAPI DIAGNOSTICS] capture stored preview/keyed photo: ${storedPreview ? "yes" : "no"}`);
+    }
 
     return NextResponse.json({
       ok: true,
       mode: "browser-video",
       capturedPhotoUrl: `/results/${sessionId}/captures/${captureFileName}`,
+      displayPhotoUrl: displayPhotoUrl,
       filePath,
       size: buffer.length
     });

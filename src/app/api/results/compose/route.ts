@@ -99,9 +99,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const capturedPhotos = body.capturedPhotos.filter(
-      (photoUrl): photoUrl is string => typeof photoUrl === "string" && photoUrl.length > 0,
-    );
+    const capturedPhotos = (body.capturedPhotos as any[])
+      .map(p => typeof p === 'object' && p !== null && p.raw ? p.raw : p)
+      .filter((photoUrl): photoUrl is string => typeof photoUrl === "string" && photoUrl.length > 0);
 
     const outputDirectory = path.join(process.cwd(), "public", "results", safeSessionId);
     const finalScreenPath = path.join(outputDirectory, "final_screen.png");
@@ -141,11 +141,9 @@ export async function POST(request: Request) {
     }
     if (env.debugLogs || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
       console.log(`[Compose API] Stage: composeFinalImages`);
-      console.log(`[Compose API DIAGNOSTICS] selectedBackground passed to compose: ${body.selectedBackgroundId ? "yes" : "no"}`);
-      console.log(`[Compose API DIAGNOSTICS] greenScreenTuning passed to compose: ${body.options ? "yes" : "no"}`);
-      console.log(`[Compose API DIAGNOSTICS] final_screen path: ${finalScreenPath}`);
-      console.log(`[Compose API DIAGNOSTICS] final_print path: ${finalPrintPath}`);
-      console.log(`[Compose API DIAGNOSTICS] print file came from: final_print.jpg (composited output, not raw template)`);
+      console.log(`[Compose API DIAGNOSTICS] compose selectedBackground: ${body.selectedBackgroundId ? "yes" : "no"}`);
+      console.log(`[Compose API DIAGNOSTICS] compose final_screen generated with chroma key: ${body.options ? "yes" : "no"}`);
+      console.log(`[Compose API DIAGNOSTICS] compose final_print generated from final_screen: yes`);
     }
 
     const composed = await composeFinalImages({

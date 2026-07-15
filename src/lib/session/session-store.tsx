@@ -14,7 +14,7 @@ function update(current: KioskSession | null, patch: Partial<KioskSession>) { re
 type Store = {
   session: KioskSession | null; hasHydrated: boolean; createNewSession: () => KioskSession; resetSession: () => void;
   selectPackage: (id: string) => void; setPaymentStatus: (s: PaymentStatus) => void; selectFrame: (id: string) => void;
-  selectBackground: (id: string) => void; addCapturedPhoto: (url: string) => void; clearCapturedPhotos: () => void;
+  selectBackground: (id: string) => void; addCapturedPhoto: (photo: { raw: string; display: string }) => void; clearCapturedPhotos: () => void;
   selectPhotos: (indices: number[]) => void; selectSticker: (id: string) => void; clearFinalResult: () => void;
   setFinalImageUrl: (url: string) => void; setPrintImageUrl: (url: string) => void; setDriveUrl: (url: string) => void;
   setPrintStatus: (s: PrintStatus) => void; setGreenScreenTuning: (t: GreenScreenTuning) => void;
@@ -33,7 +33,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const setPaymentData = useCallback((data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number }) => patch(data), [patch]);
   const selectFrame = useCallback((selectedFrameId: string) => patch({ selectedFrameId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const selectBackground = useCallback((selectedBackgroundId: string) => patch({ selectedBackgroundId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
-  const addCapturedPhoto = useCallback((url: string) => setSession(s => { const active = s ?? fresh(); return active.capturedPhotos.length >= (active.maxShots ?? 8) ? active : update(active, { capturedPhotos: [...active.capturedPhotos, url], finalImageUrl: undefined, printImageUrl: undefined }); }), []);
+  const addCapturedPhoto = useCallback((photo: { raw: string; display: string }) => setSession(s => { const active = s ?? fresh(); return active.capturedPhotos.length >= (active.maxShots ?? 8) ? active : update(active, { capturedPhotos: [...active.capturedPhotos, photo], finalImageUrl: undefined, printImageUrl: undefined }); }), []);
   const clearCapturedPhotos = useCallback(() => patch({ capturedPhotos: [], selectedPhotoIndices: [], finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const selectPhotos = useCallback((selectedPhotoIndices: number[]) => patch({ selectedPhotoIndices, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const selectSticker = useCallback((selectedStickerId: string) => patch({ selectedStickerId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);

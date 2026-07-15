@@ -27,7 +27,7 @@ export type KioskSession = {
   paymentAmount?: number;
   selectedFrameId?: string;
   selectedBackgroundId?: string;
-  capturedPhotos: string[];
+  capturedPhotos: { raw: string; display: string }[];
   selectedPhotoIndices: number[];
   selectedStickerId?: string;
   finalImageUrl?: string;
