@@ -144,8 +144,14 @@ export async function applyChromaKeyIfEnabled(
   options: ChromaKeyOptions = {},
 ) {
   if (options.applyChromaKey === false) {
+    if (getPhoboEnv().debugLogs || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+      console.log(`[Chroma Key] SKIPPED because applyChromaKey is false. Returning raw green-screen photo.`);
+    }
     return photoBuffer;
   }
 
+  if (getPhoboEnv().debugLogs || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+    console.log(`[Chroma Key] applyChromaKey is true. Proceeding with applyChromaKey().`);
+  }
   return applyChromaKey(photoBuffer, background, options);
 }

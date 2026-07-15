@@ -138,7 +138,14 @@ export async function POST(request: Request) {
       console.log(`[Compose API] Captured photos: ${capturedPhotos.join(", ")}`);
       console.log(`[Compose API] Selected frame: ${body.selectedFrameId}`);
       console.log(`[Compose API] Selected background: ${body.selectedBackgroundId}`);
+    }
+    if (env.debugLogs || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
       console.log(`[Compose API] Stage: composeFinalImages`);
+      console.log(`[Compose API DIAGNOSTICS] selectedBackground passed to compose: ${body.selectedBackgroundId ? "yes" : "no"}`);
+      console.log(`[Compose API DIAGNOSTICS] greenScreenTuning passed to compose: ${body.options ? "yes" : "no"}`);
+      console.log(`[Compose API DIAGNOSTICS] final_screen path: ${finalScreenPath}`);
+      console.log(`[Compose API DIAGNOSTICS] final_print path: ${finalPrintPath}`);
+      console.log(`[Compose API DIAGNOSTICS] print file came from: final_print.jpg (composited output, not raw template)`);
     }
 
     const composed = await composeFinalImages({
