@@ -944,26 +944,26 @@ button {
 
 .closing-qr-list {
   position: absolute;
-  left: 60px;
-  top: 50px;
+  left: 90px;
+  top: 60px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 30px;
   z-index: 2;
 }
 
 .closing-qr-row {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 24px;
 }
 
 .closing-qr {
-  width: 100px;
-  height: 100px;
+  width: 170px;
+  height: 170px;
   background: white;
-  padding: 8px;
-  border-radius: 4px;
+  padding: 12px;
+  border-radius: 12px;
 }
 
 .closing-qr .qr-image {
@@ -975,27 +975,37 @@ button {
 
 .closing-label {
   color: white;
-  font-weight: 900;
-  font-size: 24px;
-  line-height: 1.2;
+  font-family: inherit;
+  font-weight: 400;
+  font-size: 54px;
+  line-height: 0.9;
   text-transform: uppercase;
   white-space: pre-line;
+  max-width: 320px;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+  transform: translateY(0.1em);
 }
 
 .closing-home-button {
   position: absolute;
   right: 110px;
   bottom: 70px;
-  width: 190px;
-  height: 64px;
+  width: 240px;
+  height: 70px;
   border-radius: 999px;
   background: #6b1d4c;
   color: white;
-  font-weight: 900;
-  font-size: 28px;
+  font-family: inherit;
+  font-weight: 400;
+  font-size: 42px;
   z-index: 3;
   border: none;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0.8;
+  padding-top: 5px;
 }
 
 .camera-preview-canvas {

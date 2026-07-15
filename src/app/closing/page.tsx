@@ -28,7 +28,7 @@ export default function Closing() {
       const padding = 0;
       const availableWidth = Math.max(window.innerWidth - padding, 1);
       const availableHeight = Math.max(window.innerHeight - padding, 1);
-      setScale(Math.min(1, availableWidth / 1366, availableHeight / 768));
+      setScale(Math.min(availableWidth / 1366, availableHeight / 768));
     }
 
     updateScale();
