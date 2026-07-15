@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Jomhuria } from "next/font/google";
+import localFont from "next/font/local";
 import { SessionProvider } from "@/lib/session/session-store";
 import "./globals.css";
 
-const jomhuria = Jomhuria({
+const jomhuria = localFont({
+  src: "../../public/fonts/jomhuria.woff2",
   weight: "400",
-  subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
