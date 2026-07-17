@@ -20,7 +20,7 @@ function clampByte(value: number) {
   return Math.min(255, Math.max(0, Math.round(value)));
 }
 
-function parseHexColor(color: string) {
+export function parseHexColor(color: string) {
   const normalized = color.replace("#", "");
 
   if (normalized.length !== 6) {
@@ -73,10 +73,10 @@ export async function applyChromaKey(
   const metadata = await sharp(photoBuffer).metadata();
   const width = metadata.width ?? 1;
   const height = metadata.height ?? 1;
-  const greenMin = clampByte(options.greenMin ?? 40);
-  const greenTolerance = clampByte(options.greenTolerance ?? 30);
-  const spillReduction = Math.min(100, Math.max(0, options.spillReduction ?? 0));
-  const edgeSoftness = Math.min(20, Math.max(0, options.edgeSoftness ?? 5));
+  const greenMin = clampByte(options.greenMin ?? 60);
+  const greenTolerance = clampByte(options.greenTolerance ?? 25);
+  const spillReduction = Math.min(100, Math.max(0, options.spillReduction ?? 30));
+  const edgeSoftness = Math.min(20, Math.max(0, options.edgeSoftness ?? 2));
   
   const raw = await sharp(photoBuffer)
     .rotate()
@@ -122,20 +122,11 @@ export async function applyChromaKey(
   })
     .png()
     .toBuffer();
-  const backgroundBuffer = await createBackgroundBuffer({
-    background,
-    width,
-    height,
-  });
-
   if (getPhoboEnv().debugLogs) {
-    console.log(`[Chroma Key] Applied with greenMin=${greenMin}, tolerance=${greenTolerance}, edgeSoftness=${edgeSoftness}`);
+    console.log(`[Chroma Key] Extracted subject with greenMin=${greenMin}, tolerance=${greenTolerance}, edgeSoftness=${edgeSoftness}`);
   }
 
-  return sharp(backgroundBuffer)
-    .composite([{ input: keyedPhoto, left: 0, top: 0 }])
-    .png()
-    .toBuffer();
+  return keyedPhoto;
 }
 
 export async function applyChromaKeyIfEnabled(

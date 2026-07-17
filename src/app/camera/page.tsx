@@ -100,7 +100,9 @@ export default function Camera() {
 
   return (
     <KioskStage>
-      <div className="shot-counter">Shoot {maxReached ? max : count + 1} / {max}</div>
+      <div className="shot-counter">
+        Shoot {maxReached ? max : count + 1} / {max} {required < max ? `(Butuh Min. ${required})` : ""}
+      </div>
       <CameraLiveView 
         ref={live} 
         compact 

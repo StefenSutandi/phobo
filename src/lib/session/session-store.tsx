@@ -4,7 +4,7 @@ import { getPackageById } from "@/lib/phobo-data";
 import type { KioskSession, PaymentStatus, PrintStatus, GreenScreenTuning } from "./session-types";
 
 const KEY = "phobo.activeSession";
-const tuning: GreenScreenTuning = { applyChromaKey: true, greenMin: 90, greenTolerance: 35, spillReduction: 0, edgeSoftness: 0 };
+const tuning: GreenScreenTuning = { applyChromaKey: true, greenMin: 60, greenTolerance: 25, spillReduction: 30, edgeSoftness: 2 };
 const now = () => new Date().toISOString();
 function fresh(): KioskSession {
   const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;

@@ -256,9 +256,9 @@ export function BackgroundPicker({
   );
 }
 
-type PreviewComposerProps = { frame: FrameData; photoUrls: string[] };
+type PreviewComposerProps = { frame: FrameData; photoUrls: string[]; background?: any };
 
-export function PreviewComposer({ frame, photoUrls }: PreviewComposerProps) {
+export function PreviewComposer({ frame, photoUrls, background }: PreviewComposerProps) {
     return <RoundedPanel className="preview-composer"><div className="preview-frame" aria-label={`${frame.name} preview`} style={{ 
       aspectRatio: `${frame.width} / ${frame.height}`,
       width: frame.width >= frame.height ? '100%' : 'auto',
@@ -266,9 +266,22 @@ export function PreviewComposer({ frame, photoUrls }: PreviewComposerProps) {
     }}>
       {frame.photoSlots.map((photoSlot, index) => { 
         const photoUrl = photoUrls.length > 0 ? photoUrls[index % photoUrls.length] : null; 
+        const slotRatio = photoSlot.width / photoSlot.height;
+        const useContain = slotRatio < 0.8;
         return (
-          <div className="preview-frame__slot" key={`${photoSlot.x}-${photoSlot.y}-${index}`} style={{zIndex: 1, left:`${photoSlot.x/frame.width*100}%`,top:`${photoSlot.y/frame.height*100}%`,width:`${photoSlot.width/frame.width*100}%`,height:`${photoSlot.height/frame.height*100}%`,position:'absolute',transform:photoSlot.rotation?`rotate(${photoSlot.rotation}deg)`:undefined}}>
-            {photoUrl && <img src={photoUrl} alt={`Selected photo ${(index % Math.max(1, photoUrls.length)) + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+          <div className="preview-frame__slot" key={`${photoSlot.x}-${photoSlot.y}-${index}`} style={{zIndex: 1, left:`${photoSlot.x/frame.width*100}%`,top:`${photoSlot.y/frame.height*100}%`,width:`${photoSlot.width/frame.width*100}%`,height:`${photoSlot.height/frame.height*100}%`,position:'absolute',transform:photoSlot.rotation?`rotate(${photoSlot.rotation}deg)`:undefined, overflow: 'hidden'}}>
+            {background && (background.imageUrl ? (
+              <img src={background.imageUrl} alt="" style={{ position: "absolute", width: "100%", height: "100%", objectFit: "cover", zIndex: 0 }} />
+            ) : (
+              <div style={{ position: "absolute", width: "100%", height: "100%", backgroundColor: background?.color || "#d9d9d9", zIndex: 0 }} />
+            ))}
+            {photoUrl && <img src={photoUrl} alt={`Selected photo ${(index % Math.max(1, photoUrls.length)) + 1}`} style={{ position: "absolute", width: "100%", height: "100%", objectFit: useContain ? "contain" : "cover", objectPosition: useContain ? "bottom" : "center", zIndex: 1 }} />}
+            {process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true" && (
+              <div style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0, border: "2px solid red", zIndex: 2, pointerEvents: "none", color: "red", fontSize: "10px", padding: "2px", backgroundColor: "rgba(255,255,255,0.5)"}}>
+                Slot {index} | Mode: {useContain ? 'smart-cover' : 'cover'}<br/>
+                Slot AR: {slotRatio.toFixed(2)}
+              </div>
+            )}
           </div>
         );
       })}

@@ -93,27 +93,6 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
       const dCtx = displayCanvas.getContext("2d");
       
       if (dCtx) {
-          const bgImg = backgroundImgRef.current;
-          if (bgImg && bgImg.complete) {
-            const imgRatio = bgImg.width / bgImg.height;
-            const canvasRatio = displayCanvas.width / displayCanvas.height;
-            let drawWidth = displayCanvas.width;
-            let drawHeight = displayCanvas.height;
-            let drawX = 0;
-            let drawY = 0;
-            if (imgRatio > canvasRatio) {
-                drawWidth = displayCanvas.height * imgRatio;
-                drawX = (displayCanvas.width - drawWidth) / 2;
-            } else {
-                drawHeight = displayCanvas.width / imgRatio;
-                drawY = (displayCanvas.height - drawHeight) / 2;
-            }
-            dCtx.drawImage(bgImg, drawX, drawY, drawWidth, drawHeight);
-          } else {
-            dCtx.fillStyle = "#d9d9d9";
-            dCtx.fillRect(0, 0, displayCanvas.width, displayCanvas.height);
-          }
-          
           if (offscreenCanvasRef.current && tuning?.applyChromaKey !== false) {
             dCtx.drawImage(offscreenCanvasRef.current, srcX, srcY, targetWidth, targetHeight, 0, 0, displayCanvas.width, displayCanvas.height);
           } else {
@@ -121,7 +100,7 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
           }
       }
       
-      const displayImageDataUrl = displayCanvas.toDataURL("image/jpeg", 0.92);
+      const displayImageDataUrl = displayCanvas.toDataURL("image/png");
       
       return {
         rawImageDataUrl,
