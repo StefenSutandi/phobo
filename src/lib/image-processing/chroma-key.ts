@@ -73,8 +73,8 @@ export async function applyChromaKey(
   const metadata = await sharp(photoBuffer).metadata();
   const width = metadata.width ?? 1;
   const height = metadata.height ?? 1;
-  const greenMin = clampByte(options.greenMin ?? 60);
-  const greenTolerance = clampByte(options.greenTolerance ?? 25);
+  const greenMin = clampByte(options.greenMin ?? 70);
+  const greenTolerance = clampByte(options.greenTolerance ?? 35);
   const spillReduction = Math.min(100, Math.max(0, options.spillReduction ?? 30));
   const edgeSoftness = Math.min(20, Math.max(0, options.edgeSoftness ?? 2));
   

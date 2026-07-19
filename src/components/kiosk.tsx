@@ -277,7 +277,7 @@ export function PreviewComposer({ frame, photoUrls, background }: PreviewCompose
             ))}
             {photoUrl && <img src={photoUrl} alt={`Selected photo ${(index % Math.max(1, photoUrls.length)) + 1}`} style={{ position: "absolute", width: "100%", height: "100%", objectFit: useContain ? "contain" : "cover", objectPosition: useContain ? "bottom" : "center", zIndex: 1 }} />}
             {process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true" && (
-              <div style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0, border: "2px solid red", zIndex: 2, pointerEvents: "none", color: "red", fontSize: "10px", padding: "2px", backgroundColor: "rgba(255,255,255,0.5)"}}>
+              <div style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0, border: "2px solid red", zIndex: 2, pointerEvents: "none", color: "red", fontSize: "10px", padding: "2px"}}>
                 Slot {index} | Mode: {useContain ? 'smart-cover' : 'cover'}<br/>
                 Slot AR: {slotRatio.toFixed(2)}
               </div>

@@ -237,9 +237,9 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
           let keyedPixels = 0;
           const totalPixels = data.length / 4;
           
-          const greenMin = tuning?.greenMin ?? 40;
-          const greenTolerance = tuning?.greenTolerance ?? 30;
-          const edgeSoftness = tuning?.edgeSoftness ?? 5;
+          const greenMin = tuning?.greenMin ?? 70;
+          const greenTolerance = tuning?.greenTolerance ?? 35;
+          const edgeSoftness = tuning?.edgeSoftness ?? 2;
           const applyChromaKey = tuning?.applyChromaKey ?? true;
           
           if (applyChromaKey) {
