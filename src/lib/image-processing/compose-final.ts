@@ -64,12 +64,17 @@ export async function composeFinalImages({ capturedPhotos, selectedFrameId, sele
   const sortedStickers = [...stickers].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
   for (const sticker of sortedStickers) {
     if (!sticker.src || !sticker.src.startsWith('/stickers/') || sticker.src.includes('..')) continue;
+    if (!Number.isFinite(sticker.x) || !Number.isFinite(sticker.y) || !Number.isFinite(sticker.width) || sticker.width <= 0) {
+      warnings.push(`Skipped sticker with invalid geometry: ${JSON.stringify(sticker)}`);
+      continue;
+    }
+    
     try {
       const stickerPath = path.join(process.cwd(), "public", sticker.src);
       await fs.access(stickerPath);
       
       let s = sharp(stickerPath).resize({ width: Math.round(sticker.width) });
-      if (sticker.rotation) {
+      if (sticker.rotation && Number.isFinite(sticker.rotation)) {
         s = s.rotate(sticker.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } });
       }
       const stickerBuffer = await s.toBuffer();

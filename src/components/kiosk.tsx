@@ -263,14 +263,14 @@ export function StickerPicker({ stickers }: { stickers: string[] }) {
   if (!stickers || stickers.length === 0) return null;
 
   return (
-    <RoundedPanel className="sticker-picker" style={{ overflowY: 'auto', maxHeight: '400px' }}>
-      <p className="sticker-title">STICKERS</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+    <RoundedPanel className="sticker-picker">
+      <p className="background-title" style={{ left: 0, width: "100%", fontSize: "clamp(16px, 3vw, 24px)" }}>PILIH STICKER</p>
+      <div className="sticker-scroll">
         {stickers.map((src, i) => (
           <button
             key={i}
             onClick={() => addSticker({ src, x: 600, y: 900, width: 300, height: 300, rotation: 0, zIndex: Date.now() })}
-            style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '5px', borderRadius: '8px' }}
+            style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
           >
             <img src={src} alt="sticker" style={{ width: '100%', height: 'auto', objectFit: 'contain' }} />
           </button>
@@ -373,7 +373,8 @@ export function PreviewComposer({ frame, photoUrls, background }: PreviewCompose
           </div>
         )
       })}
-      {activeStickerId && session?.stickers.find(s => s.id === activeStickerId) && (() => {
+    </div>
+    {activeStickerId && session?.stickers.find(s => s.id === activeStickerId) && (() => {
         const activeSticker = session.stickers.find(s => s.id === activeStickerId)!;
         const btnStyle = { width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' };
         return (
@@ -387,7 +388,7 @@ export function PreviewComposer({ frame, photoUrls, background }: PreviewCompose
           </div>
         );
       })()}
-    </div></RoundedPanel>;
+  </RoundedPanel>;
   }
 type PhotoResultStripProps = {
   photos?: string[];
