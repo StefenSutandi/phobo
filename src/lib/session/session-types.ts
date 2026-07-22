@@ -49,5 +49,8 @@ export type KioskSession = {
   greenScreenTuning: GreenScreenTuning;
   createdAt: string;
   updatedAt: string;
+  additionalFrameId?: string;
+  addPrintPaymentStatus?: "unpaid" | "pending" | "paid" | "manual-confirmed";
+  additionalPrintImageUrl?: string;
 };
 

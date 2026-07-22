@@ -8,7 +8,7 @@ const tuning: GreenScreenTuning = { applyChromaKey: true, greenMin: 70, greenTol
 const now = () => new Date().toISOString();
 function fresh(): KioskSession {
   const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return { sessionId: `session-${id}`, paymentStatus: "idle", capturedPhotos: [], selectedPhotoIndices: [], stickers: [], printStatus: "idle", greenScreenTuning: tuning, createdAt: now(), updatedAt: now() };
+  return { sessionId: `session-${id}`, paymentStatus: "idle", capturedPhotos: [], selectedPhotoIndices: [], stickers: [], printStatus: "idle", greenScreenTuning: tuning, createdAt: now(), updatedAt: now(), addPrintPaymentStatus: "unpaid" };
 }
 function update(current: KioskSession | null, patch: Partial<KioskSession>) { return { ...(current ?? fresh()), ...patch, updatedAt: now() }; }
 type Store = {
@@ -23,6 +23,9 @@ type Store = {
   setFinalImageUrl: (url: string) => void; setPrintImageUrl: (url: string) => void; setDriveUrl: (url: string) => void;
   setPrintStatus: (s: PrintStatus) => void; setGreenScreenTuning: (t: GreenScreenTuning) => void;
   setPaymentData: (data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number }) => void;
+  selectAdditionalFrame: (id: string) => void;
+  setAddPrintPaymentStatus: (s: "unpaid" | "pending" | "paid" | "manual-confirmed") => void;
+  setAdditionalPrintImageUrl: (url: string) => void;
 };
 const Context = createContext<Store | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -51,7 +54,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const setDriveUrl = useCallback((driveUrl: string) => patch({ driveUrl }), [patch]);
   const setPrintStatus = useCallback((printStatus: PrintStatus) => patch({ printStatus }), [patch]);
   const setGreenScreenTuning = useCallback((greenScreenTuning: GreenScreenTuning) => patch({ greenScreenTuning }), [patch]);
-  const value = useMemo(() => ({ session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData]);
+  
+  const selectAdditionalFrame = useCallback((additionalFrameId: string) => patch({ additionalFrameId, additionalPrintImageUrl: undefined }), [patch]);
+  const setAddPrintPaymentStatus = useCallback((addPrintPaymentStatus: "unpaid" | "pending" | "paid" | "manual-confirmed") => patch({ addPrintPaymentStatus }), [patch]);
+  const setAdditionalPrintImageUrl = useCallback((additionalPrintImageUrl: string) => patch({ additionalPrintImageUrl }), [patch]);
+
+  const value = useMemo(() => ({ session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData, selectAdditionalFrame, setAddPrintPaymentStatus, setAdditionalPrintImageUrl }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, setPaymentData, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, selectAdditionalFrame, setAddPrintPaymentStatus, setAdditionalPrintImageUrl]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useSessionStore() { const value = useContext(Context); if (!value) throw new Error("useSessionStore must be used within SessionProvider"); return value; }
