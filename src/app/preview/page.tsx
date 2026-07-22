@@ -25,6 +25,42 @@ export default function Preview(){
     }
   }, [chosenDisplayUrls]);
 
- async function next(){if(!isReady||!session||saving)return;setSaving(true);setError("");try{const r=await fetch("/api/results/compose",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:session.sessionId,capturedPhotos:chosen,selectedFrameId:session.selectedFrameId,selectedBackgroundId:session.selectedBackgroundId,packageId:session.packageId,stickers:session.stickers,options:session.greenScreenTuning})});const d=await r.json();if(!r.ok||!d.ok||!d.finalImageUrl||!d.printImageUrl)throw new Error(d.error||"Failed to compose result");setFinalImageUrl(d.finalImageUrl);setPrintImageUrl(d.printImageUrl);if(d.driveUrl)setDriveUrl(d.driveUrl);router.push("/result");}catch(e){setError(e instanceof Error?e.message:"Failed to compose result");}finally{setSaving(false);}}
+ async function next() {
+  if (!isReady || !session || saving) return;
+  setSaving(true);
+  setError("");
+  try {
+    const stickersEnabled = process.env.NEXT_PUBLIC_PHOBO_STICKERS_ENABLED !== "false";
+    const r = await fetch("/api/results/compose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: session.sessionId,
+        capturedPhotos: chosen,
+        selectedFrameId: session.selectedFrameId,
+        selectedBackgroundId: session.selectedBackgroundId,
+        packageId: session.packageId,
+        stickers: stickersEnabled ? session.stickers : [],
+        options: session.greenScreenTuning,
+      }),
+    });
+    const text = await r.text();
+    let d;
+    try {
+      d = JSON.parse(text);
+    } catch (err) {
+      throw new Error(`API returned non-JSON response from /api/results/compose. Status: ${r.status}. Body preview: ${text.substring(0, 300)}`);
+    }
+    if (!r.ok || !d.ok || !d.finalImageUrl || !d.printImageUrl) throw new Error(d.error || "Failed to compose result");
+    setFinalImageUrl(d.finalImageUrl);
+    setPrintImageUrl(d.printImageUrl);
+    if (d.driveUrl) setDriveUrl(d.driveUrl);
+    router.push("/result");
+  } catch (e) {
+    setError(e instanceof Error ? e.message : "Failed to compose result");
+  } finally {
+    setSaving(false);
+  }
+ }
  return <KioskStage><h1 className="preview-heading">PREVIEW FRAME</h1><PreviewComposer frame={frame} photoUrls={chosenDisplayUrls} background={background}/><StickerPicker stickers={stickersList} /><PhotoResultStrip photos={allDisplayUrls} selectedIndices={selected} onTogglePhoto={toggle}/><KioskButton className="preview-next" onClick={next} disabled={!isReady || saving}>{saving?"PROCESSING...":"NEXT"}</KioskButton>{!isReady&&<p className="kiosk-message" style={{ color: "#ffaa00", top: "82%" }}>Butuh {needed} foto untuk frame ini. Kamu baru punya {chosen.length} foto.</p>}{error&&<p className="kiosk-message">{error}</p>}</KioskStage>;
 }

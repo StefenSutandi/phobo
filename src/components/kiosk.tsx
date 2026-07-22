@@ -260,6 +260,7 @@ export function BackgroundPicker({
 
 export function StickerPicker({ stickers }: { stickers: string[] }) {
   const { addSticker } = useSessionStore();
+  if (process.env.NEXT_PUBLIC_PHOBO_STICKERS_ENABLED === "false") return null;
   if (!stickers || stickers.length === 0) return null;
 
   return (
@@ -378,7 +379,7 @@ export function PreviewComposer({ frame, photoUrls, background }: PreviewCompose
         const activeSticker = session.stickers.find(s => s.id === activeStickerId)!;
         const btnStyle = { width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' };
         return (
-          <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '15px', background: 'rgba(255,255,255,0.9)', padding: '10px 20px', borderRadius: '30px', zIndex: 100 }}>
+          <div style={{ position: 'absolute', right: '-70px', top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: '12px', zIndex: 100 }}>
             <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateSticker(activeStickerId, { width: Math.max(50, activeSticker.width - 50) }); }} style={btnStyle}>-</button>
             <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateSticker(activeStickerId, { width: activeSticker.width + 50 }); }} style={btnStyle}>+</button>
             <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateSticker(activeStickerId, { rotation: activeSticker.rotation - 15 }); }} style={btnStyle}>↺</button>

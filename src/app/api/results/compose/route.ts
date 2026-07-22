@@ -48,58 +48,42 @@ function parseOptions(options: unknown): ComposeOptions {
 }
 
 export async function POST(request: Request) {
-  let body: ComposeRequest;
-
   try {
-    body = (await request.json()) as ComposeRequest;
-  } catch {
-    return NextResponse.json(
-      { ok: false, error: "Request body must be valid JSON" },
-      { status: 400 },
-    );
-  }
+    const { composeFinalImages } = await import("@/lib/image-processing/compose-final");
+    const { generate4RPrintTemplate } = await import("@/lib/print/print-template");
+    const { sanitizeSessionId } = await import("@/lib/results/result-storage");
+    const { bufferToDataUrl } = await import("@/lib/image-processing/load-image");
+    const { uploadFileToGoogleDrive } = await import("@/lib/storage/google-drive");
+    const { getPhoboEnv } = await import("@/lib/config/phobo-env");
+    
+    let body: ComposeRequest;
+    try {
+      body = (await request.json()) as ComposeRequest;
+    } catch {
+      return NextResponse.json({ ok: false, error: "Request body must be valid JSON" }, { status: 400 });
+    }
 
-  if (typeof body.sessionId !== "string" || body.sessionId.trim().length === 0) {
-    return NextResponse.json(
-      { ok: false, error: "sessionId is required" },
-      { status: 400 },
-    );
-  }
+    if (typeof body.sessionId !== "string" || body.sessionId.trim().length === 0) {
+      return NextResponse.json({ ok: false, error: "sessionId is required" }, { status: 400 });
+    }
+    if (!Array.isArray(body.capturedPhotos)) {
+      return NextResponse.json({ ok: false, error: "capturedPhotos is required" }, { status: 400 });
+    }
+    if (typeof body.selectedFrameId !== "string" || body.selectedFrameId.trim().length === 0) {
+      return NextResponse.json({ ok: false, error: "selectedFrameId is required" }, { status: 400 });
+    }
+    if (typeof body.selectedBackgroundId !== "string" || body.selectedBackgroundId.trim().length === 0) {
+      return NextResponse.json({ ok: false, error: "selectedBackgroundId is required" }, { status: 400 });
+    }
 
-  if (!Array.isArray(body.capturedPhotos)) {
-    return NextResponse.json(
-      { ok: false, error: "capturedPhotos is required" },
-      { status: 400 },
-    );
-  }
+    const safeSessionId = sanitizeSessionId(body.sessionId);
+    if (!safeSessionId) {
+      return NextResponse.json({ ok: false, error: "sessionId must contain at least one safe character" }, { status: 400 });
+    }
 
-  if (typeof body.selectedFrameId !== "string" || body.selectedFrameId.trim().length === 0) {
-    return NextResponse.json(
-      { ok: false, error: "selectedFrameId is required" },
-      { status: 400 },
-    );
-  }
+    const env = getPhoboEnv();
+    const stickersEnabled = env.stickersEnabled;
 
-  if (
-    typeof body.selectedBackgroundId !== "string" ||
-    body.selectedBackgroundId.trim().length === 0
-  ) {
-    return NextResponse.json(
-      { ok: false, error: "selectedBackgroundId is required" },
-      { status: 400 },
-    );
-  }
-
-  const safeSessionId = sanitizeSessionId(body.sessionId);
-
-  if (!safeSessionId) {
-    return NextResponse.json(
-      { ok: false, error: "sessionId must contain at least one safe character" },
-      { status: 400 },
-    );
-  }
-
-  try {
     const capturedPhotos = (body.capturedPhotos as any[])
       .map(p => typeof p === 'object' && p !== null && p.raw ? p.raw : p)
       .filter((photoUrl): photoUrl is string => typeof photoUrl === "string" && photoUrl.length > 0);
@@ -109,12 +93,13 @@ export async function POST(request: Request) {
     const finalPrintPath = path.join(outputDirectory, "final_print.jpg");
     const manifestPath = path.join(outputDirectory, "compose-manifest.json");
 
-    const stickers = Array.isArray(body.stickers)
-      ? body.stickers.map((s: any) => ({
-          ...s,
-          src: typeof s.src === 'string' && s.src.startsWith('/stickers/') ? s.src : null,
-        })).filter((s: any) => s.src !== null)
-      : [];
+    let stickers: any[] = [];
+    if (stickersEnabled && Array.isArray(body.stickers)) {
+      stickers = body.stickers.map((s: any) => ({
+        ...s,
+        src: typeof s.src === 'string' && s.src.startsWith('/stickers/') ? s.src : null,
+      })).filter((s: any) => s.src !== null);
+    }
 
     const payloadHash = JSON.stringify({
       capturedPhotos,
@@ -141,18 +126,11 @@ export async function POST(request: Request) {
       // files missing or manifest mismatch, proceed to compose
     }
 
-    const env = getPhoboEnv();
     console.log(`[Compose API] Starting compose for session: ${safeSessionId}`);
     if (env.debugLogs) {
       console.log(`[Compose API] Captured photos: ${capturedPhotos.join(", ")}`);
       console.log(`[Compose API] Selected frame: ${body.selectedFrameId}`);
       console.log(`[Compose API] Selected background: ${body.selectedBackgroundId}`);
-    }
-    if (env.debugLogs || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
-      console.log(`[Compose API] Stage: composeFinalImages`);
-      console.log(`[Compose API DIAGNOSTICS] compose selectedBackground: ${body.selectedBackgroundId ? "yes" : "no"}`);
-      console.log(`[Compose API DIAGNOSTICS] compose final_screen generated with chroma key: ${body.options ? "yes" : "no"}`);
-      console.log(`[Compose API DIAGNOSTICS] compose final_print generated from final_screen: yes`);
     }
 
     const composed = await composeFinalImages({
@@ -169,9 +147,6 @@ export async function POST(request: Request) {
       selectedFrameId: body.selectedFrameId,
       selectedBackgroundId: body.selectedBackgroundId,
     });
-    if (env.debugLogs) {
-      console.log(`[Compose API] Stage: saving files to ${outputDirectory}`);
-    }
     
     await mkdir(outputDirectory, { recursive: true });
     await writeFile(finalScreenPath, composed.finalScreenPng);
@@ -179,7 +154,6 @@ export async function POST(request: Request) {
     await writeFile(manifestPath, payloadHash);
     
     let driveUrl = undefined;
-    
     if (process.env.PHOBO_DRIVE_ENABLED === "true") {
       const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
       if (folderId) {
@@ -191,16 +165,10 @@ export async function POST(request: Request) {
             folderId: folderId
           });
           driveUrl = uploadResult.webViewLink;
-          console.log(`[Compose API] Drive upload success for ${safeSessionId}: ${driveUrl}`);
         } catch (uploadError) {
           console.error(`[Compose API] Drive upload failed for ${safeSessionId}:`, uploadError instanceof Error ? uploadError.message : String(uploadError));
-          // Fallback, don't throw
         }
-      } else {
-        console.warn(`[Compose API] PHOBO_DRIVE_ENABLED is true but GOOGLE_DRIVE_FOLDER_ID is missing.`);
       }
-    } else {
-      console.log(`[Compose API] Google Drive upload disabled for ${safeSessionId}.`);
     }
 
     return NextResponse.json({
@@ -211,14 +179,14 @@ export async function POST(request: Request) {
       warnings: composed.warnings
     });
   } catch (error) {
-    console.error(`[Compose API] Error:`, error);
+    console.error(`[Compose API] Fatal Error:`, error);
     return NextResponse.json(
       {
         ok: false,
         error: error instanceof Error ? error.message : "Failed to compose result",
         details: error instanceof Error ? error.stack : undefined
       },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }
