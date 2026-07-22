@@ -24,7 +24,8 @@ type Store = {
   setPrintStatus: (s: PrintStatus) => void; setGreenScreenTuning: (t: GreenScreenTuning) => void;
   setPaymentData: (data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number }) => void;
   selectAdditionalFrame: (id: string) => void;
-  setAddPrintPaymentStatus: (s: "unpaid" | "pending" | "paid" | "manual-confirmed") => void;
+  setAddPrintPaymentStatus: (s: "unpaid" | "pending" | "paid" | "failed") => void;
+  setAddPrintPaymentData: (data: { addPrintPaymentOrderId?: string; addPrintPaymentRedirectUrl?: string }) => void;
   setAdditionalPrintImageUrl: (url: string) => void;
 };
 const Context = createContext<Store | null>(null);
@@ -55,11 +56,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const setPrintStatus = useCallback((printStatus: PrintStatus) => patch({ printStatus }), [patch]);
   const setGreenScreenTuning = useCallback((greenScreenTuning: GreenScreenTuning) => patch({ greenScreenTuning }), [patch]);
   
-  const selectAdditionalFrame = useCallback((additionalFrameId: string) => patch({ additionalFrameId, additionalPrintImageUrl: undefined }), [patch]);
-  const setAddPrintPaymentStatus = useCallback((addPrintPaymentStatus: "unpaid" | "pending" | "paid" | "manual-confirmed") => patch({ addPrintPaymentStatus }), [patch]);
+  const selectAdditionalFrame = useCallback((additionalFrameId: string) => patch({ additionalFrameId, additionalPrintImageUrl: undefined, addPrintPaymentOrderId: undefined, addPrintPaymentRedirectUrl: undefined }), [patch]);
+  const setAddPrintPaymentStatus = useCallback((addPrintPaymentStatus: "unpaid" | "pending" | "paid" | "failed") => patch({ addPrintPaymentStatus }), [patch]);
+  const setAddPrintPaymentData = useCallback((data: { addPrintPaymentOrderId?: string; addPrintPaymentRedirectUrl?: string }) => patch(data), [patch]);
   const setAdditionalPrintImageUrl = useCallback((additionalPrintImageUrl: string) => patch({ additionalPrintImageUrl }), [patch]);
 
-  const value = useMemo(() => ({ session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData, selectAdditionalFrame, setAddPrintPaymentStatus, setAdditionalPrintImageUrl }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, setPaymentData, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, selectAdditionalFrame, setAddPrintPaymentStatus, setAdditionalPrintImageUrl]);
+  const value = useMemo(() => ({ session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData, selectAdditionalFrame, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, setPaymentData, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, selectAdditionalFrame, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useSessionStore() { const value = useContext(Context); if (!value) throw new Error("useSessionStore must be used within SessionProvider"); return value; }

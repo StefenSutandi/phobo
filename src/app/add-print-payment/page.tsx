@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { KioskStage, QrScreen } from "@/components/kiosk";
 import { ResultQrCode } from "@/components/kiosk/ResultQrCode";
@@ -7,45 +7,123 @@ import { useSessionStore } from "@/lib/session/session-store";
 
 export default function AddPrintPayment() {
   const router = useRouter(); 
-  const { session, hasHydrated, setAddPrintPaymentStatus, setAdditionalPrintImageUrl } = useSessionStore(); 
+  const { session, hasHydrated, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl } = useSessionStore(); 
+  const [midtransEnabled, setMidtransEnabled] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const paymentUrl = session?.addPrintPaymentRedirectUrl || process.env.NEXT_PUBLIC_PHOTOBO_PAYMENT_URL || "https://payment.invalid/phobo-demo";
 
   useEffect(() => { 
     if (hasHydrated && !session?.additionalFrameId) router.replace("/additional-frame"); 
   }, [hasHydrated, session?.additionalFrameId, router]);
 
-  async function handleConfirm() {
-    if (!session) return;
-    setAddPrintPaymentStatus("manual-confirmed");
-    setBusy(true);
-    setMsg("COMPOSING ADDITIONAL PRINT...");
-
-    try {
-      // 1. Compose Additional Print
-      const r = await fetch("/api/results/compose-additional", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: session.sessionId,
-          capturedPhotos: session.capturedPhotos,
-          additionalFrameId: session.additionalFrameId,
-          selectedBackgroundId: session.selectedBackgroundId,
-          stickers: session.stickers,
-          options: session.greenScreenTuning
-        })
-      });
-      const d = await r.json();
-      if (!r.ok || !d.printImageUrl) throw new Error(d.error || "Failed to compose result");
-      
-      setAdditionalPrintImageUrl(d.printImageUrl);
-      setMsg("PRINT READY.");
-    } catch(e) {
-      setMsg(e instanceof Error ? e.message : "FAILED");
-    } finally {
-      setBusy(false);
+  useEffect(() => {
+    if (!hasHydrated || !session?.sessionId) return;
+    if (session.addPrintPaymentOrderId && session.addPrintPaymentRedirectUrl) {
+      setMidtransEnabled(true);
+      setIsInitializing(false);
+      return;
     }
-  }
+
+    const initPayment = async () => {
+      try {
+        const res = await fetch("/api/payment/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: session.sessionId,
+            packageId: "add-print",
+            packageName: "Additional Print",
+            amount: 20000,
+          }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setMidtransEnabled(true);
+          setAddPrintPaymentData({
+            addPrintPaymentOrderId: data.orderId,
+            addPrintPaymentRedirectUrl: data.redirectUrl
+          });
+        } else {
+          setMidtransEnabled(false);
+        }
+      } catch (e) {
+        console.error("Failed to init Midtrans", e);
+        setMidtransEnabled(false);
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    initPayment();
+  }, [hasHydrated, session?.sessionId, session?.addPrintPaymentOrderId, session?.addPrintPaymentRedirectUrl, setAddPrintPaymentData]);
+
+  // Polling for Midtrans payment status
+  useEffect(() => {
+    if (!midtransEnabled || !session?.addPrintPaymentOrderId) return;
+    if (session?.addPrintPaymentStatus === "paid") return; // Stop polling if paid
+
+    const checkStatus = async () => {
+      try {
+        const res = await fetch(`/api/payment/status?orderId=${session.addPrintPaymentOrderId}`);
+        const data = await res.json();
+        if (data.ok && data.status) {
+          if (data.status === "confirmed") {
+            setAddPrintPaymentStatus("paid");
+          } else if (data.status === "failed" || data.status === "timeout") {
+            setAddPrintPaymentStatus("failed");
+          }
+        }
+      } catch (e) {
+        console.error("Failed to poll status", e);
+      }
+    };
+
+    pollIntervalRef.current = setInterval(checkStatus, 2000);
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, [midtransEnabled, session?.addPrintPaymentOrderId, session?.addPrintPaymentStatus, setAddPrintPaymentStatus]);
+
+  // Once paid, trigger compose
+  useEffect(() => {
+    if (session?.addPrintPaymentStatus === "paid" && !session?.additionalPrintImageUrl && !busy && msg !== "COMPOSING ADDITIONAL PRINT...") {
+      setBusy(true);
+      setMsg("COMPOSING ADDITIONAL PRINT...");
+      
+      const composePrint = async () => {
+        try {
+          const r = await fetch("/api/results/compose-additional", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: session.sessionId,
+              capturedPhotos: session.capturedPhotos,
+              additionalFrameId: session.additionalFrameId,
+              selectedBackgroundId: session.selectedBackgroundId,
+              stickers: session.stickers,
+              options: session.greenScreenTuning
+            })
+          });
+          const d = await r.json();
+          if (!r.ok || !d.printImageUrl) throw new Error(d.error || "Failed to compose result");
+          
+          setAdditionalPrintImageUrl(d.printImageUrl);
+          setMsg("PRINT READY.");
+        } catch(e) {
+          setMsg(e instanceof Error ? e.message : "FAILED TO COMPOSE");
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      composePrint();
+    }
+  }, [session?.addPrintPaymentStatus, session?.additionalPrintImageUrl, session?.sessionId, session?.capturedPhotos, session?.additionalFrameId, session?.selectedBackgroundId, session?.stickers, session?.greenScreenTuning, busy, msg, setAdditionalPrintImageUrl]);
+
 
   async function handlePrint() {
     if (!session?.additionalPrintImageUrl) return;
@@ -71,35 +149,33 @@ export default function AddPrintPayment() {
     }
   }
 
-  const paymentUrl = "https://payment.invalid/phobo-demo";
-
   return (
     <KioskStage>
       <QrScreen 
-        title={"SCAN UNTUK BAYAR"} 
+        title={midtransEnabled ? "SCAN UNTUK BAYAR" : "SCAN FOR PAYMENT"} 
         initialSeconds={120} 
         completionText="PAYMENT TIMEOUT" 
         onComplete={() => {
-          setAddPrintPaymentStatus("unpaid");
+          setAddPrintPaymentStatus("failed");
           router.push("/result");
         }} 
-        qrContent={<ResultQrCode value={paymentUrl} />} 
+        qrContent={!isInitializing ? <ResultQrCode value={paymentUrl} /> : <div className="qr-image" style={{display: "grid", placeItems: "center", background: "#fff", width:"100%", height:"100%"}}>...</div>} 
       />
       
       <div className="payment-footer" style={{ position: "absolute", bottom: "10%", left: "50%", transform: "translateX(-50%)", textAlign: "center", width: '100%' }}>
-        <p style={{ color: "white", fontSize: "2rem", marginBottom: "20px" }}>Total: Rp 20.000</p>
+        <p style={{ color: "white", fontSize: "2rem", marginBottom: "20px" }}>Additional Print: Rp 20.000</p>
         
-        {session?.addPrintPaymentStatus !== "manual-confirmed" && (
+        {(!midtransEnabled || process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true") && session?.addPrintPaymentStatus !== "paid" && (
           <button 
-            onClick={handleConfirm}
-            disabled={busy}
-            style={{ padding: "15px 40px", fontSize: "1.5rem", borderRadius: "30px", background: "#8e44ad", color: "white", border: "none", cursor: busy ? "not-allowed" : "pointer" }}
+            className="operator-confirm" 
+            onClick={() => setAddPrintPaymentStatus("paid")}
+            style={{ padding: "15px 40px", fontSize: "1.5rem", borderRadius: "30px", background: "#8e44ad", color: "white", border: "none", cursor: "pointer", marginBottom: "15px" }}
           >
-            {busy ? "PROCESSING..." : "CONFIRM PAYMENT (MANUAL)"}
+            DEV FALLBACK: SIMULATE PAYMENT
           </button>
         )}
 
-        {session?.addPrintPaymentStatus === "manual-confirmed" && !session?.additionalPrintImageUrl && (
+        {session?.addPrintPaymentStatus === "paid" && !session?.additionalPrintImageUrl && (
           <p style={{ color: "white", fontSize: "1.5rem" }}>{busy ? "COMPOSING..." : "READY TO COMPOSE..."}</p>
         )}
 

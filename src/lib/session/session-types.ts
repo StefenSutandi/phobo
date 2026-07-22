@@ -50,7 +50,9 @@ export type KioskSession = {
   createdAt: string;
   updatedAt: string;
   additionalFrameId?: string;
-  addPrintPaymentStatus?: "unpaid" | "pending" | "paid" | "manual-confirmed";
+  addPrintPaymentOrderId?: string;
+  addPrintPaymentRedirectUrl?: string;
+  addPrintPaymentStatus?: "unpaid" | "pending" | "paid" | "failed";
   additionalPrintImageUrl?: string;
 };
 
