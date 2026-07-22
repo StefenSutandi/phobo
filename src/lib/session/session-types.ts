@@ -10,6 +10,17 @@ export type GreenScreenTuning = {
   edgeSoftness: number;
 };
 
+export type StickerPlacement = {
+  id: string;
+  src: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  zIndex: number;
+};
+
 export type KioskSession = {
   sessionId: string;
   selectedPackageId?: string;
@@ -30,6 +41,7 @@ export type KioskSession = {
   capturedPhotos: { raw: string; display: string }[];
   selectedPhotoIndices: number[];
   selectedStickerId?: string;
+  stickers: StickerPlacement[];
   finalImageUrl?: string;
   printImageUrl?: string;
   driveUrl?: string;

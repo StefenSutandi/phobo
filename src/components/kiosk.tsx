@@ -3,9 +3,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { CountdownTimer } from "./kiosk/CountdownTimer";
 import type { FrameData } from "@/lib/phobo-data";
+import type { StickerPlacement } from "@/lib/session/session-types";
+import { useSessionStore } from "@/lib/session/session-store";
 
 type KioskStageProps = {
   children: ReactNode;
@@ -256,13 +258,82 @@ export function BackgroundPicker({
   );
 }
 
+export function StickerPicker({ stickers }: { stickers: string[] }) {
+  const { addSticker } = useSessionStore();
+  if (!stickers || stickers.length === 0) return null;
+
+  return (
+    <RoundedPanel className="sticker-picker" style={{ overflowY: 'auto', maxHeight: '400px' }}>
+      <p className="sticker-title">STICKERS</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+        {stickers.map((src, i) => (
+          <button
+            key={i}
+            onClick={() => addSticker({ src, x: 600, y: 900, width: 300, height: 300, rotation: 0, zIndex: Date.now() })}
+            style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '5px', borderRadius: '8px' }}
+          >
+            <img src={src} alt="sticker" style={{ width: '100%', height: 'auto', objectFit: 'contain' }} />
+          </button>
+        ))}
+      </div>
+    </RoundedPanel>
+  );
+}
+
 type PreviewComposerProps = { frame: FrameData; photoUrls: string[]; background?: any };
 
 export function PreviewComposer({ frame, photoUrls, background }: PreviewComposerProps) {
-    return <RoundedPanel className="preview-composer"><div className="preview-frame" aria-label={`${frame.name} preview`} style={{ 
+    const { session, updateSticker, removeSticker } = useSessionStore();
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [activeStickerId, setActiveStickerId] = useState<string | null>(null);
+
+    const handlePointerDown = (e: React.PointerEvent, id: string, type: 'drag' | 'resize' | 'rotate') => {
+      e.preventDefault();
+      setActiveStickerId(id);
+      const sticker = session?.stickers.find(s => s.id === id);
+      if (!sticker) return;
+      
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startStickerX = sticker.x;
+      const startStickerY = sticker.y;
+      const startWidth = sticker.width;
+      const startRotation = sticker.rotation;
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        if (!containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const scaleX = 1200 / rect.width;
+        const scaleY = 1800 / rect.height;
+        
+        const dx = (moveEvent.clientX - startX) * scaleX;
+        const dy = (moveEvent.clientY - startY) * scaleY;
+        
+        if (type === 'drag') {
+          updateSticker(id, { x: startStickerX + dx, y: startStickerY + dy });
+        } else if (type === 'resize') {
+          // simple diagonal resize based on dx
+          updateSticker(id, { width: Math.max(50, startWidth + dx) });
+        } else if (type === 'rotate') {
+          // simple rotation based on dx for simplicity
+          updateSticker(id, { rotation: startRotation + dx / 5 });
+        }
+      };
+
+      const handlePointerUp = () => {
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+      };
+
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp);
+    };
+
+    return <RoundedPanel className="preview-composer"><div className="preview-frame" ref={containerRef} aria-label={`${frame.name} preview`} style={{ 
       aspectRatio: `${frame.width} / ${frame.height}`,
       width: frame.width >= frame.height ? '100%' : 'auto',
-      height: frame.height >= frame.width ? '100%' : 'auto' 
+      height: frame.height >= frame.width ? '100%' : 'auto',
+      position: 'relative'
     }}>
       {frame.photoSlots.map((photoSlot, index) => { 
         const photoUrl = photoUrls.length > 0 ? photoUrls[index % photoUrls.length] : null; 
@@ -286,6 +357,29 @@ export function PreviewComposer({ frame, photoUrls, background }: PreviewCompose
         );
       })}
       <img src={frame.templateUrl} alt={frame.name} className="preview-frame__template" style={{ position: "absolute", zIndex: 10, pointerEvents: "none", width: "100%", height: "100%", top: 0, left: 0 }} />
+      {session?.stickers.map(sticker => {
+        const isActive = activeStickerId === sticker.id;
+        return (
+          <div key={sticker.id} style={{
+            position: 'absolute',
+            left: `${(sticker.x / 1200) * 100}%`,
+            top: `${(sticker.y / 1800) * 100}%`,
+            width: `${(sticker.width / 1200) * 100}%`,
+            transform: `translate(-50%, -50%) rotate(${sticker.rotation}deg)`,
+            zIndex: sticker.zIndex,
+            border: isActive ? '2px dashed #00f' : 'none'
+          }}>
+            <img src={sticker.src} style={{ width: '100%', height: 'auto', display: 'block' }} onPointerDown={(e) => handlePointerDown(e, sticker.id, 'drag')} />
+            {isActive && (
+              <>
+                <button onPointerDown={(e) => { e.stopPropagation(); removeSticker(sticker.id); }} style={{ position: 'absolute', top: '-15px', left: '-15px', background: 'red', color: 'white', borderRadius: '50%', width: '30px', height: '30px', border: 'none' }}>X</button>
+                <div onPointerDown={(e) => { e.stopPropagation(); handlePointerDown(e, sticker.id, 'resize'); }} style={{ position: 'absolute', bottom: '-10px', right: '-10px', width: '20px', height: '20px', background: 'blue', borderRadius: '50%', cursor: 'nwse-resize' }} />
+                <div onPointerDown={(e) => { e.stopPropagation(); handlePointerDown(e, sticker.id, 'rotate'); }} style={{ position: 'absolute', top: '-25px', left: '50%', transform: 'translateX(-50%)', width: '20px', height: '20px', background: 'green', borderRadius: '50%', cursor: 'ew-resize' }} />
+              </>
+            )}
+          </div>
+        )
+      })}
     </div></RoundedPanel>;
   }
 type PhotoResultStripProps = {
@@ -311,18 +405,7 @@ export function PhotoResultStrip({ photos = [], selectedIndices = [], onTogglePh
   );
 }
 
-export function StickerPicker({ selectedStickerId, onSelectSticker }: { selectedStickerId?: string; onSelectSticker?: (id: string) => void }) {
-  return (
-    <RoundedPanel className="sticker-picker">
-      <p className="sticker-title">STICKER</p>
-      <div className="sticker-scroll">
-        {Array.from({ length: 16 }, (_, index) => (
-          <button type="button" className={`sticker-choice ${selectedStickerId === `sticker-${index + 1}` ? "is-selected" : ""}`} key={index} aria-label={`Sticker ${index + 1}`} onClick={() => onSelectSticker?.(`sticker-${index + 1}`)} />
-        ))}
-      </div>
-    </RoundedPanel>
-  );
-}
+
 
 type OptionalAssetProps = {
   src: string;

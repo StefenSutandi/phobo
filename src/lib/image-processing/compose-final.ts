@@ -1,3 +1,5 @@
+import fs from "fs/promises";
+import path from "path";
 import sharp from "sharp";
 import { applyChromaKeyIfEnabled, parseHexColor, type ChromaKeyOptions } from "./chroma-key";
 import { bufferToDataUrl, loadImage, normalizeImageBuffer } from "./load-image";
@@ -6,10 +8,10 @@ import { getBackgroundById, getFrameById } from "@/lib/phobo-data";
 export const FINAL_SCREEN_WIDTH_PX = 1200;
 export const FINAL_SCREEN_HEIGHT_PX = 1800;
 
-export type ComposeFinalRequest = { sessionId:string; capturedPhotos:string[]; selectedFrameId:string; selectedBackgroundId:string; options?:ChromaKeyOptions };
+export type ComposeFinalRequest = { sessionId:string; capturedPhotos:string[]; selectedFrameId:string; selectedBackgroundId:string; stickers?:any[]; options?:ChromaKeyOptions };
 export type ComposedFinalImages = { finalScreenPng:Buffer; processedPhotoDataUrls:string[]; warnings:string[] };
 
-export async function composeFinalImages({ capturedPhotos, selectedFrameId, selectedBackgroundId, options={} }:ComposeFinalRequest):Promise<ComposedFinalImages> {
+export async function composeFinalImages({ capturedPhotos, selectedFrameId, selectedBackgroundId, stickers=[], options={} }:ComposeFinalRequest):Promise<ComposedFinalImages> {
   const warnings:string[]=[];
   const frame=getFrameById(selectedFrameId);
   const background=getBackgroundById(selectedBackgroundId);
@@ -58,6 +60,29 @@ export async function composeFinalImages({ capturedPhotos, selectedFrameId, sele
   }
   
   composites.push({ input: template, left: 0, top: 0 });
+
+  const sortedStickers = [...stickers].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  for (const sticker of sortedStickers) {
+    if (!sticker.src || !sticker.src.startsWith('/stickers/')) continue;
+    try {
+      const stickerPath = path.join(process.cwd(), "public", sticker.src);
+      await fs.access(stickerPath);
+      
+      let s = sharp(stickerPath).resize({ width: Math.round(sticker.width) });
+      if (sticker.rotation) {
+        s = s.rotate(sticker.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } });
+      }
+      const stickerBuffer = await s.toBuffer();
+      const meta = await sharp(stickerBuffer).metadata();
+      
+      const left = Math.round(sticker.x - (meta.width || 0) / 2);
+      const top = Math.round(sticker.y - (meta.height || 0) / 2);
+      
+      composites.push({ input: stickerBuffer, left, top });
+    } catch (e) {
+      warnings.push(`Failed to compose sticker ${sticker.src}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
 
   const finalScreenPng=await sharp({
     create: { width: frame.width, height: frame.height, channels: 4, background: background.color }

@@ -1,14 +1,14 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getPackageById } from "@/lib/phobo-data";
-import type { KioskSession, PaymentStatus, PrintStatus, GreenScreenTuning } from "./session-types";
+import type { KioskSession, PaymentStatus, PrintStatus, GreenScreenTuning, StickerPlacement } from "./session-types";
 
 const KEY = "phobo.activeSession";
 const tuning: GreenScreenTuning = { applyChromaKey: true, greenMin: 70, greenTolerance: 35, spillReduction: 30, edgeSoftness: 2 };
 const now = () => new Date().toISOString();
 function fresh(): KioskSession {
   const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return { sessionId: `session-${id}`, paymentStatus: "idle", capturedPhotos: [], selectedPhotoIndices: [], printStatus: "idle", greenScreenTuning: tuning, createdAt: now(), updatedAt: now() };
+  return { sessionId: `session-${id}`, paymentStatus: "idle", capturedPhotos: [], selectedPhotoIndices: [], stickers: [], printStatus: "idle", greenScreenTuning: tuning, createdAt: now(), updatedAt: now() };
 }
 function update(current: KioskSession | null, patch: Partial<KioskSession>) { return { ...(current ?? fresh()), ...patch, updatedAt: now() }; }
 type Store = {
@@ -16,6 +16,10 @@ type Store = {
   selectPackage: (id: string) => void; setPaymentStatus: (s: PaymentStatus) => void; selectFrame: (id: string) => void;
   selectBackground: (id: string) => void; addCapturedPhoto: (photo: { raw: string; display: string }) => void; clearCapturedPhotos: () => void;
   selectPhotos: (indices: number[]) => void; selectSticker: (id: string) => void; clearFinalResult: () => void;
+  addSticker: (sticker: Omit<StickerPlacement, "id">) => void;
+  updateSticker: (id: string, sticker: Partial<StickerPlacement>) => void;
+  removeSticker: (id: string) => void;
+  clearStickers: () => void;
   setFinalImageUrl: (url: string) => void; setPrintImageUrl: (url: string) => void; setDriveUrl: (url: string) => void;
   setPrintStatus: (s: PrintStatus) => void; setGreenScreenTuning: (t: GreenScreenTuning) => void;
   setPaymentData: (data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number }) => void;
@@ -38,12 +42,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const selectPhotos = useCallback((selectedPhotoIndices: number[]) => patch({ selectedPhotoIndices, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const selectSticker = useCallback((selectedStickerId: string) => patch({ selectedStickerId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const clearFinalResult = useCallback(() => patch({ finalImageUrl: undefined, printImageUrl: undefined, printStatus: "idle" }), [patch]);
+  const addSticker = useCallback((sticker: Omit<StickerPlacement, "id">) => setSession(s => { const active = s ?? fresh(); return update(active, { stickers: [...active.stickers, { ...sticker, id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2)}` }] }); }), []);
+  const updateSticker = useCallback((id: string, stickerPatch: Partial<StickerPlacement>) => setSession(s => { const active = s ?? fresh(); return update(active, { stickers: active.stickers.map(st => st.id === id ? { ...st, ...stickerPatch } : st) }); }), []);
+  const removeSticker = useCallback((id: string) => setSession(s => { const active = s ?? fresh(); return update(active, { stickers: active.stickers.filter(st => st.id !== id) }); }), []);
+  const clearStickers = useCallback(() => patch({ stickers: [] }), [patch]);
   const setFinalImageUrl = useCallback((finalImageUrl: string) => patch({ finalImageUrl }), [patch]);
   const setPrintImageUrl = useCallback((printImageUrl: string) => patch({ printImageUrl }), [patch]);
   const setDriveUrl = useCallback((driveUrl: string) => patch({ driveUrl }), [patch]);
   const setPrintStatus = useCallback((printStatus: PrintStatus) => patch({ printStatus }), [patch]);
   const setGreenScreenTuning = useCallback((greenScreenTuning: GreenScreenTuning) => patch({ greenScreenTuning }), [patch]);
-  const value = useMemo(() => ({ session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData]);
+  const value = useMemo(() => ({ session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useSessionStore() { const value = useContext(Context); if (!value) throw new Error("useSessionStore must be used within SessionProvider"); return value; }

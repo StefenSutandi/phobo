@@ -15,6 +15,7 @@ type ComposeRequest = {
   capturedPhotos?: unknown;
   selectedFrameId?: unknown;
   selectedBackgroundId?: unknown;
+  stickers?: unknown;
   options?: unknown;
 };
 
@@ -108,10 +109,18 @@ export async function POST(request: Request) {
     const finalPrintPath = path.join(outputDirectory, "final_print.jpg");
     const manifestPath = path.join(outputDirectory, "compose-manifest.json");
 
+    const stickers = Array.isArray(body.stickers)
+      ? body.stickers.map((s: any) => ({
+          ...s,
+          src: typeof s.src === 'string' && s.src.startsWith('/stickers/') ? s.src : null,
+        })).filter((s: any) => s.src !== null)
+      : [];
+
     const payloadHash = JSON.stringify({
       capturedPhotos,
       selectedFrameId: body.selectedFrameId,
       selectedBackgroundId: body.selectedBackgroundId,
+      stickers,
       options: body.options,
     });
 
@@ -151,6 +160,7 @@ export async function POST(request: Request) {
       capturedPhotos,
       selectedFrameId: body.selectedFrameId,
       selectedBackgroundId: body.selectedBackgroundId,
+      stickers,
       options: parseOptions(body.options),
     });
     const printBuffer = await generate4RPrintTemplate({
