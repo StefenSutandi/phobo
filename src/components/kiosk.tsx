@@ -367,19 +367,26 @@ export function PreviewComposer({ frame, photoUrls, background }: PreviewCompose
             width: `${(sticker.width / 1200) * 100}%`,
             transform: `translate(-50%, -50%) rotate(${sticker.rotation}deg)`,
             zIndex: sticker.zIndex,
-            border: isActive ? '2px dashed #00f' : 'none'
+            border: isActive ? '3px dashed #00f' : 'none'
           }}>
-            <img src={sticker.src} style={{ width: '100%', height: 'auto', display: 'block' }} onPointerDown={(e) => handlePointerDown(e, sticker.id, 'drag')} />
-            {isActive && (
-              <>
-                <button onPointerDown={(e) => { e.stopPropagation(); removeSticker(sticker.id); }} style={{ position: 'absolute', top: '-15px', left: '-15px', background: 'red', color: 'white', borderRadius: '50%', width: '30px', height: '30px', border: 'none' }}>X</button>
-                <div onPointerDown={(e) => { e.stopPropagation(); handlePointerDown(e, sticker.id, 'resize'); }} style={{ position: 'absolute', bottom: '-10px', right: '-10px', width: '20px', height: '20px', background: 'blue', borderRadius: '50%', cursor: 'nwse-resize' }} />
-                <div onPointerDown={(e) => { e.stopPropagation(); handlePointerDown(e, sticker.id, 'rotate'); }} style={{ position: 'absolute', top: '-25px', left: '50%', transform: 'translateX(-50%)', width: '20px', height: '20px', background: 'green', borderRadius: '50%', cursor: 'ew-resize' }} />
-              </>
-            )}
+            <img src={sticker.src} style={{ width: '100%', height: 'auto', display: 'block', touchAction: 'none' }} onPointerDown={(e) => handlePointerDown(e, sticker.id, 'drag')} />
           </div>
         )
       })}
+      {activeStickerId && session?.stickers.find(s => s.id === activeStickerId) && (() => {
+        const activeSticker = session.stickers.find(s => s.id === activeStickerId)!;
+        const btnStyle = { width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' };
+        return (
+          <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '15px', background: 'rgba(255,255,255,0.9)', padding: '10px 20px', borderRadius: '30px', zIndex: 100 }}>
+            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateSticker(activeStickerId, { width: Math.max(50, activeSticker.width - 50) }); }} style={btnStyle}>-</button>
+            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateSticker(activeStickerId, { width: activeSticker.width + 50 }); }} style={btnStyle}>+</button>
+            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateSticker(activeStickerId, { rotation: activeSticker.rotation - 15 }); }} style={btnStyle}>↺</button>
+            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateSticker(activeStickerId, { rotation: activeSticker.rotation + 15 }); }} style={btnStyle}>↻</button>
+            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); removeSticker(activeStickerId); setActiveStickerId(null); }} style={{...btnStyle, background: '#e74c3c'}}>🗑</button>
+            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setActiveStickerId(null); }} style={{...btnStyle, background: '#95a5a6', fontSize: '16px'}}>OK</button>
+          </div>
+        );
+      })()}
     </div></RoundedPanel>;
   }
 type PhotoResultStripProps = {

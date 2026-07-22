@@ -63,7 +63,7 @@ export async function composeFinalImages({ capturedPhotos, selectedFrameId, sele
 
   const sortedStickers = [...stickers].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
   for (const sticker of sortedStickers) {
-    if (!sticker.src || !sticker.src.startsWith('/stickers/')) continue;
+    if (!sticker.src || !sticker.src.startsWith('/stickers/') || sticker.src.includes('..')) continue;
     try {
       const stickerPath = path.join(process.cwd(), "public", sticker.src);
       await fs.access(stickerPath);
