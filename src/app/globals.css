@@ -292,18 +292,18 @@ button {
 }
 
 .frame-scroller {
-  height: 51.82%;
-  left: 10%;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding-right: 34px;
+  height: 52%;
+  left: 5%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 16px;
+  padding-top: 10px;
+  padding-left: 20px;
+  padding-right: 20px;
   position: absolute;
-  top: 33.18%;
-  width: 84%;
-}
-
-.frame-scroller {
-  overscroll-behavior: contain;
+  top: 31%;
+  width: 90%;
+  overscroll-behavior-x: contain;
 }
 
 .frame-scroller::-webkit-scrollbar,
@@ -311,6 +311,7 @@ button {
 .strip-scroll::-webkit-scrollbar,
 .sticker-scroll::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
 .frame-scroller::-webkit-scrollbar-track,
@@ -330,31 +331,13 @@ button {
 }
 
 .frame-grid {
-  display: grid;
-  gap: 29px 22px;
-  grid-template-columns: repeat(5, 100px);
+  display: flex;
+  gap: 24px;
+  width: max-content;
+  align-items: stretch;
 }
 
-.frame-choice {
-  background: transparent;
-  border: 0;
-  display: grid;
-  gap: 29px;
-  grid-template-rows: 128px 68px;
-  height: 225px;
-  width: 100px;
-}
-
-.frame-choice.is-selected {
-  outline: 4px solid var(--purple);
-  outline-offset: 5px;
-}
-
-.frame-choice__top,
-.frame-choice__bottom {
-  background: var(--placeholder);
-  display: block;
-}
+/* Replaced by refined frame-choice styling below */
 
 .camera-panel {
   border-radius: 34px;
@@ -881,9 +864,42 @@ button {
 .result-message{position:absolute;right:18px;top:18px;font-family:var(--sans-font);font-size:12px}
 .photo-strip-placeholder{width:125px;height:260px;background:#fff;color:var(--main-bg);display:grid;place-items:center;font-family:var(--sans-font);font-size:12px}
 /* Real frame template thumbnails and layered preview */
-.frame-choice { background:#fff; display:flex; flex-direction:column; gap:4px; overflow:hidden; padding:5px; }
-.frame-choice__image { display:block; height:196px; object-fit:contain; width:100%; }
-.frame-choice__label { color:var(--black); font-family:var(--sans-font); font-size:11px; line-height:1; }
+.frame-choice {
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 3px solid transparent;
+  cursor: pointer;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+.frame-choice.is-selected {
+  border-color: var(--purple);
+  box-shadow: 0 4px 15px rgba(107, 29, 76, 0.4);
+  outline: none;
+}
+.frame-choice__image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: contain;
+  background: repeating-conic-gradient(#e6e6e6 0% 25%, #ffffff 0% 50%) 50% / 16px 16px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
+}
+.frame-choice__label {
+  color: var(--black);
+  font-family: var(--sans-font);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: center;
+}
 .preview-frame { overflow:hidden; }
 .preview-frame__template { display:block; height:100%; left:0; object-fit:fill; position:absolute; top:0; width:100%; z-index:1; }
 .preview-frame__slot { background:rgba(205,205,205,.35); overflow:hidden; position:absolute; transform-origin:center; z-index:2; }
