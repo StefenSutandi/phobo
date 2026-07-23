@@ -162,45 +162,49 @@ export default function AddPrintPayment() {
         qrContent={!isInitializing ? <ResultQrCode value={paymentUrl} /> : <div className="qr-image" style={{display: "grid", placeItems: "center", background: "#fff", width:"100%", height:"100%"}}>...</div>} 
       />
       
-      <div className="payment-footer" style={{ position: "absolute", bottom: "10%", left: "50%", transform: "translateX(-50%)", textAlign: "center", width: '100%' }}>
-        <p style={{ color: "white", fontSize: "2rem", marginBottom: "20px" }}>Additional Print: Rp 20.000</p>
-        
-        {(!midtransEnabled || process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true") && session?.addPrintPaymentStatus !== "paid" && (
-          <button 
-            className="operator-confirm" 
-            onClick={() => setAddPrintPaymentStatus("paid")}
-            style={{ padding: "15px 40px", fontSize: "1.5rem", borderRadius: "30px", background: "#8e44ad", color: "white", border: "none", cursor: "pointer", marginBottom: "15px" }}
-          >
-            DEV FALLBACK: SIMULATE PAYMENT
-          </button>
-        )}
-
-        {session?.addPrintPaymentStatus === "paid" && !session?.additionalPrintImageUrl && (
-          <p style={{ color: "white", fontSize: "1.5rem" }}>{busy ? "COMPOSING..." : "READY TO COMPOSE..."}</p>
-        )}
-
-        {session?.additionalPrintImageUrl && (
-          <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', alignItems: 'center' }}>
-            <button 
-              onClick={handlePrint}
-              disabled={busy || msg === "PRINT SUCCESS!"}
-              style={{ padding: "15px 40px", fontSize: "1.5rem", borderRadius: "30px", background: "#2ecc71", color: "white", border: "none", cursor: busy ? "not-allowed" : "pointer" }}
-            >
-              {busy ? "PRINTING..." : (msg === "PRINT SUCCESS!" ? "PRINTED" : "PRINT ADDITIONAL")}
-            </button>
-            {msg === "PRINT SUCCESS!" && (
-              <button 
-                onClick={() => router.push("/closing")}
-                style={{ padding: "15px 40px", fontSize: "1.5rem", borderRadius: "30px", background: "#e74c3c", color: "white", border: "none", cursor: "pointer" }}
-              >
-                FINISH
-              </button>
-            )}
+      <div className="payment-summary">
+        Additional Print - Rp 20.000,00
+        {!midtransEnabled && !isInitializing && (
+          <div style={{fontSize: 16, opacity: 0.7, marginTop: 10}}>
+            {process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" 
+              ? "(Manual payment mode)" 
+              : "Payment gateway is disabled. Enable Midtrans or debug fallback to continue."}
           </div>
         )}
-
-        {msg && <p style={{ color: "white", fontSize: "1.2rem", marginTop: "15px", whiteSpace: "pre-wrap" }}>{msg}</p>}
+        {session?.addPrintPaymentStatus === "paid" && !session?.additionalPrintImageUrl && (
+          <div style={{marginTop: 10, fontSize: "1.2rem"}}>{busy ? "COMPOSING..." : "READY TO COMPOSE..."}</div>
+        )}
+        {msg && <div style={{marginTop: 10, fontSize: "1.2rem", whiteSpace: "pre-wrap"}}>{msg}</div>}
       </div>
+
+      {session?.additionalPrintImageUrl && (
+        <div style={{ position: "absolute", bottom: "15%", left: "50%", transform: "translateX(-50%)", display: "flex", gap: "20px", justifyContent: "center", alignItems: "center", zIndex: 10 }}>
+          <button 
+            onClick={handlePrint}
+            disabled={busy || msg === "PRINT SUCCESS!"}
+            style={{ padding: "15px 40px", fontSize: "1.5rem", borderRadius: "30px", background: "#2ecc71", color: "white", border: "none", cursor: busy ? "not-allowed" : "pointer" }}
+          >
+            {busy ? "PRINTING..." : (msg === "PRINT SUCCESS!" ? "PRINTED" : "PRINT ADDITIONAL")}
+          </button>
+          {msg === "PRINT SUCCESS!" && (
+            <button 
+              onClick={() => router.push("/closing")}
+              style={{ padding: "15px 40px", fontSize: "1.5rem", borderRadius: "30px", background: "#e74c3c", color: "white", border: "none", cursor: "pointer" }}
+            >
+              FINISH
+            </button>
+          )}
+        </div>
+      )}
+
+      {process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" && session?.addPrintPaymentStatus !== "paid" && (
+        <button 
+          className="operator-confirm" 
+          onClick={() => setAddPrintPaymentStatus("paid")}
+        >
+          SIMULATE PAYMENT
+        </button>
+      )}
     </KioskStage>
   );
 }

@@ -102,10 +102,16 @@ export default function Payment() {
       />
       <div className="payment-summary">
         {session?.packageName} - Rp. {(session?.price ?? 0).toLocaleString("id-ID")},00
-        {!midtransEnabled && !isInitializing && <div style={{fontSize: 16, opacity: 0.7, marginTop: 10}}>(Manual payment mode)</div>}
+        {!midtransEnabled && !isInitializing && (
+          <div style={{fontSize: 16, opacity: 0.7, marginTop: 10}}>
+            {process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" 
+              ? "(Manual payment mode)" 
+              : "Payment gateway is disabled. Enable Midtrans or debug fallback to continue."}
+          </div>
+        )}
       </div>
       
-      {(!midtransEnabled || process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true") && (
+      {process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" && (
         <button 
           className="operator-confirm" 
           onClick={() => {
@@ -113,7 +119,7 @@ export default function Payment() {
             router.push("/frames");
           }}
         >
-          CONFIRM PAYMENT
+          SIMULATE PAYMENT
         </button>
       )}
     </KioskStage>
