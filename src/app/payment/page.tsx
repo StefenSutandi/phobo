@@ -94,18 +94,27 @@ export default function Payment() {
   return (
     <KioskStage>
       <QrScreen 
-        title={midtransEnabled ? "SCAN UNTUK BAYAR" : "SCAN FOR PAYMENT"} 
+        title={midtransEnabled ? "SCAN UNTUK BAYAR" : "PAYMENT DISABLED"} 
         initialSeconds={120} 
         completionText="PAYMENT TIMEOUT" 
         onComplete={() => setPaymentStatus("timeout")} 
-        qrContent={!isInitializing ? <ResultQrCode value={paymentUrl} /> : <div className="qr-image" style={{display: "grid", placeItems: "center", background: "#fff", width:"100%", height:"100%"}}>...</div>} 
+        qrContent={
+          !isInitializing 
+            ? midtransEnabled 
+              ? <ResultQrCode value={paymentUrl} /> 
+              : <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#222', color: '#aaa', borderRadius: '8px', textAlign: 'center'}}>
+                  <span style={{fontSize: '48px'}}>⚙️</span>
+                  <span style={{marginTop: '10px', fontSize: '18px'}}>OFFLINE</span>
+                </div>
+            : <div className="qr-image" style={{display: "grid", placeItems: "center", background: "#fff", width:"100%", height:"100%", borderRadius: "8px"}}>...</div>
+        } 
       />
       <div className="payment-summary">
         {session?.packageName} - Rp. {(session?.price ?? 0).toLocaleString("id-ID")},00
         {!midtransEnabled && !isInitializing && (
           <div style={{fontSize: 16, opacity: 0.7, marginTop: 10}}>
             {process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" 
-              ? "(Manual payment mode)" 
+              ? "(Manual debug mode)" 
               : "Payment gateway is disabled. Enable Midtrans or debug fallback to continue."}
           </div>
         )}
