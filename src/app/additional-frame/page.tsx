@@ -37,15 +37,23 @@ export default function AdditionalFrame() {
   return (
     <KioskStage>
       <h1 className="frames-title">ADDITIONAL FRAME</h1>
-      <RoundedPanel className="frame-panel" />
-      <FrameGridScroller
-        frames={frames}
-        selectedFrameId={session?.additionalFrameId}
-        onSelectFrame={(frameId) => {
-          selectAdditionalFrame(frameId);
-          setMessage("");
-        }}
-      />
+      <RoundedPanel className="frame-panel">
+        {session?.additionalFrameId && (
+          <img
+            src={frames.find((f) => f.id === session.additionalFrameId)?.templateUrl}
+            alt="Selected additional frame preview"
+            className="selected-frame-preview"
+          />
+        )}
+        <FrameGridScroller
+          frames={frames}
+          selectedFrameId={session?.additionalFrameId}
+          onSelectFrame={(frameId) => {
+            selectAdditionalFrame(frameId);
+            setMessage("");
+          }}
+        />
+      </RoundedPanel>
       <KioskButton
         onClick={goNext}
         className={`frame-next ${!session?.additionalFrameId ? "is-disabled" : ""}`}

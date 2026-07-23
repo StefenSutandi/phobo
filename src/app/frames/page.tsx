@@ -38,15 +38,23 @@ export default function Frames() {
   return (
     <KioskStage>
       <h1 className="frames-title">FRAME</h1>
-      <RoundedPanel className="frame-panel" />
-      <FrameGridScroller
-        frames={frames}
-        selectedFrameId={session?.selectedFrameId}
-        onSelectFrame={(frameId) => {
-          selectFrame(frameId);
-          setMessage("");
-        }}
-      />
+      <RoundedPanel className="frame-panel">
+        {session?.selectedFrameId && (
+          <img
+            src={frames.find((f) => f.id === session.selectedFrameId)?.templateUrl}
+            alt="Selected frame preview"
+            className="selected-frame-preview"
+          />
+        )}
+        <FrameGridScroller
+          frames={frames}
+          selectedFrameId={session?.selectedFrameId}
+          onSelectFrame={(frameId) => {
+            selectFrame(frameId);
+            setMessage("");
+          }}
+        />
+      </RoundedPanel>
       <KioskButton
         onClick={goNext}
         className={`frame-next ${!session?.selectedFrameId ? "is-disabled" : ""}`}
