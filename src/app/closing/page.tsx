@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+"use client";
+
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { KioskStage, OptionalAsset } from "@/components/kiosk";
 
@@ -21,53 +23,36 @@ export default function Closing() {
     { label: "EVENT REGISTRATION", src: "/assets/qr/event-registration.png" },
   ];
 
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    function updateScale() {
-      const padding = 0;
-      const availableWidth = Math.max(window.innerWidth - padding, 1);
-      const availableHeight = Math.max(window.innerHeight - padding, 1);
-      setScale(Math.min(availableWidth / 1366, availableHeight / 768));
-    }
-
-    updateScale();
-    window.addEventListener("resize", updateScale);
-    return () => window.removeEventListener("resize", updateScale);
-  }, []);
-
   return (
-    <main className="closing-page">
-      <div className="closing-stage" style={{ transform: `scale(${scale})`, transformOrigin: "center" }}>
-        <OptionalAsset
-          src="/assets/figma/illustrations/closing.png"
-          alt="Closing artwork"
-          className="closing-art"
-        />
+    <KioskStage background="main">
+      <OptionalAsset
+        src="/assets/figma/illustrations/closing.png"
+        alt="Closing artwork"
+        className="closing-art"
+      />
 
-        <div className="closing-qr-list">
-          {qrAssets.map(({ label, src }) => (
-            <div className="closing-qr-row" key={label}>
-              <div className="closing-qr">
-                <img 
-                  src={src} 
-                  alt={`${label} QR`} 
-                  className="qr-image" 
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='12' fill='red'%3EMISSING QR%3C/text%3E%3C/svg%3E";
-                  }}
-                />
-              </div>
-              <span className="closing-label">{label}</span>
+      <div className="closing-qr-list">
+        {qrAssets.map(({ label, src }) => (
+          <div className="closing-qr-row" key={label}>
+            <div className="closing-qr">
+              <img 
+                src={src} 
+                alt={`${label} QR`} 
+                className="qr-image" 
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='12' fill='red'%3EMISSING QR%3C/text%3E%3C/svg%3E";
+                }}
+              />
             </div>
-          ))}
-        </div>
-
-        <button className="closing-home-button" onClick={() => { resetSession(); router.push("/"); }}>
-          HOME
-        </button>
+            <span className="closing-label">{label}</span>
+          </div>
+        ))}
       </div>
-    </main>
+
+      <button className="closing-home-button" onClick={() => { resetSession(); router.push("/"); }}>
+        HOME
+      </button>
+    </KioskStage>
   );
 }

@@ -921,30 +921,11 @@ button {
   top: 8px;
   width: 110px;
 }
-
-.closing-page {
-  width: 100%;
-  min-height: 100vh;
-  background: #1f2727;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.closing-stage {
-  width: 1366px;
-  height: 768px;
-  position: relative;
-  overflow: hidden;
-  background: #344140;
-}
-
 .closing-art {
   position: absolute;
   right: 0;
   top: 0;
-  width: 850px;
+  width: 466px;
   height: 100%;
   object-fit: cover;
   object-position: 70% center;
@@ -955,26 +936,26 @@ button {
 
 .closing-qr-list {
   position: absolute;
-  left: 90px;
-  top: 60px;
+  left: 49px;
+  top: 34px;
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 17px;
   z-index: 2;
 }
 
 .closing-qr-row {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 13px;
 }
 
 .closing-qr {
-  width: 170px;
-  height: 170px;
+  width: 95px;
+  height: 95px;
   background: white;
-  padding: 12px;
-  border-radius: 12px;
+  padding: 6px;
+  border-radius: 8px;
 }
 
 .closing-qr .qr-image {
@@ -988,27 +969,27 @@ button {
   color: white;
   font-family: inherit;
   font-weight: 400;
-  font-size: 54px;
+  font-size: 30px;
   line-height: 0.9;
   text-transform: uppercase;
   white-space: pre-line;
-  max-width: 320px;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+  max-width: 175px;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
   transform: translateY(0.1em);
 }
 
 .closing-home-button {
   position: absolute;
-  right: 110px;
-  bottom: 70px;
-  width: 240px;
-  height: 70px;
+  right: 60px;
+  bottom: 40px;
+  width: 131px;
+  height: 40px;
   border-radius: 999px;
   background: #6b1d4c;
   color: white;
   font-family: inherit;
   font-weight: 400;
-  font-size: 42px;
+  font-size: 23px;
   z-index: 3;
   border: none;
   cursor: pointer;
@@ -1016,7 +997,7 @@ button {
   align-items: center;
   justify-content: center;
   line-height: 0.8;
-  padding-top: 5px;
+  padding-top: 3px;
 }
 
 .camera-preview-canvas {
