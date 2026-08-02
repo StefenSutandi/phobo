@@ -40,6 +40,7 @@ export type KioskSession = {
   selectedBackgroundId?: string;
   capturedPhotos: { raw: string; display: string }[];
   selectedPhotoIndices: number[];
+  additionalSelectedPhotoIndices?: number[];
   selectedStickerId?: string;
   stickers: StickerPlacement[];
   finalImageUrl?: string;

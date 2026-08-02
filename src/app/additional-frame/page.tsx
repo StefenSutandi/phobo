@@ -28,10 +28,8 @@ export default function AdditionalFrame() {
       setMessage("PILIH FRAME TAMBAHAN");
       return;
     }
-    
-    // Set payment status to unpaid before proceeding
-    setAddPrintPaymentStatus("unpaid");
-    router.push("/add-print-payment");
+    // Go to preview first instead of payment
+    router.push("/additional-preview");
   }
 
   return (

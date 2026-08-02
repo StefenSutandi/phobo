@@ -96,12 +96,16 @@ export default function AddPrintPayment() {
       
       const composePrint = async () => {
         try {
+          const additionalPhotos = session.additionalSelectedPhotoIndices 
+            ? session.additionalSelectedPhotoIndices.map(i => session.capturedPhotos[i]).filter(Boolean)
+            : session.capturedPhotos;
+
           const r = await fetch("/api/results/compose-additional", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               sessionId: session.sessionId,
-              capturedPhotos: session.capturedPhotos,
+              capturedPhotos: additionalPhotos,
               additionalFrameId: session.additionalFrameId,
               selectedBackgroundId: session.selectedBackgroundId,
               stickers: session.stickers,

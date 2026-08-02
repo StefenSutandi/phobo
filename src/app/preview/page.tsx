@@ -11,12 +11,28 @@ export default function Preview(){
  const [stickersList, setStickersList] = useState<string[]>([]);
  useEffect(()=>{if(hasHydrated&&!session?.capturedPhotos.length)router.replace("/camera");},[hasHydrated,session?.capturedPhotos.length,router]);
  useEffect(() => { getStickers().then(setStickersList); }, []);
- const frame=getFrameById(session?.selectedFrameId); const needed=frame.requiredPhotos; const selected=session?.selectedPhotoIndices??[];
- const chosen=selected.length>0?selected.map(i=>session?.capturedPhotos[i]).filter((x):x is { raw: string; display: string }=>Boolean(x)):(session?.capturedPhotos??[]);
- const chosenDisplayUrls=chosen.map(p=>p.display);
- const allDisplayUrls=(session?.capturedPhotos??[]).map(p=>p.display);
- function toggle(i:number){const next=selected.includes(i)?selected.filter(x=>x!==i):selected.length<needed?[...selected,i]:[...selected.slice(1),i];selectPhotos(next);}
- const isReady = chosen.length >= needed;
+  const frame = getFrameById(session?.selectedFrameId); 
+  const needed = frame.requiredPhotos; 
+  
+  // Default to first 'needed' photos if not selected yet
+  const selected = session?.selectedPhotoIndices && session.selectedPhotoIndices.length > 0
+    ? session.selectedPhotoIndices
+    : Array.from({ length: Math.min(needed, session?.capturedPhotos?.length || 0) }, (_, i) => i);
+    
+  const chosen = selected.map(i => session?.capturedPhotos[i]).filter(Boolean) as { raw: string; display: string }[];
+  const chosenDisplayUrls = chosen.map(p => p.display);
+  const allDisplayUrls = (session?.capturedPhotos ?? []).map(p => p.display);
+  
+  function toggle(i: number) {
+    const next = selected.includes(i) 
+      ? selected.filter(x => x !== i) 
+      : selected.length < needed 
+        ? [...selected, i] 
+        : [...selected.slice(1), i];
+    selectPhotos(next);
+  }
+  
+  const isReady = selected.length === needed;
  const background = backgrounds.find(bg => bg.id === session?.selectedBackgroundId) || backgrounds[0];
 
  useEffect(() => {
@@ -62,5 +78,5 @@ export default function Preview(){
     setSaving(false);
   }
  }
- return <KioskStage><h1 className="preview-heading">PREVIEW FRAME</h1><PreviewComposer frame={frame} photoUrls={chosenDisplayUrls} background={background}/><StickerPicker stickers={stickersList} /><PhotoResultStrip photos={allDisplayUrls} selectedIndices={selected} onTogglePhoto={toggle}/><KioskButton className="preview-next" onClick={next} disabled={!isReady || saving}>{saving?"PROCESSING...":"NEXT"}</KioskButton>{!isReady&&<p className="kiosk-message" style={{ color: "#ffaa00", top: "82%" }}>Butuh {needed} foto untuk frame ini. Kamu baru punya {chosen.length} foto.</p>}{error&&<p className="kiosk-message">{error}</p>}</KioskStage>;
+  return <KioskStage><h1 className="preview-heading">PREVIEW FRAME</h1><PreviewComposer frame={frame} photoUrls={chosenDisplayUrls} background={background}/><StickerPicker stickers={stickersList} /><PhotoResultStrip photos={allDisplayUrls} selectedIndices={selected} onTogglePhoto={toggle}/><KioskButton className="preview-next" onClick={next} disabled={!isReady || saving}>{saving?"PROCESSING...":"NEXT"}</KioskButton>{!isReady&&<p className="kiosk-message" style={{ color: "#ffaa00", top: "82%" }}>Pilih {needed} foto untuk frame ini. (Terpilih {selected.length} / {needed})</p>}{error&&<p className="kiosk-message">{error}</p>}</KioskStage>;
 }

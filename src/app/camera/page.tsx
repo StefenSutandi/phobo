@@ -41,7 +41,7 @@ export default function Camera() {
 
   const count = session?.capturedPhotos.length ?? 0;
   const max = session?.maxShots ?? 8;
-  const required = Math.min(getFrameById(session?.selectedFrameId).requiredPhotos, max);
+  const required = max; // require full package shot count
   const maxReached = count >= max;
   shotCount.current = count;
 
@@ -101,7 +101,7 @@ export default function Camera() {
   return (
     <KioskStage>
       <div className="shot-counter">
-        Shoot {maxReached ? max : count + 1} / {max} {required < max ? `(Butuh Min. ${required})` : ""}
+        Shoot {maxReached ? max : count + 1} / {max}
       </div>
       <CameraLiveView 
         ref={live} 
