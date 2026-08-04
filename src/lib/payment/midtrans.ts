@@ -28,6 +28,10 @@ export async function createSnapTransaction({
       last_name: "Customer",
     },
     custom_field1: sessionId,
+    custom_expiry: {
+      expiry_duration: 2,
+      unit: "minute"
+    }
   };
 
   const transaction = await snap.createTransaction(params);

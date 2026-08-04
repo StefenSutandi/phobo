@@ -72,8 +72,10 @@ export default function AddPrintPayment() {
         const data = await res.json();
         if (data.ok && data.status) {
           if (data.status === "confirmed") {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             setAddPrintPaymentStatus("paid");
           } else if (data.status === "failed" || data.status === "timeout") {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             setAddPrintPaymentStatus("failed");
           }
         }
@@ -177,6 +179,16 @@ export default function AddPrintPayment() {
       
       <div className="payment-summary">
         Additional Print - Rp 20.000,00
+
+        {session?.addPrintPaymentOrderId && (
+          <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#222', borderRadius: '8px', border: '1px solid #444' }}>
+            <p style={{ fontSize: '14px', color: '#aaa', margin: '0 0 5px 0' }}>Jika terjadi kendala, silakan foto layar ini</p>
+            <p style={{ fontSize: '18px', fontFamily: 'monospace', margin: '0', color: '#fff', letterSpacing: '2px' }}>
+              ID: {session.addPrintPaymentOrderId}
+            </p>
+          </div>
+        )}
+
         {!midtransEnabled && !isInitializing && (
           <div style={{fontSize: 16, opacity: 0.7, marginTop: 10}}>
             {process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" 
