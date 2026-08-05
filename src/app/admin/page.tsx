@@ -379,11 +379,11 @@ export default function Admin() {
           <div className="admin-result">
             <strong>Captured Photos</strong>
             {session.capturedPhotos.map((photoObj, index) => {
-              const url = typeof photoObj === 'string' ? photoObj : photoObj.raw;
+              const url = typeof photoObj === 'string' ? photoObj : (photoObj?.raw || photoObj?.display || "");
               return (
               <p key={`${url}-${index}`}>
-                {index + 1}: {url.slice(0, 96)}
-                {url.length > 96 ? "..." : ""}
+                {index + 1}: {url ? url.slice(0, 96) : "NONE"}
+                {url && url.length > 96 ? "..." : ""}
               </p>
             )})}
           </div>

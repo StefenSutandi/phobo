@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       const displayMatches = displayImageDataUrl.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/);
       if (displayMatches && displayMatches.length === 3) {
         const displayBuffer = Buffer.from(displayMatches[2], "base64");
-        const displayFileName = `capture-${Date.now()}-display.jpg`;
+        const displayFileName = `capture-${Date.now()}-display.png`;
         const displayFilePath = path.join(captureDir, displayFileName);
         await writeFile(displayFilePath, displayBuffer);
         displayPhotoUrl = `/results/${sessionId}/captures/${displayFileName}`;

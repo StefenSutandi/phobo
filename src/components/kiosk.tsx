@@ -6,7 +6,8 @@ import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState, useRef } from "react";
 import { CountdownTimer } from "./kiosk/CountdownTimer";
 import type { FrameData } from "@/lib/phobo-data";
-import type { StickerPlacement } from "@/lib/session/session-types";
+import type { StickerPlacement, CapturedPhoto } from "@/lib/session/session-types";
+import { getPhotoDisplayUrl, getPhotoRawUrl, isValidImgSrc } from "@/lib/session/session-types";
 import { useSessionStore } from "@/lib/session/session-store";
 
 type KioskStageProps = {
@@ -281,12 +282,13 @@ export function StickerPicker({ stickers }: { stickers: string[] }) {
   );
 }
 
-type PreviewComposerProps = { frame: FrameData; photoUrls: string[]; background?: any };
+type PreviewComposerProps = { frame: FrameData; photoUrls: (CapturedPhoto | string)[]; background?: any };
 
 export function PreviewComposer({ frame, photoUrls, background }: PreviewComposerProps) {
     const { session, updateSticker, removeSticker } = useSessionStore();
     const containerRef = useRef<HTMLDivElement>(null);
     const [activeStickerId, setActiveStickerId] = useState<string | null>(null);
+    const [failedSlots, setFailedSlots] = useState<Record<number, boolean>>({});
 
     const handlePointerDown = (e: React.PointerEvent, id: string, type: 'drag' | 'resize' | 'rotate') => {
       e.preventDefault();
@@ -337,7 +339,14 @@ export function PreviewComposer({ frame, photoUrls, background }: PreviewCompose
       position: 'relative'
     }}>
       {frame.photoSlots.map((photoSlot, index) => { 
-        const photoUrl = photoUrls.length > 0 ? photoUrls[index % photoUrls.length] : null; 
+        const photoItem = photoUrls.length > 0 ? photoUrls[index % photoUrls.length] : null; 
+        const displayUrl = getPhotoDisplayUrl(photoItem);
+        const rawUrl = getPhotoRawUrl(photoItem);
+        let activeSrc = failedSlots[index] ? rawUrl : displayUrl;
+        if (!isValidImgSrc(activeSrc)) {
+          activeSrc = rawUrl && isValidImgSrc(rawUrl) ? rawUrl : "";
+        }
+
         const slotRatio = photoSlot.width / photoSlot.height;
         const useContain = slotRatio < 0.8;
         return (
@@ -347,10 +356,28 @@ export function PreviewComposer({ frame, photoUrls, background }: PreviewCompose
             ) : (
               <div style={{ position: "absolute", width: "100%", height: "100%", backgroundColor: background?.color || "#d9d9d9", zIndex: 0 }} />
             ))}
-            {photoUrl && <img src={photoUrl} alt={`Selected photo ${(index % Math.max(1, photoUrls.length)) + 1}`} style={{ position: "absolute", width: "100%", height: "100%", objectFit: useContain ? "contain" : "cover", objectPosition: useContain ? "bottom" : "center", zIndex: 1 }} />}
-            {process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true" && (
+            {activeSrc ? (
+              <img 
+                src={activeSrc} 
+                alt={`Selected photo ${(index % Math.max(1, photoUrls.length)) + 1}`} 
+                style={{ position: "absolute", width: "100%", height: "100%", objectFit: useContain ? "contain" : "cover", objectPosition: useContain ? "bottom" : "center", zIndex: 1 }} 
+                onError={() => {
+                  console.warn(`[PreviewComposer Diagnostics] Slot ${index} image failed to load. Tried src: ${activeSrc.slice(0, 40)}... (length: ${activeSrc.length})`);
+                  if (!failedSlots[index] && rawUrl && rawUrl !== activeSrc) {
+                    console.log(`[PreviewComposer Diagnostics] Falling back slot ${index} from display to raw: ${rawUrl.slice(0, 40)}...`);
+                    setFailedSlots(prev => ({ ...prev, [index]: true }));
+                  }
+                }}
+              />
+            ) : (
+              <div style={{ position: "absolute", width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#444", color: "#fff", fontSize: "12px", zIndex: 1 }}>
+                📷 Foto {index + 1}
+              </div>
+            )}
+            {(process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true" || process.env.PHOBO_DEBUG_LOGS === "true") && (
               <div style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0, border: "2px solid red", zIndex: 2, pointerEvents: "none", color: "red", fontSize: "10px", padding: "2px"}}>
                 Slot {index} | Mode: {useContain ? 'smart-cover' : 'cover'}<br/>
+                Src: {activeSrc ? activeSrc.slice(0, 20) : "NONE"}<br/>
                 Slot AR: {slotRatio.toFixed(2)}
               </div>
             )}
@@ -391,24 +418,52 @@ export function PreviewComposer({ frame, photoUrls, background }: PreviewCompose
       })()}
   </RoundedPanel>;
   }
+
 type PhotoResultStripProps = {
-  photos?: string[];
+  photos?: (CapturedPhoto | string)[];
   selectedIndices?: number[];
   onTogglePhoto?: (index: number) => void;
 };
 
 export function PhotoResultStrip({ photos = [], selectedIndices = [], onTogglePhoto }: PhotoResultStripProps) {
+  const [failedThumbnails, setFailedThumbnails] = useState<Record<number, boolean>>({});
   const visiblePhotos = photos.length > 0 ? photos : Array.from({ length: 4 }, () => "");
 
   return (
     <RoundedPanel className="photo-strip">
       <p className="strip-title">HASIL FOTO</p>
       <div className="strip-scroll">
-        {visiblePhotos.map((photoUrl, index) => (
-          <button type="button" className={`strip-photo ${selectedIndices.includes(index) ? "is-selected" : ""}`} key={`${photoUrl}-${index}`} aria-label={`Photo result ${index + 1}`} onClick={() => onTogglePhoto?.(index)}>
-            {photoUrl && <img src={photoUrl} alt="" className="strip-photo__image" />}
-          </button>
-        ))}
+        {visiblePhotos.map((photoItem, index) => {
+          const displayUrl = getPhotoDisplayUrl(photoItem);
+          const rawUrl = getPhotoRawUrl(photoItem);
+          let activeSrc = failedThumbnails[index] ? rawUrl : displayUrl;
+          if (!isValidImgSrc(activeSrc)) {
+            activeSrc = rawUrl && isValidImgSrc(rawUrl) ? rawUrl : "";
+          }
+
+          return (
+            <button type="button" className={`strip-photo ${selectedIndices.includes(index) ? "is-selected" : ""}`} key={`${index}-${typeof photoItem === 'string' ? photoItem : photoItem?.raw}`} aria-label={`Photo result ${index + 1}`} onClick={() => onTogglePhoto?.(index)}>
+              {activeSrc ? (
+                <img 
+                  src={activeSrc} 
+                  alt="" 
+                  className="strip-photo__image" 
+                  onError={() => {
+                    console.warn(`[PhotoResultStrip Diagnostics] Thumbnail ${index} image failed to load. Tried src: ${activeSrc.slice(0, 40)}... (length: ${activeSrc.length})`);
+                    if (!failedThumbnails[index] && rawUrl && rawUrl !== activeSrc) {
+                      console.log(`[PhotoResultStrip Diagnostics] Falling back thumbnail ${index} from display to raw: ${rawUrl.slice(0, 40)}...`);
+                      setFailedThumbnails(prev => ({ ...prev, [index]: true }));
+                    }
+                  }}
+                />
+              ) : (
+                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#333", color: "#aaa", fontSize: "14px" }}>
+                  📷 {index + 1}
+                </div>
+              )}
+            </button>
+          );
+        })}
       </div>
     </RoundedPanel>
   );

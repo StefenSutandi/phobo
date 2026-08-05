@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { KioskButton, KioskStage, PhotoResultStrip, PreviewComposer, StickerPicker } from "@/components/kiosk";
 import { getFrameById, backgrounds } from "@/lib/phobo-data";
 import { useSessionStore } from "@/lib/session/session-store";
+import { getPhotoDisplayUrl, getPhotoRawUrl, type CapturedPhoto } from "@/lib/session/session-types";
 import { getStickers } from "./actions";
 
 export default function Preview(){
@@ -19,9 +20,8 @@ export default function Preview(){
     ? session.selectedPhotoIndices
     : Array.from({ length: Math.min(needed, session?.capturedPhotos?.length || 0) }, (_, i) => i);
     
-  const chosen = selected.map(i => session?.capturedPhotos[i]).filter(Boolean) as { raw: string; display: string }[];
-  const chosenDisplayUrls = chosen.map(p => p.display);
-  const allDisplayUrls = (session?.capturedPhotos ?? []).map(p => p.display);
+  const captured = session?.capturedPhotos ?? [];
+  const chosen = selected.map(i => captured[i]).filter(Boolean);
   
   function toggle(i: number) {
     const next = selected.includes(i) 
@@ -36,10 +36,15 @@ export default function Preview(){
  const background = backgrounds.find(bg => bg.id === session?.selectedBackgroundId) || backgrounds[0];
 
  useEffect(() => {
-    if (process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true" && chosenDisplayUrls.length > 0) {
-      console.log(`[Preview DIAGNOSTICS] /preview uses keyed photo: yes (url: ${chosenDisplayUrls[0]})`);
+    if ((process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true" || process.env.PHOBO_DEBUG_LOGS === "true") && captured.length > 0) {
+      console.log(`[Preview DIAGNOSTICS] Total capturedPhotos: ${captured.length}`);
+      captured.forEach((p, idx) => {
+        const raw = getPhotoRawUrl(p);
+        const display = getPhotoDisplayUrl(p);
+        console.log(`[Preview DIAGNOSTICS] Photo ${idx}: type=${typeof p}, rawPrefix=${raw.slice(0, 30)} (len ${raw.length}), displayPrefix=${display.slice(0, 30)} (len ${display.length})`);
+      });
     }
-  }, [chosenDisplayUrls]);
+  }, [captured]);
 
  async function next() {
   if (!isReady || !session || saving) return;
@@ -78,5 +83,5 @@ export default function Preview(){
     setSaving(false);
   }
  }
-  return <KioskStage><h1 className="preview-heading">PREVIEW FRAME</h1><PreviewComposer frame={frame} photoUrls={chosenDisplayUrls} background={background}/><StickerPicker stickers={stickersList} /><PhotoResultStrip photos={allDisplayUrls} selectedIndices={selected} onTogglePhoto={toggle}/><KioskButton className="preview-next" onClick={next} disabled={!isReady || saving}>{saving?"PROCESSING...":"NEXT"}</KioskButton>{!isReady&&<p className="kiosk-message" style={{ color: "#ffaa00", top: "82%" }}>Pilih {needed} foto untuk frame ini. (Terpilih {selected.length} / {needed})</p>}{error&&<p className="kiosk-message">{error}</p>}</KioskStage>;
+  return <KioskStage><h1 className="preview-heading">PREVIEW FRAME</h1><PreviewComposer frame={frame} photoUrls={chosen} background={background}/><StickerPicker stickers={stickersList} /><PhotoResultStrip photos={captured} selectedIndices={selected} onTogglePhoto={toggle}/><KioskButton className="preview-next" onClick={next} disabled={!isReady || saving}>{saving?"PROCESSING...":"NEXT"}</KioskButton>{!isReady&&<p className="kiosk-message" style={{ color: "#ffaa00", top: "82%" }}>Pilih {needed} foto untuk frame ini. (Terpilih {selected.length} / {needed})</p>}{error&&<p className="kiosk-message">{error}</p>}</KioskStage>;
 }

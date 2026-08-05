@@ -30,9 +30,8 @@ export default function AdditionalPreview() {
     }
   }, [hasHydrated, session?.capturedPhotos, session?.additionalSelectedPhotoIndices, needed, selected.length]);
 
-  const chosen = selected.map(i => session?.capturedPhotos?.[i]).filter(Boolean) as { raw: string; display: string }[];
-  const chosenDisplayUrls = chosen.map(p => p.display);
-  const allDisplayUrls = (session?.capturedPhotos ?? []).map(p => p.display);
+  const captured = session?.capturedPhotos ?? [];
+  const chosen = selected.map(i => captured[i]).filter(Boolean);
 
   function toggle(i: number) {
     const next = selected.includes(i) 
@@ -58,8 +57,8 @@ export default function AdditionalPreview() {
   return (
     <KioskStage>
       <h1 className="preview-heading">PREVIEW ADDITIONAL FRAME</h1>
-      <PreviewComposer frame={frame} photoUrls={chosenDisplayUrls} background={background} />
-      <PhotoResultStrip photos={allDisplayUrls} selectedIndices={selected} onTogglePhoto={toggle} />
+      <PreviewComposer frame={frame} photoUrls={chosen} background={background} />
+      <PhotoResultStrip photos={captured} selectedIndices={selected} onTogglePhoto={toggle} />
       <KioskButton className="preview-next" onClick={next} disabled={!isReady}>
         NEXT
       </KioskButton>

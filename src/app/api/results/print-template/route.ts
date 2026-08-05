@@ -48,7 +48,9 @@ export async function POST(request: Request) {
       sessionId: body.sessionId,
       finalImageUrl: typeof body.finalImageUrl === "string" ? body.finalImageUrl : undefined,
       capturedPhotos: Array.isArray(body.capturedPhotos)
-        ? body.capturedPhotos.filter((photoUrl): photoUrl is string => typeof photoUrl === "string")
+        ? body.capturedPhotos
+            .map((p: any) => (typeof p === 'object' && p !== null && p.raw ? p.raw : p))
+            .filter((photoUrl): photoUrl is string => typeof photoUrl === "string" && photoUrl.length > 0)
         : undefined,
       selectedFrameId: typeof body.selectedFrameId === "string" ? body.selectedFrameId : undefined,
       selectedBackgroundId:

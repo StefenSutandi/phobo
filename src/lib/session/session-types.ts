@@ -21,6 +21,13 @@ export type StickerPlacement = {
   zIndex: number;
 };
 
+export type CapturedPhoto = {
+  raw: string;
+  display: string;
+  width?: number;
+  height?: number;
+};
+
 export type KioskSession = {
   sessionId: string;
   selectedPackageId?: string;
@@ -38,7 +45,7 @@ export type KioskSession = {
   paymentAmount?: number;
   selectedFrameId?: string;
   selectedBackgroundId?: string;
-  capturedPhotos: { raw: string; display: string }[];
+  capturedPhotos: CapturedPhoto[];
   selectedPhotoIndices: number[];
   additionalSelectedPhotoIndices?: number[];
   selectedStickerId?: string;
@@ -57,3 +64,28 @@ export type KioskSession = {
   additionalPrintImageUrl?: string;
 };
 
+export function getPhotoRawUrl(photo: CapturedPhoto | string | null | undefined): string {
+  if (!photo) return "";
+  if (typeof photo === "string") return photo;
+  if (typeof photo === "object" && photo !== null) {
+    if (typeof photo.raw === "string" && photo.raw.trim().length > 0) return photo.raw;
+    if (typeof photo.display === "string" && photo.display.trim().length > 0) return photo.display;
+  }
+  return "";
+}
+
+export function getPhotoDisplayUrl(photo: CapturedPhoto | string | null | undefined): string {
+  if (!photo) return "";
+  if (typeof photo === "string") return photo;
+  if (typeof photo === "object" && photo !== null) {
+    if (typeof photo.display === "string" && photo.display.trim().length > 0) return photo.display;
+    if (typeof photo.raw === "string" && photo.raw.trim().length > 0) return photo.raw;
+  }
+  return "";
+}
+
+export function isValidImgSrc(src: unknown): src is string {
+  if (typeof src !== "string" || !src) return false;
+  if (src === "[object Object]" || src === "undefined" || src === "null") return false;
+  return src.startsWith("data:image/") || src.startsWith("/results/") || src.startsWith("http://") || src.startsWith("https://") || src.startsWith("/");
+}

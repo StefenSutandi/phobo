@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getPackageById } from "@/lib/phobo-data";
-import type { KioskSession, PaymentStatus, PrintStatus, GreenScreenTuning, StickerPlacement } from "./session-types";
+import type { KioskSession, PaymentStatus, PrintStatus, GreenScreenTuning, StickerPlacement, CapturedPhoto } from "./session-types";
 
 const KEY = "phobo.activeSession";
 const tuning: GreenScreenTuning = { applyChromaKey: true, greenMin: 70, greenTolerance: 35, spillReduction: 30, edgeSoftness: 2 };
@@ -14,7 +14,7 @@ function update(current: KioskSession | null, patch: Partial<KioskSession>) { re
 type Store = {
   session: KioskSession | null; hasHydrated: boolean; createNewSession: () => KioskSession; resetSession: () => void;
   selectPackage: (id: string) => void; setPaymentStatus: (s: PaymentStatus) => void; selectFrame: (id: string) => void;
-  selectBackground: (id: string) => void; addCapturedPhoto: (photo: { raw: string; display: string }) => void; clearCapturedPhotos: () => void;
+  selectBackground: (id: string) => void; addCapturedPhoto: (photo: CapturedPhoto | string) => void; clearCapturedPhotos: () => void;
   selectPhotos: (indices: number[]) => void; selectSticker: (id: string) => void; clearFinalResult: () => void;
   addSticker: (sticker: Omit<StickerPlacement, "id">) => void;
   updateSticker: (id: string, sticker: Partial<StickerPlacement>) => void;
@@ -32,7 +32,19 @@ type Store = {
 const Context = createContext<Store | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<KioskSession | null>(null); const [hasHydrated, setHydrated] = useState(false);
-  useEffect(() => { const saved = localStorage.getItem(KEY); if (saved) try { const parsed = JSON.parse(saved) as KioskSession; setSession({ ...parsed, selectedPhotoIndices: parsed.selectedPhotoIndices ?? [] }); } catch { localStorage.removeItem(KEY); } setHydrated(true); }, []);
+  useEffect(() => {
+    const saved = localStorage.getItem(KEY);
+    if (saved) try {
+      const parsed = JSON.parse(saved) as any;
+      const normalizedPhotos: CapturedPhoto[] = Array.isArray(parsed.capturedPhotos)
+        ? parsed.capturedPhotos.map((p: any) => typeof p === 'string' ? { raw: p, display: p } : { raw: p?.raw || "", display: p?.display || p?.raw || "" }).filter((p: CapturedPhoto) => p.raw || p.display)
+        : [];
+      setSession({ ...parsed, capturedPhotos: normalizedPhotos, selectedPhotoIndices: parsed.selectedPhotoIndices ?? [] });
+    } catch {
+      localStorage.removeItem(KEY);
+    }
+    setHydrated(true);
+  }, []);
   useEffect(() => { if (!hasHydrated) return; if (session) localStorage.setItem(KEY, JSON.stringify(session)); else localStorage.removeItem(KEY); }, [hasHydrated, session]);
   const createNewSession = useCallback(() => { const s = fresh(); setSession(s); return s; }, []);
   const resetSession = useCallback(() => setSession(null), []);
@@ -42,7 +54,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const setPaymentData = useCallback((data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number }) => patch(data), [patch]);
   const selectFrame = useCallback((selectedFrameId: string) => patch({ selectedFrameId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const selectBackground = useCallback((selectedBackgroundId: string) => patch({ selectedBackgroundId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
-  const addCapturedPhoto = useCallback((photo: { raw: string; display: string }) => setSession(s => { const active = s ?? fresh(); return active.capturedPhotos.length >= (active.maxShots ?? 8) ? active : update(active, { capturedPhotos: [...active.capturedPhotos, photo], finalImageUrl: undefined, printImageUrl: undefined }); }), []);
+  const addCapturedPhoto = useCallback((photo: CapturedPhoto | string) => setSession(s => {
+    const active = s ?? fresh();
+    const photoObj: CapturedPhoto = typeof photo === 'string' ? { raw: photo, display: photo } : { raw: photo.raw || photo.display, display: photo.display || photo.raw };
+    return active.capturedPhotos.length >= (active.maxShots ?? 8) ? active : update(active, { capturedPhotos: [...active.capturedPhotos, photoObj], finalImageUrl: undefined, printImageUrl: undefined });
+  }), []);
   const clearCapturedPhotos = useCallback(() => patch({ capturedPhotos: [], selectedPhotoIndices: [], finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const selectPhotos = useCallback((selectedPhotoIndices: number[]) => patch({ selectedPhotoIndices, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const selectSticker = useCallback((selectedStickerId: string) => patch({ selectedStickerId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
