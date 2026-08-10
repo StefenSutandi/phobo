@@ -5,7 +5,7 @@ import { capturePhoto } from "@/lib/hardware/camera-adapter";
 import { captureDccPhoto } from "@/lib/camera/digicamcontrol-adapter";
 import { getPhoboEnv } from "@/lib/config/phobo-env";
 import { getBackgroundById } from "@/lib/phobo-data";
-import { loadImage, bufferToDataUrl } from "@/lib/image-processing/load-image";
+import { loadImage } from "@/lib/image-processing/load-image";
 import { applyChromaKeyIfEnabled } from "@/lib/image-processing/chroma-key";
 
 export const runtime = "nodejs";
@@ -13,6 +13,8 @@ export const runtime = "nodejs";
 type CaptureRequest = {
   sessionId?: unknown;
   shotIndex?: unknown;
+  count?: unknown;
+  backgroundId?: unknown;
   selectedBackgroundId?: unknown;
   greenScreenTuning?: unknown;
 };
@@ -39,7 +41,17 @@ export async function POST(request: Request) {
   const env = getPhoboEnv();
 
   if (env.cameraCaptureMode === "digicamcontrol") {
-    const shotIndex = typeof body.shotIndex === "number" ? body.shotIndex : undefined;
+    const shotIndex = typeof body.shotIndex === "number" 
+      ? body.shotIndex 
+      : typeof body.count === "number" 
+        ? body.count 
+        : undefined;
+
+    const bgId = typeof body.backgroundId === "string"
+      ? body.backgroundId
+      : typeof body.selectedBackgroundId === "string"
+        ? body.selectedBackgroundId
+        : "background-01";
     
     // Execute real DSLR tethered capture via digiCamControl
     const dccResult = await captureDccPhoto({
@@ -62,7 +74,6 @@ export async function POST(request: Request) {
     let displayUrl = dccResult.relativeUrl;
 
     try {
-      const bgId = typeof body.selectedBackgroundId === "string" ? body.selectedBackgroundId : "background-01";
       const bgObj = getBackgroundById(bgId);
       const options = body.greenScreenTuning && typeof body.greenScreenTuning === "object" ? (body.greenScreenTuning as any) : {};
 
