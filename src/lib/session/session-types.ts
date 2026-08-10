@@ -1,4 +1,4 @@
-export type PaymentStatus = "idle" | "pending" | "confirmed" | "failed" | "timeout";
+export type PaymentStatus = "idle" | "pending" | "confirmed" | "failed" | "timeout" | "cancelled" | "expired";
 
 export type PrintStatus = "idle" | "queued" | "printed" | "failed";
 
@@ -62,6 +62,11 @@ export type KioskSession = {
   addPrintPaymentRedirectUrl?: string;
   addPrintPaymentStatus?: "unpaid" | "pending" | "paid" | "failed";
   additionalPrintImageUrl?: string;
+  paymentMode?: "midtrans" | "operator" | "mock";
+  payableAmount?: number;
+  uniqueCode?: number;
+  addPrintPayableAmount?: number;
+  addPrintUniqueCode?: number;
 };
 
 export function getPhotoRawUrl(photo: CapturedPhoto | string | null | undefined): string {

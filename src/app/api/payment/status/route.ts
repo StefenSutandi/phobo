@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPaymentStatus } from "@/lib/payment/status-store";
+import { getPhoboEnv } from "@/lib/config/phobo-env";
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "Missing orderId" }, { status: 400 });
   }
 
-  const status = getPaymentStatus(orderId) || "pending";
+  const env = getPhoboEnv();
+  const status = await getPaymentStatus(orderId);
 
-  return NextResponse.json({ ok: true, status });
+  return NextResponse.json({
+    ok: true,
+    provider: env.paymentProvider,
+    orderId,
+    status,
+  });
 }

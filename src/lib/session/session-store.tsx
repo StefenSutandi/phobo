@@ -22,11 +22,11 @@ type Store = {
   clearStickers: () => void;
   setFinalImageUrl: (url: string) => void; setPrintImageUrl: (url: string) => void; setDriveUrl: (url: string) => void;
   setPrintStatus: (s: PrintStatus) => void; setGreenScreenTuning: (t: GreenScreenTuning) => void;
-  setPaymentData: (data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number }) => void;
+  setPaymentData: (data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number; paymentMode?: "midtrans" | "operator" | "mock"; payableAmount?: number; uniqueCode?: number }) => void;
   selectAdditionalFrame: (id: string) => void;
   setAdditionalSelectedPhotoIndices: (indices: number[]) => void;
   setAddPrintPaymentStatus: (s: "unpaid" | "pending" | "paid" | "failed") => void;
-  setAddPrintPaymentData: (data: { addPrintPaymentOrderId?: string; addPrintPaymentRedirectUrl?: string }) => void;
+  setAddPrintPaymentData: (data: { addPrintPaymentOrderId?: string; addPrintPaymentRedirectUrl?: string; addPrintPayableAmount?: number; addPrintUniqueCode?: number }) => void;
   setAdditionalPrintImageUrl: (url: string) => void;
 };
 const Context = createContext<Store | null>(null);

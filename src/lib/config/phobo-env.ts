@@ -27,5 +27,10 @@ export function getPhoboEnv() {
     publicBaseUrl: process.env.PHOBO_PUBLIC_BASE_URL || "http://localhost:3000",
     debugLogs: process.env.PHOBO_DEBUG_LOGS === "true",
     stickersEnabled: process.env.PHOBO_STICKERS_ENABLED !== "false", // Default to true
+    paymentProvider: (process.env.PHOBO_PAYMENT_PROVIDER === "midtrans" || process.env.PHOBO_PAYMENT_PROVIDER === "operator" || process.env.PHOBO_PAYMENT_PROVIDER === "mock")
+      ? process.env.PHOBO_PAYMENT_PROVIDER
+      : (process.env.MIDTRANS_ENABLED === "true" ? "midtrans" : (process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" ? "mock" : "operator")),
+    operatorQrisImage: process.env.PHOBO_OPERATOR_QRIS_IMAGE || "/assets/payment/qris.png",
+    operatorPaymentEnabled: process.env.PHOBO_OPERATOR_PAYMENT_ENABLED !== "false",
   };
 }

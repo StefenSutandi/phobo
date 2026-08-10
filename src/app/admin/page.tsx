@@ -347,9 +347,14 @@ export default function Admin() {
           <span className="mock-badge">MOCK</span>
           <h1>Admin Dashboard</h1>
         </div>
-        <Link href="/" className="admin-button">
-          Exit Admin
-        </Link>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <Link href="/admin/payments" className="admin-button" style={{ backgroundColor: '#2ecc71', color: '#fff' }}>
+            💳 Operator Payments
+          </Link>
+          <Link href="/" className="admin-button">
+            Exit Admin
+          </Link>
+        </div>
       </div>
 
       <section className="admin-card">
