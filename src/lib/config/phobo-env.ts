@@ -10,6 +10,8 @@ export function getPhoboEnv() {
     cameraMode: (process.env.PHOBO_CAMERA_MODE === "command" || process.env.PHOBO_CAMERA_MODE === "eos-watch" || process.env.PHOBO_CAMERA_MODE === "browser-video")
       ? process.env.PHOBO_CAMERA_MODE
       : "mock",
+    cameraCaptureMode: process.env.PHOBO_CAMERA_CAPTURE_MODE === "digicamcontrol" ? "digicamcontrol" : (process.env.PHOBO_CAMERA_CAPTURE_MODE || "fallback"),
+    digicamBaseUrl: process.env.PHOBO_DIGICAM_BASE_URL || "http://127.0.0.1:5513",
     cameraCaptureDir: process.env.PHOBO_CAMERA_CAPTURE_DIR || "C:\\PhoboCameraCaptures",
     eosWatchDir: process.env.PHOBO_EOS_WATCH_DIR || "C:\\PhoboCameraIncoming",
     eosAllowedExtensions: (process.env.PHOBO_EOS_ALLOWED_EXTENSIONS || ".jpg,.jpeg,.png").split(",").map(ext => ext.trim().toLowerCase()),

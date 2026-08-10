@@ -24,12 +24,16 @@ export default function Camera() {
   const [message, setMessage] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
   const [mode, setMode] = useState("mock");
+  const [captureMode, setCaptureMode] = useState("fallback");
   const [countdown, setCountdown] = useState<number | string | null>(null);
 
   useEffect(() => {
     fetch("/api/diagnostics")
       .then((response) => response.json())
-      .then((data) => setMode(data.env?.cameraMode || "mock"))
+      .then((data) => {
+        setMode(data.env?.cameraMode || "mock");
+        setCaptureMode(data.env?.cameraCaptureMode || "fallback");
+      })
       .catch(() => {});
   }, []);
 
@@ -45,8 +49,8 @@ export default function Camera() {
   const maxReached = count >= max;
   shotCount.current = count;
 
-  async function shoot() {
-    if (!session || captureLock.current || shotCount.current >= max) return;
+  async function handleShoot() {
+    if (!session || isCapturing || captureLock.current || maxReached) return;
 
     captureLock.current = true;
     setIsCapturing(true);
@@ -59,12 +63,24 @@ export default function Camera() {
     await new Promise(res => setTimeout(res, 500));
     setCountdown(null);
 
-    setMessage("");
+    setMessage("MENGAMBIL FOTO...");
 
     try {
       let response: Response;
 
-      if (mode === "browser-video") {
+      if (captureMode === "digicamcontrol") {
+        // Real Canon DSLR capture via digiCamControl
+        response = await fetch("/api/camera/capture", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: session.sessionId,
+            shotIndex: count + 1,
+            selectedBackgroundId: session.selectedBackgroundId,
+            greenScreenTuning: session.greenScreenTuning,
+          }),
+        });
+      } else if (mode === "browser-video") {
         if (live.current?.getStatus() !== "active") throw new Error("START LIVE VIEW DULU");
         const frame = live.current.captureFrame();
         response = await fetch("/api/camera/browser-frame", {
@@ -91,7 +107,7 @@ export default function Camera() {
       addCapturedPhoto({ raw: url, display: displayUrl as string, backgroundId: session?.selectedBackgroundId || "background-01" });
       setMessage(`FOTO ${shotCount.current} TERSIMPAN`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "CAMERA CAPTURE GAGAL");
+      setMessage(error instanceof Error ? error.message : "Foto gagal diambil. Silakan coba lagi.");
     } finally {
       captureLock.current = false;
       setIsCapturing(false);
@@ -145,8 +161,8 @@ export default function Camera() {
         </div>
         <div className="camera-action-buttons">
           {!maxReached && (
-            <KioskButton onClick={shoot} disabled={isCapturing} className="camera-shoot">
-              {isCapturing ? "..." : "SHOOT"}
+            <KioskButton onClick={handleShoot} disabled={isCapturing} className="camera-shoot">
+              {isCapturing ? "MENGAMBIL FOTO..." : "SHOOT"}
             </KioskButton>
           )}
           {count >= 1 && (

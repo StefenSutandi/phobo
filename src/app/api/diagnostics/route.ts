@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { getPhoboEnv } from "@/lib/config/phobo-env";
+import { checkDccHealth } from "@/lib/camera/digicamcontrol-adapter";
 
-export function GET() {
+export const runtime = "nodejs";
+
+export async function GET() {
   const env = getPhoboEnv();
+  const dccHealth = await checkDccHealth();
 
   return NextResponse.json({
     ok: true,
@@ -10,6 +14,11 @@ export function GET() {
     timestamp: new Date().toISOString(),
     env: {
       cameraMode: env.cameraMode,
+      cameraCaptureMode: env.cameraCaptureMode,
+      digicamBaseUrl: env.digicamBaseUrl,
+      dccReachable: dccHealth.reachable,
+      dccLastCaptured: dccHealth.lastCaptured,
+      dccError: dccHealth.error,
       cameraCaptureDir: env.cameraCaptureDir,
       eosWatchDir: env.eosWatchDir,
       eosAllowedExtensions: env.eosAllowedExtensions,
