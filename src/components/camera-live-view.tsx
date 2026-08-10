@@ -9,6 +9,9 @@ export type CameraLiveViewHandle = {
   stopLiveView: () => void;
   captureFrame: () => { rawImageDataUrl: string; displayImageDataUrl: string; width: number; height: number };
   getStatus: () => "inactive" | "starting" | "active" | "failed";
+  freezeFrame: () => string | null;
+  isReady: () => boolean;
+  restartLiveView: () => Promise<void>;
 };
 
 export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boolean; selectedBackgroundUrl?: string; autoStart?: boolean; tuning?: GreenScreenTuning }>(({ compact = false, selectedBackgroundUrl, autoStart = false, tuning }, ref) => {
@@ -46,9 +49,48 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
     setVideoDimensions("");
   };
 
+  const isReady = () => {
+    const video = videoRef.current;
+    return Boolean(
+      status === "active" &&
+      video &&
+      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+      video.videoWidth > 0 &&
+      video.videoHeight > 0
+    );
+  };
+
+  const freezeFrame = (): string | null => {
+    try {
+      const canvas = canvasRef.current;
+      if (canvas && canvas.width > 0 && canvas.height > 0) {
+        return canvas.toDataURL("image/jpeg", 0.9);
+      }
+      const video = videoRef.current;
+      if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = video.videoWidth;
+        tempCanvas.height = video.videoHeight;
+        const ctx = tempCanvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(video, 0, 0);
+          return tempCanvas.toDataURL("image/jpeg", 0.9);
+        }
+      }
+    } catch (err) {
+      console.warn("[LiveView] freezeFrame failed:", err);
+    }
+    return null;
+  };
+
   useImperativeHandle(ref, () => ({
     stopLiveView,
     getStatus: () => status,
+    isReady,
+    freezeFrame,
+    restartLiveView: async () => {
+      await startLiveView(false);
+    },
     captureFrame: () => {
       const video = videoRef.current;
       const videoReady = video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0;

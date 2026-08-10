@@ -26,6 +26,7 @@ export default function Camera() {
   const [mode, setMode] = useState("mock");
   const [captureMode, setCaptureMode] = useState("fallback");
   const [countdown, setCountdown] = useState<number | string | null>(null);
+  const [freezeFrameUrl, setFreezeFrameUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/diagnostics")
@@ -63,12 +64,25 @@ export default function Camera() {
     await new Promise(res => setTimeout(res, 500));
     setCountdown(null);
 
+    // 1. Freeze last good browser-video frame to hide Canon HDMI shutter interruption
+    const snapshot = live.current?.freezeFrame() || null;
+    if (snapshot) {
+      if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_PHOBO_DEBUG === "true") {
+        console.log("[Camera Preview] freeze frame created");
+      }
+      setFreezeFrameUrl(snapshot);
+    }
+
     setMessage("MENGAMBIL FOTO...");
 
     try {
       let response: Response;
 
       if (captureMode === "digicamcontrol") {
+        if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_PHOBO_DEBUG === "true") {
+          console.log("[Camera Preview] DSLR shutter started");
+        }
+
         // Real Canon DSLR capture via digiCamControl
         response = await fetch("/api/camera/capture", {
           method: "POST",
@@ -102,6 +116,42 @@ export default function Camera() {
       const displayUrl = data.displayPhotoUrl || url;
       if (!response.ok || !data.ok || !url) throw new Error(data.error || "CAMERA CAPTURE GAGAL");
 
+      if (captureMode === "digicamcontrol") {
+        if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_PHOBO_DEBUG === "true") {
+          console.log("[Camera Preview] DSLR capture completed");
+          console.log("[Camera Preview] waiting for HDMI recovery");
+        }
+
+        // 2. Short recovery grace period for Canon HDMI stream after shutter release
+        const recoveryStartTime = Date.now();
+        await new Promise(r => setTimeout(r, 800));
+
+        // 3. Poll to verify video stream readiness
+        let recovered = false;
+        const pollStart = Date.now();
+
+        while (Date.now() - pollStart < 2000) {
+          if (live.current?.isReady()) {
+            recovered = true;
+            break;
+          }
+          await new Promise(r => setTimeout(r, 200));
+        }
+
+        if (recovered) {
+          const elapsed = Date.now() - recoveryStartTime;
+          if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_PHOBO_DEBUG === "true") {
+            console.log(`[Camera Preview] video recovered after ${elapsed} ms`);
+          }
+        } else {
+          if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_PHOBO_DEBUG === "true") {
+            console.log("[Camera Preview] video did not recover; restarting browser stream");
+          }
+          await live.current?.restartLiveView();
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+
       if (shotCount.current >= max) return;
       shotCount.current += 1;
       addCapturedPhoto({ raw: url, display: displayUrl as string, backgroundId: session?.selectedBackgroundId || "background-01" });
@@ -111,6 +161,7 @@ export default function Camera() {
     } finally {
       captureLock.current = false;
       setIsCapturing(false);
+      setFreezeFrameUrl(null);
     }
   }
 
@@ -126,6 +177,44 @@ export default function Camera() {
         selectedBackgroundUrl={backgrounds.find(bg => bg.id === session?.selectedBackgroundId)?.imageUrl}
         tuning={session?.greenScreenTuning}
       />
+      {freezeFrameUrl && (
+        <div
+          style={{
+            position: "absolute",
+            top: "7.73%",
+            left: "3.47%",
+            width: "72%",
+            height: "70%",
+            zIndex: 90,
+            borderRadius: "16px",
+            overflow: "hidden",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.6)",
+            background: "#000",
+          }}
+        >
+          <img
+            src={freezeFrameUrl}
+            alt=""
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.3)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#ffffff",
+              fontSize: "2.2rem",
+              fontWeight: "bold",
+              textShadow: "0 4px 12px rgba(0,0,0,0.8)",
+            }}
+          >
+            MENGAMBIL FOTO...
+          </div>
+        </div>
+      )}
       {countdown !== null && (
         <div style={{
           position: "absolute",
