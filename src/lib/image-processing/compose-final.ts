@@ -8,45 +8,104 @@ import { getBackgroundById, getFrameById } from "@/lib/phobo-data";
 export const FINAL_SCREEN_WIDTH_PX = 1200;
 export const FINAL_SCREEN_HEIGHT_PX = 1800;
 
-export type ComposeFinalRequest = { sessionId:string; capturedPhotos:string[]; selectedFrameId:string; selectedBackgroundId:string; stickers?:any[]; options?:ChromaKeyOptions };
-export type ComposedFinalImages = { finalScreenPng:Buffer; processedPhotoDataUrls:string[]; warnings:string[] };
+export type PhotoInput = {
+  raw: string;
+  display?: string;
+  backgroundId?: string;
+};
 
-export async function composeFinalImages({ capturedPhotos, selectedFrameId, selectedBackgroundId, stickers=[], options={} }:ComposeFinalRequest):Promise<ComposedFinalImages> {
-  const warnings:string[]=[];
-  const frame=getFrameById(selectedFrameId);
-  const background=getBackgroundById(selectedBackgroundId);
-  const template=await normalizeImageBuffer(frame.templateUrl,{width:frame.width,height:frame.height,fit:"fill"});
-  const processedPhotos=await Promise.all(capturedPhotos.slice(0,frame.requiredPhotos).map(async photoUrl=>{
-    try { const loaded=await loadImage(photoUrl); return await applyChromaKeyIfEnabled(loaded.buffer,{color:background.color,imageUrl:background.imageUrl},options); }
-    catch(error) { warnings.push(`Failed to process photo ${photoUrl}: ${error instanceof Error?error.message:String(error)}`); return null; }
-  }));
+export type SlotAssignmentInput = {
+  slotIndex: number;
+  photoRaw: string;
+  backgroundId?: string;
+};
+
+export type ComposeFinalRequest = { 
+  sessionId: string; 
+  capturedPhotos: (PhotoInput | string)[]; 
+  selectedFrameId: string; 
+  selectedBackgroundId: string; 
+  slotAssignments?: SlotAssignmentInput[];
+  stickers?: any[]; 
+  options?: ChromaKeyOptions 
+};
+
+export type ComposedFinalImages = { finalScreenPng: Buffer; processedPhotoDataUrls: string[]; warnings: string[] };
+
+export async function composeFinalImages({ capturedPhotos, selectedFrameId, selectedBackgroundId, slotAssignments, stickers = [], options = {} }: ComposeFinalRequest): Promise<ComposedFinalImages> {
+  const warnings: string[] = [];
+  const frame = getFrameById(selectedFrameId);
+  const globalBg = getBackgroundById(selectedBackgroundId);
+  const template = await normalizeImageBuffer(frame.templateUrl, { width: frame.width, height: frame.height, fit: "fill" });
+  
+  // Normalize photo array
+  const normalizedPhotos: PhotoInput[] = (capturedPhotos || []).map((item) => {
+    if (typeof item === "string") {
+      return { raw: item, backgroundId: selectedBackgroundId };
+    }
+    return {
+      raw: item.raw || item.display || "",
+      display: item.display || item.raw,
+      backgroundId: item.backgroundId || selectedBackgroundId,
+    };
+  }).filter((p) => Boolean(p.raw));
+
   const { computePhotoFit } = await import("./fit-math");
   const composites = [];
+  const processedPhotoBuffers: Buffer[] = [];
   
   for (let index = 0; index < frame.photoSlots.length; index++) {
     const photoSlot = frame.photoSlots[index];
-    const source = processedPhotos[index % Math.max(1, processedPhotos.length)];
-    if (!source) continue;
     
+    // Resolve photo assignment for this slot
+    let slotRaw = "";
+    let slotBgId = selectedBackgroundId;
+
+    if (Array.isArray(slotAssignments) && slotAssignments.length > index && slotAssignments[index]) {
+      const sa = slotAssignments[index];
+      slotRaw = sa.photoRaw;
+      slotBgId = sa.backgroundId || selectedBackgroundId;
+    } else if (normalizedPhotos.length > 0) {
+      const photoItem = normalizedPhotos[index % normalizedPhotos.length];
+      slotRaw = photoItem.raw;
+      slotBgId = photoItem.backgroundId || selectedBackgroundId;
+    }
+
+    if (!slotRaw) {
+      warnings.push(`Slot ${index} has no photo assigned`);
+      continue;
+    }
+
+    const slotBg = getBackgroundById(slotBgId) || globalBg;
+
     try {
-      // 1. Draw background into the slot
+      // 1. Process chroma key for this specific photo with its specific background
+      const loaded = await loadImage(slotRaw);
+      const transparentSubject = await applyChromaKeyIfEnabled(
+        loaded.buffer,
+        { color: slotBg.color, imageUrl: slotBg.imageUrl },
+        options
+      );
+      processedPhotoBuffers.push(transparentSubject);
+
+      // 2. Draw this photo's background into the slot
       let bgBuffer;
-      if (background.imageUrl) {
-        bgBuffer = await normalizeImageBuffer(background.imageUrl, { width: photoSlot.width, height: photoSlot.height, fit: "cover" });
+      if (slotBg.imageUrl) {
+        bgBuffer = await normalizeImageBuffer(slotBg.imageUrl, { width: photoSlot.width, height: photoSlot.height, fit: "cover" });
       } else {
-        const { r, g, b } = parseHexColor(background.color);
+        const { r, g, b } = parseHexColor(slotBg.color);
         bgBuffer = await sharp({ create: { width: photoSlot.width, height: photoSlot.height, channels: 4, background: { r, g, b, alpha: 1 } } }).png().toBuffer();
       }
       composites.push({ input: bgBuffer, left: photoSlot.x, top: photoSlot.y });
 
-      // 2. Draw transparent subject into the slot using computePhotoFit
-      const meta = await sharp(source).metadata();
+      // 3. Draw transparent subject into the slot using computePhotoFit
+      const meta = await sharp(transparentSubject).metadata();
       const sWidth = meta.width ?? 1;
       const sHeight = meta.height ?? 1;
       
       const fit = computePhotoFit(sWidth, sHeight, photoSlot.width, photoSlot.height, "smart-cover");
       
-      const extractedSubject = await sharp(source).extract({
+      const extractedSubject = await sharp(transparentSubject).extract({
         left: fit.sx,
         top: fit.sy,
         width: fit.sw,
@@ -89,8 +148,8 @@ export async function composeFinalImages({ capturedPhotos, selectedFrameId, sele
     }
   }
 
-  const finalScreenPng=await sharp({
-    create: { width: frame.width, height: frame.height, channels: 4, background: background.color }
+  const finalScreenPng = await sharp({
+    create: { width: frame.width, height: frame.height, channels: 4, background: globalBg.color }
   }).composite(composites).png().toBuffer();
-  return { finalScreenPng, processedPhotoDataUrls:await Promise.all(processedPhotos.filter((photo):photo is Buffer=>photo!==null).map(photo=>bufferToDataUrl(photo))), warnings };
+  return { finalScreenPng, processedPhotoDataUrls: await Promise.all(processedPhotoBuffers.map(photo => bufferToDataUrl(photo))), warnings };
 }

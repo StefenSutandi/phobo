@@ -88,7 +88,7 @@ export default function Camera() {
 
       if (shotCount.current >= max) return;
       shotCount.current += 1;
-      addCapturedPhoto({ raw: url, display: displayUrl as string });
+      addCapturedPhoto({ raw: url, display: displayUrl as string, backgroundId: session?.selectedBackgroundId || "background-01" });
       setMessage(`FOTO ${shotCount.current} TERSIMPAN`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "CAMERA CAPTURE GAGAL");

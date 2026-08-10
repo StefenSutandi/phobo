@@ -33,8 +33,19 @@ export async function POST(request: Request) {
     const additionalPrintPath = path.join(outputDirectory, "additional_print.jpg");
 
     const capturedPhotos = Array.isArray(body.capturedPhotos) 
-      ? body.capturedPhotos.map((p: any) => p.raw || p).filter((p: any) => typeof p === "string")
+      ? body.capturedPhotos.map((p: any) => {
+          if (typeof p === "object" && p !== null) {
+            return {
+              raw: typeof p.raw === "string" ? p.raw : p.display || "",
+              display: typeof p.display === "string" ? p.display : p.raw || "",
+              backgroundId: typeof p.backgroundId === "string" ? p.backgroundId : undefined,
+            };
+          }
+          return { raw: String(p) };
+        }).filter((p: any) => Boolean(p.raw))
       : [];
+
+    const slotAssignments = Array.isArray(body.slotAssignments) ? body.slotAssignments : undefined;
 
     const stickers = Array.isArray(body.stickers)
       ? body.stickers.map((s: any) => ({
@@ -50,6 +61,7 @@ export async function POST(request: Request) {
       capturedPhotos,
       selectedFrameId: body.additionalFrameId,
       selectedBackgroundId: body.selectedBackgroundId,
+      slotAssignments,
       stickers,
       options: parseOptions(body.options),
     });

@@ -24,6 +24,7 @@ export type StickerPlacement = {
 export type CapturedPhoto = {
   raw: string;
   display: string;
+  backgroundId?: string;
   width?: number;
   height?: number;
 };
@@ -47,7 +48,9 @@ export type KioskSession = {
   selectedBackgroundId?: string;
   capturedPhotos: CapturedPhoto[];
   selectedPhotoIndices: number[];
+  photoSlotAssignments?: (number | null)[];
   additionalSelectedPhotoIndices?: number[];
+  additionalPhotoSlotAssignments?: (number | null)[];
   selectedStickerId?: string;
   stickers: StickerPlacement[];
   finalImageUrl?: string;

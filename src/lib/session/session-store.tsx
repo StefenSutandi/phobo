@@ -15,7 +15,7 @@ type Store = {
   session: KioskSession | null; hasHydrated: boolean; createNewSession: () => KioskSession; resetSession: () => void;
   selectPackage: (id: string) => void; setPaymentStatus: (s: PaymentStatus) => void; selectFrame: (id: string) => void;
   selectBackground: (id: string) => void; addCapturedPhoto: (photo: CapturedPhoto | string) => void; clearCapturedPhotos: () => void;
-  selectPhotos: (indices: number[]) => void; selectSticker: (id: string) => void; clearFinalResult: () => void;
+  selectPhotos: (indices: number[]) => void; setPhotoSlotAssignments: (assignments: (number | null)[]) => void; selectSticker: (id: string) => void; clearFinalResult: () => void;
   addSticker: (sticker: Omit<StickerPlacement, "id">) => void;
   updateSticker: (id: string, sticker: Partial<StickerPlacement>) => void;
   removeSticker: (id: string) => void;
@@ -25,6 +25,7 @@ type Store = {
   setPaymentData: (data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number; paymentMode?: "midtrans" | "operator" | "mock"; payableAmount?: number; uniqueCode?: number }) => void;
   selectAdditionalFrame: (id: string) => void;
   setAdditionalSelectedPhotoIndices: (indices: number[]) => void;
+  setAdditionalPhotoSlotAssignments: (assignments: (number | null)[]) => void;
   setAddPrintPaymentStatus: (s: "unpaid" | "pending" | "paid" | "failed") => void;
   setAddPrintPaymentData: (data: { addPrintPaymentOrderId?: string; addPrintPaymentRedirectUrl?: string; addPrintPayableAmount?: number; addPrintUniqueCode?: number }) => void;
   setAdditionalPrintImageUrl: (url: string) => void;
@@ -36,10 +37,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem(KEY);
     if (saved) try {
       const parsed = JSON.parse(saved) as any;
+      const defaultBg = parsed.selectedBackgroundId || "background-01";
       const normalizedPhotos: CapturedPhoto[] = Array.isArray(parsed.capturedPhotos)
-        ? parsed.capturedPhotos.map((p: any) => typeof p === 'string' ? { raw: p, display: p } : { raw: p?.raw || "", display: p?.display || p?.raw || "" }).filter((p: CapturedPhoto) => p.raw || p.display)
+        ? parsed.capturedPhotos.map((p: any) => typeof p === 'string' 
+            ? { raw: p, display: p, backgroundId: defaultBg } 
+            : { raw: p?.raw || "", display: p?.display || p?.raw || "", backgroundId: p?.backgroundId || defaultBg }
+          ).filter((p: CapturedPhoto) => p.raw || p.display)
         : [];
-      setSession({ ...parsed, capturedPhotos: normalizedPhotos, selectedPhotoIndices: parsed.selectedPhotoIndices ?? [] });
+      
+      const photoSlotAssignments = parsed.photoSlotAssignments ?? (Array.isArray(parsed.selectedPhotoIndices) ? parsed.selectedPhotoIndices : undefined);
+      const additionalPhotoSlotAssignments = parsed.additionalPhotoSlotAssignments ?? (Array.isArray(parsed.additionalSelectedPhotoIndices) ? parsed.additionalSelectedPhotoIndices : undefined);
+      
+      setSession({ ...parsed, capturedPhotos: normalizedPhotos, selectedPhotoIndices: parsed.selectedPhotoIndices ?? [], photoSlotAssignments, additionalPhotoSlotAssignments });
     } catch {
       localStorage.removeItem(KEY);
     }
@@ -52,15 +61,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const patch = useCallback((value: Partial<KioskSession>) => setSession(s => update(s, value)), []);
   const setPaymentStatus = useCallback((paymentStatus: PaymentStatus) => patch({ paymentStatus }), [patch]);
   const setPaymentData = useCallback((data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number }) => patch(data), [patch]);
-  const selectFrame = useCallback((selectedFrameId: string) => patch({ selectedFrameId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
+  const selectFrame = useCallback((selectedFrameId: string) => patch({ selectedFrameId, finalImageUrl: undefined, printImageUrl: undefined, photoSlotAssignments: undefined }), [patch]);
   const selectBackground = useCallback((selectedBackgroundId: string) => patch({ selectedBackgroundId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const addCapturedPhoto = useCallback((photo: CapturedPhoto | string) => setSession(s => {
     const active = s ?? fresh();
-    const photoObj: CapturedPhoto = typeof photo === 'string' ? { raw: photo, display: photo } : { raw: photo.raw || photo.display, display: photo.display || photo.raw };
+    const activeBg = active.selectedBackgroundId || "background-01";
+    const photoObj: CapturedPhoto = typeof photo === 'string' 
+      ? { raw: photo, display: photo, backgroundId: activeBg } 
+      : { raw: photo.raw || photo.display, display: photo.display || photo.raw, backgroundId: photo.backgroundId || activeBg };
     return active.capturedPhotos.length >= (active.maxShots ?? 8) ? active : update(active, { capturedPhotos: [...active.capturedPhotos, photoObj], finalImageUrl: undefined, printImageUrl: undefined });
   }), []);
-  const clearCapturedPhotos = useCallback(() => patch({ capturedPhotos: [], selectedPhotoIndices: [], finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
+  const clearCapturedPhotos = useCallback(() => patch({ capturedPhotos: [], selectedPhotoIndices: [], photoSlotAssignments: undefined, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const selectPhotos = useCallback((selectedPhotoIndices: number[]) => patch({ selectedPhotoIndices, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
+  const setPhotoSlotAssignments = useCallback((photoSlotAssignments: (number | null)[]) => patch({ photoSlotAssignments, selectedPhotoIndices: photoSlotAssignments.filter((x): x is number => x !== null && x !== undefined), finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const selectSticker = useCallback((selectedStickerId: string) => patch({ selectedStickerId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
   const clearFinalResult = useCallback(() => patch({ finalImageUrl: undefined, printImageUrl: undefined, printStatus: "idle" }), [patch]);
   const addSticker = useCallback((sticker: Omit<StickerPlacement, "id">) => setSession(s => { const active = s ?? fresh(); return update(active, { stickers: [...active.stickers, { ...sticker, id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2)}` }] }); }), []);
@@ -73,13 +86,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const setPrintStatus = useCallback((printStatus: PrintStatus) => patch({ printStatus }), [patch]);
   const setGreenScreenTuning = useCallback((greenScreenTuning: GreenScreenTuning) => patch({ greenScreenTuning }), [patch]);
   
-  const selectAdditionalFrame = useCallback((additionalFrameId: string) => patch({ additionalFrameId, additionalPrintImageUrl: undefined, addPrintPaymentOrderId: undefined, addPrintPaymentRedirectUrl: undefined, additionalSelectedPhotoIndices: undefined }), [patch]);
+  const selectAdditionalFrame = useCallback((additionalFrameId: string) => patch({ additionalFrameId, additionalPrintImageUrl: undefined, addPrintPaymentOrderId: undefined, addPrintPaymentRedirectUrl: undefined, additionalSelectedPhotoIndices: undefined, additionalPhotoSlotAssignments: undefined }), [patch]);
   const setAdditionalSelectedPhotoIndices = useCallback((additionalSelectedPhotoIndices: number[]) => patch({ additionalSelectedPhotoIndices }), [patch]);
+  const setAdditionalPhotoSlotAssignments = useCallback((additionalPhotoSlotAssignments: (number | null)[]) => patch({ additionalPhotoSlotAssignments, additionalSelectedPhotoIndices: additionalPhotoSlotAssignments.filter((x): x is number => x !== null && x !== undefined) }), [patch]);
   const setAddPrintPaymentStatus = useCallback((addPrintPaymentStatus: "unpaid" | "pending" | "paid" | "failed") => patch({ addPrintPaymentStatus }), [patch]);
   const setAddPrintPaymentData = useCallback((data: { addPrintPaymentOrderId?: string; addPrintPaymentRedirectUrl?: string }) => patch(data), [patch]);
   const setAdditionalPrintImageUrl = useCallback((additionalPrintImageUrl: string) => patch({ additionalPrintImageUrl }), [patch]);
 
-  const value = useMemo(() => ({ session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData, selectAdditionalFrame, setAdditionalSelectedPhotoIndices, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, setPaymentData, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, selectAdditionalFrame, setAdditionalSelectedPhotoIndices, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl]);
+  const value = useMemo(() => ({ session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, setPhotoSlotAssignments, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData, selectAdditionalFrame, setAdditionalSelectedPhotoIndices, setAdditionalPhotoSlotAssignments, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, setPaymentData, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, setPhotoSlotAssignments, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, selectAdditionalFrame, setAdditionalSelectedPhotoIndices, setAdditionalPhotoSlotAssignments, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useSessionStore() { const value = useContext(Context); if (!value) throw new Error("useSessionStore must be used within SessionProvider"); return value; }

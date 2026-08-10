@@ -84,9 +84,20 @@ export async function POST(request: Request) {
     const env = getPhoboEnv();
     const stickersEnabled = env.stickersEnabled;
 
-    const capturedPhotos = (body.capturedPhotos as any[])
-      .map(p => typeof p === 'object' && p !== null && p.raw ? p.raw : p)
-      .filter((photoUrl): photoUrl is string => typeof photoUrl === "string" && photoUrl.length > 0);
+    const capturedPhotos = (body.capturedPhotos as any[]).map((p: any) => {
+      if (typeof p === "object" && p !== null) {
+        return {
+          raw: typeof p.raw === "string" ? p.raw : p.display || "",
+          display: typeof p.display === "string" ? p.display : p.raw || "",
+          backgroundId: typeof p.backgroundId === "string" ? p.backgroundId : undefined,
+        };
+      }
+      return { raw: String(p) };
+    }).filter((p) => Boolean(p.raw));
+
+    const slotAssignments = Array.isArray((body as any).slotAssignments)
+      ? (body as any).slotAssignments
+      : undefined;
 
     const outputDirectory = path.join(process.cwd(), "public", "results", safeSessionId);
     const finalScreenPath = path.join(outputDirectory, "final_screen.png");
@@ -105,6 +116,7 @@ export async function POST(request: Request) {
       capturedPhotos,
       selectedFrameId: body.selectedFrameId,
       selectedBackgroundId: body.selectedBackgroundId,
+      slotAssignments,
       stickers,
       options: body.options,
     });
@@ -138,6 +150,7 @@ export async function POST(request: Request) {
       capturedPhotos,
       selectedFrameId: body.selectedFrameId,
       selectedBackgroundId: body.selectedBackgroundId,
+      slotAssignments,
       stickers,
       options: parseOptions(body.options),
     });

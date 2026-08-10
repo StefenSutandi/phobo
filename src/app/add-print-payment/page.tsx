@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { KioskStage, QrScreen } from "@/components/kiosk";
 import { ResultQrCode } from "@/components/kiosk/ResultQrCode";
 import { useSessionStore } from "@/lib/session/session-store";
+import { getPhotoRawUrl } from "@/lib/session/session-types";
 
 export default function AddPrintPayment() {
   const router = useRouter(); 
@@ -112,18 +113,28 @@ export default function AddPrintPayment() {
       
       const composePrint = async () => {
         try {
-          const additionalPhotos = session.additionalSelectedPhotoIndices 
-            ? session.additionalSelectedPhotoIndices.map(i => session.capturedPhotos[i]).filter(Boolean)
-            : session.capturedPhotos;
+          const slotAssignments = Array.isArray(session.additionalPhotoSlotAssignments)
+            ? session.additionalPhotoSlotAssignments.map((photoIdx, slotIdx) => {
+                const photoObj = photoIdx !== null && photoIdx !== undefined ? session.capturedPhotos[photoIdx] : null;
+                return {
+                  slotIndex: slotIdx,
+                  photoRaw: getPhotoRawUrl(photoObj),
+                  backgroundId: (photoObj && typeof photoObj === "object" && photoObj.backgroundId)
+                    ? photoObj.backgroundId
+                    : (session.selectedBackgroundId || "background-01"),
+                };
+              })
+            : undefined;
 
           const r = await fetch("/api/results/compose-additional", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               sessionId: session.sessionId,
-              capturedPhotos: additionalPhotos,
+              capturedPhotos: session.capturedPhotos,
               additionalFrameId: session.additionalFrameId,
               selectedBackgroundId: session.selectedBackgroundId,
+              slotAssignments,
               stickers: session.stickers,
               options: session.greenScreenTuning,
             }),
