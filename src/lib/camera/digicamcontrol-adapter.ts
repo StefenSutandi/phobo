@@ -66,15 +66,17 @@ function parseLoopbackEndpoint(): { host: string; port: number } {
 }
 
 /**
- * Raw TCP HTTP client tailored specifically for digiCamControl's webserver.
+ * Raw TCP HTTP client tailored specifically for digiCamControl's webserver with IDLE-AFTER-DATA completion.
  * 
- * WHY RAW TCP IS REQUIRED:
- * digiCamControl v2.1.7's HTTP server sends malformed HTTP responses:
- * - Duplicate 'Content-Length' headers (causes Node http parser HPE_UNEXPECTED_CONTENT_LENGTH error)
- * - Response content length mismatch (causes Node fetch UND_ERR_RES_CONTENT_LENGTH_MISMATCH error)
+ * WHY THIS IMPLEMENTATION IS REQUIRED:
+ * 1. digiCamControl v2.1.7's HTTP server sends malformed HTTP headers:
+ *    - Duplicate 'Content-Length' headers (causes Node http parser HPE_UNEXPECTED_CONTENT_LENGTH error)
+ *    - Content length mismatch (causes Node fetch UND_ERR_RES_CONTENT_LENGTH_MISMATCH error)
+ * 2. digiCamControl does not reliably close TCP sockets after sending response bytes.
  * 
- * This raw TCP client reads socket bytes directly, ignores duplicate Content-Length headers completely,
- * splits headers from body at \r\n\r\n, and returns the received body.
+ * SOLUTION:
+ * Reads raw socket Buffer chunks directly, ignores Content-Length headers completely,
+ * uses a 150ms idle grace period after data arrives to finalize response, and destroys socket.
  */
 export async function dccRawRequest(pathAndQuery: string, timeoutMs = 5000): Promise<string> {
   const { host, port } = parseLoopbackEndpoint();
@@ -89,61 +91,41 @@ export async function dccRawRequest(pathAndQuery: string, timeoutMs = 5000): Pro
     const socket = net.createConnection({ host, port });
     const chunks: Buffer[] = [];
     let isSettled = false;
+    let idleTimer: NodeJS.Timeout | null = null;
+    let hardTimeoutId: NodeJS.Timeout | null = null;
+    let dataReceived = false;
 
     const cleanup = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (hardTimeoutId) clearTimeout(hardTimeoutId);
+      idleTimer = null;
+      hardTimeoutId = null;
       if (!socket.destroyed) {
         socket.destroy();
       }
     };
 
-    socket.setTimeout(timeoutMs);
-
-    socket.on("connect", () => {
-      const httpRequest =
-        `GET ${pathAndQuery} HTTP/1.1\r\n` +
-        `Host: ${host}:${port}\r\n` +
-        `Connection: close\r\n` +
-        `Accept: */*\r\n` +
-        `User-Agent: Phobo-DccRawClient/1.0\r\n\r\n`;
-
-      socket.write(httpRequest);
-    });
-
-    socket.on("data", (chunk: Buffer) => {
-      chunks.push(chunk);
-    });
-
-    socket.on("timeout", () => {
+    const finalize = (err?: Error, completionType: string = "normal") => {
       if (isSettled) return;
       isSettled = true;
       cleanup();
+
       const elapsed = Date.now() - startTime;
-      if (env.debugLogs) {
-        console.error(`[DCC RAW] timeout after ${elapsed}ms | command=${pathAndQuery}`);
+
+      if (err) {
+        if (env.debugLogs) {
+          console.error(`[DCC RAW] error/timeout (${completionType}) after ${elapsed}ms | command=${pathAndQuery}:`, err.message);
+        }
+        reject(err);
+        return;
       }
-      reject(new Error(`DCC socket timeout after ${timeoutMs}ms`));
-    });
 
-    socket.on("error", (err: Error) => {
-      if (isSettled) return;
-      isSettled = true;
-      cleanup();
-      const elapsed = Date.now() - startTime;
-      if (env.debugLogs) {
-        console.error(`[DCC RAW] socket error after ${elapsed}ms:`, err.message);
-      }
-      reject(err);
-    });
-
-    const processResponse = () => {
-      if (isSettled) return;
-      isSettled = true;
-      cleanup();
-
-      const elapsed = Date.now() - startTime;
       const rawBuffer = Buffer.concat(chunks);
 
       if (rawBuffer.length === 0) {
+        if (env.debugLogs) {
+          console.error(`[DCC RAW] empty socket response after ${elapsed}ms | command=${pathAndQuery}`);
+        }
         reject(new Error("DCC returned empty socket response"));
         return;
       }
@@ -158,10 +140,10 @@ export async function dccRawRequest(pathAndQuery: string, timeoutMs = 5000): Pro
       }
 
       if (sepIndex === -1) {
-        // Body without clear headers, fallback to full buffer string
         const fallbackBody = rawBuffer.toString("utf8").trim();
+        const escapedPrefix = fallbackBody.slice(0, 500).replace(/[\r\n]+/g, " ");
         if (env.debugLogs) {
-          console.log(`[DCC RAW] no header sep | bytes=${rawBuffer.length} | elapsed=${elapsed}ms | body=${fallbackBody.slice(0, 100)}`);
+          console.warn(`[DCC RAW] no header separator found | bytes=${rawBuffer.length} | elapsed=${elapsed}ms | rawPrefix=${escapedPrefix}`);
         }
         resolve(fallbackBody);
         return;
@@ -171,30 +153,83 @@ export async function dccRawRequest(pathAndQuery: string, timeoutMs = 5000): Pro
       const bodyBuffer = rawBuffer.subarray(sepIndex + headerSepLen);
       const bodyStr = bodyBuffer.toString("utf8").trim();
 
-      // Check HTTP status line (e.g. HTTP/1.1 200 OK)
       const firstLine = headersStr.split(/\r?\n/)[0] || "";
       const statusMatch = firstLine.match(/HTTP\/\d\.\d\s+(\d{3})/i);
       const statusCode = statusMatch ? Number.parseInt(statusMatch[1], 10) : 200;
 
       if (statusCode < 200 || statusCode >= 300) {
         if (env.debugLogs) {
-          console.error(`[DCC RAW] HTTP status ${statusCode} | headers=${firstLine} | elapsed=${elapsed}ms`);
+          console.error(`[DCC RAW] HTTP status ${statusCode} | statusLine=${firstLine} | elapsed=${elapsed}ms`);
         }
         reject(new Error(`DCC HTTP ${statusCode} response: ${firstLine}`));
         return;
       }
 
       if (env.debugLogs) {
-        console.log(`[DCC RAW] bytes=${rawBuffer.length} | status=${statusCode} | elapsed=${elapsed}ms | body=${bodyStr.slice(0, 100)}`);
+        console.log(`[DCC RAW] ${completionType} after ${elapsed}ms | total bytes=${rawBuffer.length} | HTTP status=${statusCode} | body="${bodyStr.slice(0, 100)}"`);
       }
 
       resolve(bodyStr);
     };
 
-    socket.on("end", processResponse);
+    // Hard overall timeout safeguard
+    hardTimeoutId = setTimeout(() => {
+      if (!isSettled) {
+        if (dataReceived && chunks.length > 0) {
+          finalize(undefined, "hard-timeout-with-data");
+        } else {
+          finalize(new Error(`DCC socket timeout after ${timeoutMs}ms`), "hard-timeout");
+        }
+      }
+    }, timeoutMs);
+
+    socket.on("connect", () => {
+      if (env.debugLogs) {
+        console.log(`[DCC RAW] connected to ${host}:${port}`);
+      }
+
+      const httpRequest =
+        `GET ${pathAndQuery} HTTP/1.1\r\n` +
+        `Host: ${host}:${port}\r\n` +
+        `Connection: close\r\n` +
+        `Accept: */*\r\n` +
+        `User-Agent: Phobo-DccRawClient/1.0\r\n\r\n`;
+
+      socket.write(httpRequest);
+    });
+
+    socket.on("data", (chunk: Buffer) => {
+      chunks.push(chunk);
+      dataReceived = true;
+
+      if (env.debugLogs) {
+        console.log(`[DCC RAW] received chunk bytes=${chunk.length} | total chunks=${chunks.length}`);
+      }
+
+      // Reset idle timer: 150ms silence after data reception triggers completion
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        if (!isSettled) {
+          finalize(undefined, "idle-after-data");
+        }
+      }, 150);
+    });
+
+    socket.on("end", () => {
+      if (!isSettled) {
+        finalize(undefined, "socket-end");
+      }
+    });
+
     socket.on("close", () => {
       if (!isSettled) {
-        processResponse();
+        finalize(undefined, "socket-close");
+      }
+    });
+
+    socket.on("error", (err: Error) => {
+      if (!isSettled) {
+        finalize(err, "socket-error");
       }
     });
   });
@@ -210,7 +245,6 @@ export async function checkDccHealth(): Promise<{
   const baseUrl = env.digicamBaseUrl.replace(/\/+$/, "");
 
   try {
-    // Check session.folder via raw TCP transport (2000ms timeout)
     const result = await dccRawRequest("/?slc=get&param1=session.folder&param2=", 2000);
     return { reachable: true, baseUrl, lastCaptured: result };
   } catch (err) {
