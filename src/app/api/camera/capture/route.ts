@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import path from "node:path";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile, stat } from "node:fs/promises";
 import { capturePhoto } from "@/lib/hardware/camera-adapter";
 import { captureDccPhoto } from "@/lib/camera/digicamcontrol-adapter";
 import { getPhoboEnv } from "@/lib/config/phobo-env";
 import { getBackgroundById } from "@/lib/phobo-data";
-import { loadImage } from "@/lib/image-processing/load-image";
 import { applyChromaKeyIfEnabled } from "@/lib/image-processing/chroma-key";
 
 export const runtime = "nodejs";
@@ -53,7 +52,7 @@ export async function POST(request: Request) {
         ? body.selectedBackgroundId
         : "background-01";
     
-    // Execute real DSLR tethered capture via digiCamControl
+    // 1. Execute real DSLR tethered capture via digiCamControl
     const dccResult = await captureDccPhoto({
       sessionId: body.sessionId,
       shotIndex,
@@ -70,31 +69,65 @@ export async function POST(request: Request) {
       );
     }
 
-    // Process chroma key on the real Canon DSLR JPEG for display preview
-    let displayUrl = dccResult.relativeUrl;
+    // 2. Read raw Canon DSLR JPEG buffer directly from disk
+    let rawBuffer: Buffer;
+    let rawSize = 0;
+    try {
+      rawBuffer = await readFile(dccResult.localFilePath);
+      const rawStats = await stat(dccResult.localFilePath);
+      rawSize = rawStats.size;
+    } catch (err) {
+      console.error(`[DCC Capture Error] Failed to read raw DSLR JPEG at ${dccResult.localFilePath}:`, err);
+      return NextResponse.json(
+        {
+          ok: false,
+          mode: "digicamcontrol",
+          error: "File foto DSLR Canon tidak dapat dibaca dari disk.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // 3. Process chroma key on that high-resolution DSLR JPEG to generate transparent display PNG
+    const safeSessionId = body.sessionId.replace(/[^a-zA-Z0-9_-]/g, "");
+    const fileNameNoExt = dccResult.fileName ? dccResult.fileName.replace(/\.[^.]+$/, "") : `capture-${Date.now()}`;
+    const displayFileName = `${fileNameNoExt}-display.png`;
+    const displayDiskPath = path.join(process.cwd(), "public", "results", safeSessionId, "captures", displayFileName);
+    const displayUrl = `/results/${safeSessionId}/captures/${displayFileName}`;
+
+    let displaySize = 0;
+    let chromaApplied = false;
 
     try {
       const bgObj = getBackgroundById(bgId);
       const options = body.greenScreenTuning && typeof body.greenScreenTuning === "object" ? (body.greenScreenTuning as any) : {};
 
-      const loaded = await loadImage(dccResult.localFilePath);
+      // Apply chroma keying to generate transparent PNG subject buffer
       const transparentBuffer = await applyChromaKeyIfEnabled(
-        loaded.buffer,
+        rawBuffer,
         { color: bgObj.color, imageUrl: bgObj.imageUrl },
         options
       );
 
-      const safeSessionId = body.sessionId.replace(/[^a-zA-Z0-9_-]/g, "");
-      const fileNameNoExt = dccResult.fileName ? dccResult.fileName.replace(/\.[^.]+$/, "") : `capture-${Date.now()}`;
-      const displayFileName = `${fileNameNoExt}-display.png`;
-      const displayDiskPath = path.join(process.cwd(), "public", "results", safeSessionId, "captures", displayFileName);
-
       await writeFile(displayDiskPath, transparentBuffer);
-      displayUrl = `/results/${safeSessionId}/captures/${displayFileName}`;
+      const displayStats = await stat(displayDiskPath);
+      displaySize = displayStats.size;
+      chromaApplied = options.applyChromaKey !== false;
+
+      console.log(`[DCC Capture]\nrawPath=${dccResult.localFilePath}\nrawSize=${rawSize}\ndisplayPath=${displayDiskPath}\ndisplaySize=${displaySize}\nchromaApplied=${chromaApplied}\nbackgroundId=${bgId}`);
     } catch (err) {
-      console.warn("[Capture API] Chroma key display processing failed, using raw JPEG fallback:", err);
+      console.error(`[DCC Capture Error] Chroma key generation failed for ${dccResult.localFilePath}:`, err);
+      return NextResponse.json(
+        {
+          ok: false,
+          mode: "digicamcontrol",
+          error: "Gagal memproses chroma key pada foto DSLR Canon. Silakan coba lagi.",
+        },
+        { status: 500 }
+      );
     }
 
+    // 4. Return successful response with distinct raw and display URLs + backgroundId
     return NextResponse.json({
       ok: true,
       mode: "digicamcontrol",
@@ -102,6 +135,7 @@ export async function POST(request: Request) {
       displayPhotoUrl: displayUrl,
       raw: dccResult.relativeUrl,
       display: displayUrl,
+      backgroundId: bgId,
     });
   }
 
