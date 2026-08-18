@@ -34,6 +34,7 @@ export default function Camera() {
   const [isCapturing, setIsCapturing] = useState(false);
   const [mode, setMode] = useState("mock");
   const [captureMode, setCaptureMode] = useState("fallback");
+  const [previewEnabled, setPreviewEnabled] = useState(true);
   const [countdown, setCountdown] = useState<number | string | null>(null);
   const [freezeFrameUrl, setFreezeFrameUrl] = useState<string | null>(null);
 
@@ -43,6 +44,7 @@ export default function Camera() {
       .then((data) => {
         setMode(data.env?.cameraMode || "mock");
         setCaptureMode(data.env?.cameraCaptureMode || "fallback");
+        setPreviewEnabled(data.env?.cameraPreviewEnabled !== false);
       })
       .catch(() => {});
   }, []);
@@ -89,13 +91,15 @@ export default function Camera() {
     // Exact shutter-time resolution: resolved immediately at shutter trigger after countdown
     const backgroundIdAtShutter = selectedBackgroundIdRef.current || session.selectedBackgroundId || backgrounds[0].id;
 
-    // 1. Freeze last good browser-video frame to hide Canon HDMI shutter interruption
-    const snapshot = live.current?.freezeFrame() || null;
-    if (snapshot) {
-      if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
-        console.log("[Camera Preview] freeze frame created");
+    // 1. Freeze last good browser-video frame if preview is active
+    if (previewEnabled) {
+      const snapshot = live.current?.freezeFrame() || null;
+      if (snapshot) {
+        if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+          console.log("[Camera Preview] freeze frame created");
+        }
+        setFreezeFrameUrl(snapshot);
       }
-      setFreezeFrameUrl(snapshot);
     }
 
     setMessage("MENGAMBIL FOTO...");
@@ -120,7 +124,7 @@ export default function Camera() {
             greenScreenTuning: session.greenScreenTuning,
           }),
         });
-      } else if (mode === "browser-video") {
+      } else if (mode === "browser-video" && previewEnabled) {
         if (live.current?.getStatus() !== "active") throw new Error("START LIVE VIEW DULU");
         const frame = live.current.captureFrame();
         response = await fetch("/api/camera/browser-frame", {
@@ -152,16 +156,15 @@ export default function Camera() {
         throw new Error(data.error || "CAMERA CAPTURE GAGAL");
       }
 
-      if (captureMode === "digicamcontrol") {
+      // 2. HDMI recovery handling (only required when live preview is enabled)
+      if (captureMode === "digicamcontrol" && previewEnabled) {
         if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
           console.log("[Camera Preview] DSLR capture completed | waiting for HDMI recovery");
         }
 
-        // 2. Minimum recovery grace period (1200ms) for Canon HDMI stream after shutter release
         const recoveryStartTime = Date.now();
         await new Promise(r => setTimeout(r, 1200));
 
-        // 3. Poll to verify video stream readiness
         let recovered = false;
         const pollStart = Date.now();
 
@@ -190,7 +193,7 @@ export default function Camera() {
       if (shotCount.current >= max) return;
       shotCount.current += 1;
 
-      // 4. Save authoritative captured photo with frozen backgroundId and dimensions
+      // 3. Save authoritative captured photo with frozen backgroundId and dimensions
       addCapturedPhoto({
         raw: rawUrl,
         display: displayUrl as string,
@@ -209,21 +212,71 @@ export default function Camera() {
     }
   }
 
+  const selectedBgObj = backgrounds.find(bg => bg.id === (selectedBackgroundIdRef.current || session?.selectedBackgroundId));
+
   return (
     <KioskStage>
       <div className="shot-counter">
         Shoot {maxReached ? max : count + 1} / {max}
       </div>
 
-      <CameraLiveView 
-        ref={live} 
-        compact 
-        autoStart
-        selectedBackgroundUrl={backgrounds.find(bg => bg.id === (selectedBackgroundIdRef.current || session?.selectedBackgroundId))?.imageUrl}
-        tuning={session?.greenScreenTuning}
-      />
+      {previewEnabled ? (
+        <CameraLiveView 
+          ref={live} 
+          compact 
+          autoStart
+          selectedBackgroundUrl={selectedBgObj?.imageUrl}
+          tuning={session?.greenScreenTuning}
+        />
+      ) : (
+        <div
+          className="camera-live-placeholder"
+          style={{
+            position: "absolute",
+            top: "7.73%",
+            left: "3.47%",
+            width: "72%",
+            height: "70%",
+            borderRadius: "16px",
+            backgroundColor: "#111827",
+            backgroundImage: selectedBgObj?.imageUrl ? `url('${selectedBgObj.imageUrl}')` : undefined,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            border: "2px solid rgba(255,255,255,0.15)",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#ffffff",
+            zIndex: 10,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(8px)",
+              padding: "28px 40px",
+              borderRadius: "16px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "16px",
+              textAlign: "center",
+              border: "1px solid rgba(255,255,255,0.2)",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
+            }}
+          >
+            <span style={{ fontSize: "4.5rem", lineHeight: 1 }}>📷</span>
+            <span style={{ fontSize: "1.75rem", fontWeight: "800", letterSpacing: "1.5px" }}>
+              MOHON LIHAT KE LENSA KAMERA
+            </span>
+          </div>
+        </div>
+      )}
 
-      {freezeFrameUrl && (
+      {freezeFrameUrl && previewEnabled && (
         <div
           style={{
             position: "absolute",

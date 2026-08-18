@@ -14,6 +14,7 @@ export async function GET() {
     timestamp: new Date().toISOString(),
     env: {
       cameraMode: env.cameraMode,
+      cameraPreviewEnabled: env.cameraPreviewEnabled,
       cameraCaptureMode: env.cameraCaptureMode,
       digicamBaseUrl: env.digicamBaseUrl,
       dccReachable: dccHealth.reachable,
