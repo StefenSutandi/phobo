@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CameraLiveView, type CameraLiveViewHandle } from "@/components/camera-live-view";
 import { BackgroundPicker, KioskButton, KioskStage } from "@/components/kiosk";
-import { backgrounds, getFrameById } from "@/lib/phobo-data";
+import { backgrounds } from "@/lib/phobo-data";
 import { useSessionStore } from "@/lib/session/session-store";
 
 type CaptureResponse = {
@@ -12,6 +12,11 @@ type CaptureResponse = {
   imageUrl?: string;
   capturedPhotoUrl?: string;
   displayPhotoUrl?: string;
+  raw?: string;
+  display?: string;
+  backgroundId?: string;
+  width?: number;
+  height?: number;
   error?: string;
 };
 
@@ -21,6 +26,10 @@ export default function Camera() {
   const live = useRef<CameraLiveViewHandle>(null);
   const captureLock = useRef(false);
   const shotCount = useRef(0);
+  
+  // Authoritative shutter-time background ref to prevent async race conditions
+  const selectedBackgroundIdRef = useRef<string>(session?.selectedBackgroundId || backgrounds[0].id);
+
   const [message, setMessage] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
   const [mode, setMode] = useState("mock");
@@ -40,9 +49,21 @@ export default function Camera() {
 
   useEffect(() => {
     if (!hasHydrated) return;
-    if (!session?.selectedFrameId) router.replace("/frames");
-    else if (!session.selectedBackgroundId) selectBackground(backgrounds[0].id);
+    if (!session?.selectedFrameId) {
+      router.replace("/frames");
+    } else if (!session.selectedBackgroundId) {
+      const defaultBg = backgrounds[0].id;
+      selectedBackgroundIdRef.current = defaultBg;
+      selectBackground(defaultBg);
+    } else {
+      selectedBackgroundIdRef.current = session.selectedBackgroundId;
+    }
   }, [hasHydrated, session?.selectedFrameId, session?.selectedBackgroundId, router, selectBackground]);
+
+  const handleSelectBackground = useCallback((bgId: string) => {
+    selectedBackgroundIdRef.current = bgId;
+    selectBackground(bgId);
+  }, [selectBackground]);
 
   const count = session?.capturedPhotos.length ?? 0;
   const max = session?.maxShots ?? 8;
@@ -56,6 +77,9 @@ export default function Camera() {
     captureLock.current = true;
     setIsCapturing(true);
 
+    // Freeze the exact background selected at shutter trigger time
+    const backgroundIdAtShutter = selectedBackgroundIdRef.current || session.selectedBackgroundId || backgrounds[0].id;
+
     for (let i = 3; i > 0; i--) {
       setCountdown(i);
       await new Promise(res => setTimeout(res, 1000));
@@ -67,7 +91,7 @@ export default function Camera() {
     // 1. Freeze last good browser-video frame to hide Canon HDMI shutter interruption
     const snapshot = live.current?.freezeFrame() || null;
     if (snapshot) {
-      if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_PHOBO_DEBUG === "true") {
+      if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
         console.log("[Camera Preview] freeze frame created");
       }
       setFreezeFrameUrl(snapshot);
@@ -79,8 +103,8 @@ export default function Camera() {
       let response: Response;
 
       if (captureMode === "digicamcontrol") {
-        if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_PHOBO_DEBUG === "true") {
-          console.log("[Camera Preview] DSLR shutter started");
+        if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+          console.log(`[Camera Preview] DSLR shutter started | backgroundAtShutter=${backgroundIdAtShutter}`);
         }
 
         // Real Canon DSLR capture via digiCamControl
@@ -90,7 +114,8 @@ export default function Camera() {
           body: JSON.stringify({
             sessionId: session.sessionId,
             shotIndex: count + 1,
-            selectedBackgroundId: session.selectedBackgroundId,
+            backgroundId: backgroundIdAtShutter,
+            selectedBackgroundId: backgroundIdAtShutter,
             greenScreenTuning: session.greenScreenTuning,
           }),
         });
@@ -100,31 +125,40 @@ export default function Camera() {
         response = await fetch("/api/camera/browser-frame", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: session.sessionId, imageDataUrl: frame.rawImageDataUrl, displayImageDataUrl: frame.displayImageDataUrl }),
+          body: JSON.stringify({
+            sessionId: session.sessionId,
+            imageDataUrl: frame.rawImageDataUrl,
+            displayImageDataUrl: frame.displayImageDataUrl,
+          }),
         });
       } else {
         live.current?.stopLiveView();
         response = await fetch("/api/camera/capture", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: session.sessionId }),
+          body: JSON.stringify({
+            sessionId: session.sessionId,
+            backgroundId: backgroundIdAtShutter,
+          }),
         });
       }
 
       const data = (await response.json()) as CaptureResponse;
-      const url = data.capturedPhotoUrl || data.imageUrl;
-      const displayUrl = data.displayPhotoUrl || url;
-      if (!response.ok || !data.ok || !url) throw new Error(data.error || "CAMERA CAPTURE GAGAL");
+      const rawUrl = data.raw || data.capturedPhotoUrl || data.imageUrl;
+      const displayUrl = data.display || data.displayPhotoUrl || rawUrl;
+
+      if (!response.ok || !data.ok || !rawUrl) {
+        throw new Error(data.error || "CAMERA CAPTURE GAGAL");
+      }
 
       if (captureMode === "digicamcontrol") {
-        if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_PHOBO_DEBUG === "true") {
-          console.log("[Camera Preview] DSLR capture completed");
-          console.log("[Camera Preview] waiting for HDMI recovery");
+        if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+          console.log("[Camera Preview] DSLR capture completed | waiting for HDMI recovery");
         }
 
-        // 2. Short recovery grace period for Canon HDMI stream after shutter release
+        // 2. Minimum recovery grace period (1200ms) for Canon HDMI stream after shutter release
         const recoveryStartTime = Date.now();
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 1200));
 
         // 3. Poll to verify video stream readiness
         let recovered = false;
@@ -140,11 +174,11 @@ export default function Camera() {
 
         if (recovered) {
           const elapsed = Date.now() - recoveryStartTime;
-          if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_PHOBO_DEBUG === "true") {
+          if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
             console.log(`[Camera Preview] video recovered after ${elapsed} ms`);
           }
         } else {
-          if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_PHOBO_DEBUG === "true") {
+          if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
             console.log("[Camera Preview] video did not recover; restarting browser stream");
           }
           await live.current?.restartLiveView();
@@ -154,7 +188,16 @@ export default function Camera() {
 
       if (shotCount.current >= max) return;
       shotCount.current += 1;
-      addCapturedPhoto({ raw: url, display: displayUrl as string, backgroundId: session?.selectedBackgroundId || "background-01" });
+
+      // 4. Save authoritative captured photo with frozen backgroundId and dimensions
+      addCapturedPhoto({
+        raw: rawUrl,
+        display: displayUrl as string,
+        backgroundId: data.backgroundId || backgroundIdAtShutter,
+        width: data.width,
+        height: data.height,
+      });
+
       setMessage(`FOTO ${shotCount.current} TERSIMPAN`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Foto gagal diambil. Silakan coba lagi.");
@@ -170,13 +213,15 @@ export default function Camera() {
       <div className="shot-counter">
         Shoot {maxReached ? max : count + 1} / {max}
       </div>
+
       <CameraLiveView 
         ref={live} 
         compact 
         autoStart
-        selectedBackgroundUrl={backgrounds.find(bg => bg.id === session?.selectedBackgroundId)?.imageUrl}
+        selectedBackgroundUrl={backgrounds.find(bg => bg.id === (selectedBackgroundIdRef.current || session?.selectedBackgroundId))?.imageUrl}
         tuning={session?.greenScreenTuning}
       />
+
       {freezeFrameUrl && (
         <div
           style={{
@@ -215,6 +260,7 @@ export default function Camera() {
           </div>
         </div>
       )}
+
       {countdown !== null && (
         <div style={{
           position: "absolute",
@@ -232,11 +278,13 @@ export default function Camera() {
           {countdown}
         </div>
       )}
+
       <BackgroundPicker
         backgrounds={backgrounds}
-        selectedBackgroundId={session?.selectedBackgroundId}
-        onSelectBackground={selectBackground}
+        selectedBackgroundId={session?.selectedBackgroundId || backgrounds[0].id}
+        onSelectBackground={handleSelectBackground}
       />
+
       <footer className="camera-actions">
         <div className="camera-status" aria-live="polite">
           {maxReached ? (
@@ -257,7 +305,7 @@ export default function Camera() {
           {count >= 1 && (
             <KioskButton
               onClick={() => { if (count >= required) router.push("/preview"); }}
-              disabled={count < required}
+              disabled={count < required || isCapturing}
               className={`camera-next ${maxReached ? "camera-next--primary" : ""}`}
             >
               {maxReached ? "NEXT" : `NEXT (${count}/${required})`}

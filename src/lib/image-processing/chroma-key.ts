@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { normalizeImageBuffer } from "./load-image";
-import { getPhoboEnv } from "@/lib/config/phobo-env";
+import { getPhoboEnv } from "../config/phobo-env";
 
 export type ChromaKeyOptions = {
   applyChromaKey?: boolean;

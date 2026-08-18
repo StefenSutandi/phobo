@@ -2,8 +2,8 @@ import { constants } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import sharp, { type FitEnum } from "sharp";
-import { parseDataUrl } from "@/lib/results/result-storage";
-import { getPhoboEnv } from "@/lib/config/phobo-env";
+import { parseDataUrl } from "../results/result-storage";
+import { getPhoboEnv } from "../config/phobo-env";
 
 const mimeByExtension: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -25,6 +25,7 @@ export type LoadedImage = {
 };
 
 export async function loadImage(source: string): Promise<LoadedImage> {
+  // 1. Data URL
   if (source.startsWith("data:")) {
     const parsed = parseDataUrl(source);
 
@@ -35,36 +36,45 @@ export async function loadImage(source: string): Promise<LoadedImage> {
     };
   }
 
-  const pathname = source.startsWith("http://") || source.startsWith("https://")
+  // 2. Absolute filesystem path (Windows C:\... or Unix /...)
+  if (path.isAbsolute(source)) {
+    try {
+      await access(source, constants.F_OK);
+      const extension = path.extname(source).toLowerCase();
+      const mimeType = mimeByExtension[extension] || "image/jpeg";
+      const buffer = await readFile(source);
+
+      return {
+        buffer,
+        mimeType,
+        dataUrl: `data:${mimeType};base64,${buffer.toString("base64")}`,
+      };
+    } catch {
+      // If direct absolute path access fails, attempt publicRoot resolution below
+    }
+  }
+
+  // 3. App-local public URL or relative path
+  let pathname = source.startsWith("http://") || source.startsWith("https://")
     ? new URL(source).pathname
     : source;
 
   if (!pathname.startsWith("/")) {
-    throw new Error("Image source must be a data URL or app-local public URL");
+    pathname = `/${pathname}`;
   }
 
   const publicRoot = path.join(process.cwd(), "public");
   const resolvedPath = path.resolve(publicRoot, `.${pathname}`);
-  const relativePath = path.relative(publicRoot, resolvedPath);
-
-  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-    throw new Error("Image source resolved outside the public directory");
-  }
 
   await access(resolvedPath, constants.F_OK);
 
   const extension = path.extname(resolvedPath).toLowerCase();
-  const mimeType = mimeByExtension[extension];
-
-  if (!mimeType) {
-    throw new Error(`Unsupported image extension: ${extension}`);
-  }
+  const mimeType = mimeByExtension[extension] || "image/jpeg";
 
   const buffer = await readFile(resolvedPath);
 
-  const signature = buffer.slice(0, Math.min(80, buffer.length)).toString('hex');
   if (getPhoboEnv().debugLogs) {
-    console.log(`[loadImage] Loaded asset: ${resolvedPath} | ext: ${extension} | size: ${buffer.length} bytes | sig: ${signature}`);
+    console.log(`[loadImage] Loaded asset: ${resolvedPath} | ext: ${extension} | size: ${buffer.length} bytes`);
   }
 
   return {

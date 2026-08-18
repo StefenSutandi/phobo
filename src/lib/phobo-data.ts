@@ -1,4 +1,4 @@
-import frameSlots from "@/../public/assets/frames/frame-slots.json";
+import frameSlots from "../../public/assets/frames/frame-slots.json";
 
 export type PackageData = {
   id: string;
@@ -64,7 +64,7 @@ const backgroundColors = [
   "#c8d0d2",
 ];
 
-import backgroundsJson from "@/../public/assets/backgrounds/backgrounds.json";
+import backgroundsJson from "../../public/assets/backgrounds/backgrounds.json";
 
 export const backgrounds: BackgroundData[] = backgroundsJson.length > 0 
   ? backgroundsJson.map((bg: any) => ({

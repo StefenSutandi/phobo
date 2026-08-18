@@ -235,6 +235,118 @@ export async function dccRawRequest(pathAndQuery: string, timeoutMs = 5000): Pro
   });
 }
 
+/**
+ * Raw TCP binary request helper for retrieving binary assets (e.g. liveview JPEG frames) from digiCamControl.
+ */
+export async function dccRawBinaryRequest(pathAndQuery: string, timeoutMs = 3000): Promise<Buffer> {
+  const { host, port } = parseLoopbackEndpoint();
+  const startTime = Date.now();
+
+  return new Promise<Buffer>((resolve, reject) => {
+    const socket = net.createConnection({ host, port });
+    const chunks: Buffer[] = [];
+    let isSettled = false;
+    let idleTimer: NodeJS.Timeout | null = null;
+    let hardTimeoutId: NodeJS.Timeout | null = null;
+
+    const cleanup = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (hardTimeoutId) clearTimeout(hardTimeoutId);
+      idleTimer = null;
+      hardTimeoutId = null;
+      if (!socket.destroyed) {
+        socket.destroy();
+      }
+    };
+
+    const finalize = (err?: Error) => {
+      if (isSettled) return;
+      isSettled = true;
+      cleanup();
+
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      const rawBuffer = Buffer.concat(chunks);
+      if (rawBuffer.length === 0) {
+        reject(new Error("DCC returned empty binary response"));
+        return;
+      }
+
+      let sepIndex = rawBuffer.indexOf("\r\n\r\n");
+      let headerSepLen = 4;
+
+      if (sepIndex === -1) {
+        sepIndex = rawBuffer.indexOf("\n\n");
+        headerSepLen = 2;
+      }
+
+      if (sepIndex === -1) {
+        // Assume pure binary body if no header separator
+        resolve(rawBuffer);
+        return;
+      }
+
+      const bodyBuffer = rawBuffer.subarray(sepIndex + headerSepLen);
+      resolve(bodyBuffer);
+    };
+
+    hardTimeoutId = setTimeout(() => {
+      if (!isSettled) {
+        finalize(new Error(`DCC binary socket timeout after ${timeoutMs}ms`));
+      }
+    }, timeoutMs);
+
+    socket.on("connect", () => {
+      const httpRequest =
+        `GET ${pathAndQuery} HTTP/1.1\r\n` +
+        `Host: ${host}:${port}\r\n` +
+        `Connection: close\r\n` +
+        `Accept: image/jpeg, image/*, */*\r\n` +
+        `User-Agent: Phobo-DccRawClient/1.0\r\n\r\n`;
+
+      socket.write(httpRequest);
+    });
+
+    socket.on("data", (chunk: Buffer) => {
+      chunks.push(chunk);
+
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        if (!isSettled) {
+          finalize(undefined);
+        }
+      }, 100);
+    });
+
+    socket.on("end", () => {
+      if (!isSettled) finalize(undefined);
+    });
+
+    socket.on("close", () => {
+      if (!isSettled) finalize(undefined);
+    });
+
+    socket.on("error", (err: Error) => {
+      if (!isSettled) finalize(err);
+    });
+  });
+}
+
+export async function getDccLiveViewFrame(): Promise<Buffer | null> {
+  try {
+    const buffer = await dccRawBinaryRequest("/liveview.jpg", 1500);
+    if (buffer && buffer.length > 100) {
+      return buffer;
+    }
+    return null;
+  } catch (err) {
+    return null;
+  }
+}
+
 export async function checkDccHealth(): Promise<{
   reachable: boolean;
   baseUrl: string;

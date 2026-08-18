@@ -3,7 +3,8 @@ import path from "path";
 import sharp from "sharp";
 import { applyChromaKeyIfEnabled, parseHexColor, type ChromaKeyOptions } from "./chroma-key";
 import { bufferToDataUrl, loadImage, normalizeImageBuffer } from "./load-image";
-import { getBackgroundById, getFrameById } from "@/lib/phobo-data";
+import { getBackgroundById, getFrameById } from "../phobo-data";
+import { getPhoboEnv } from "../config/phobo-env";
 
 export const FINAL_SCREEN_WIDTH_PX = 1200;
 export const FINAL_SCREEN_HEIGHT_PX = 1800;
@@ -12,6 +13,8 @@ export type PhotoInput = {
   raw: string;
   display?: string;
   backgroundId?: string;
+  width?: number;
+  height?: number;
 };
 
 export type SlotAssignmentInput = {
@@ -32,7 +35,16 @@ export type ComposeFinalRequest = {
 
 export type ComposedFinalImages = { finalScreenPng: Buffer; processedPhotoDataUrls: string[]; warnings: string[] };
 
-export async function composeFinalImages({ capturedPhotos, selectedFrameId, selectedBackgroundId, slotAssignments, stickers = [], options = {} }: ComposeFinalRequest): Promise<ComposedFinalImages> {
+export async function composeFinalImages({
+  sessionId,
+  capturedPhotos,
+  selectedFrameId,
+  selectedBackgroundId,
+  slotAssignments,
+  stickers = [],
+  options = {}
+}: ComposeFinalRequest): Promise<ComposedFinalImages> {
+  const env = getPhoboEnv();
   const warnings: string[] = [];
   const frame = getFrameById(selectedFrameId);
   const globalBg = getBackgroundById(selectedBackgroundId);
@@ -47,6 +59,8 @@ export async function composeFinalImages({ capturedPhotos, selectedFrameId, sele
       raw: item.raw || item.display || "",
       display: item.display || item.raw,
       backgroundId: item.backgroundId || selectedBackgroundId,
+      width: item.width,
+      height: item.height,
     };
   }).filter((p) => Boolean(p.raw));
 
@@ -79,7 +93,7 @@ export async function composeFinalImages({ capturedPhotos, selectedFrameId, sele
     const slotBg = getBackgroundById(slotBgId) || globalBg;
 
     try {
-      // 1. Process chroma key for this specific photo with its specific background
+      // 1. Load photo buffer and process chroma key for this specific photo with its specific background
       const loaded = await loadImage(slotRaw);
       const transparentSubject = await applyChromaKeyIfEnabled(
         loaded.buffer,
@@ -113,6 +127,10 @@ export async function composeFinalImages({ capturedPhotos, selectedFrameId, sele
       }).resize({ width: fit.dw, height: fit.dh }).toBuffer();
       
       composites.push({ input: extractedSubject, left: photoSlot.x + fit.dx, top: photoSlot.y + fit.dy });
+
+      if (env.debugLogs || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+        console.log(`[Compose Slot] Slot ${index} | bg=${slotBgId} | photoRaw=${slotRaw.slice(0, 30)} | sDims=${sWidth}x${sHeight} | slotDims=${photoSlot.width}x${photoSlot.height} | fitMode=${fit.finalMode} | extract=(${fit.sx},${fit.sy},${fit.sw},${fit.sh}) -> dest=(${photoSlot.x + fit.dx},${photoSlot.y + fit.dy},${fit.dw},${fit.dh})`);
+      }
     } catch (error) {
       warnings.push(`Failed to compose slot ${index}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -138,18 +156,26 @@ export async function composeFinalImages({ capturedPhotos, selectedFrameId, sele
       }
       const stickerBuffer = await s.toBuffer();
       const meta = await sharp(stickerBuffer).metadata();
+      const finalWidth = meta.width ?? sticker.width;
+      const finalHeight = meta.height ?? sticker.width;
       
-      const left = Math.round(sticker.x - (meta.width || 0) / 2);
-      const top = Math.round(sticker.y - (meta.height || 0) / 2);
+      const left = Math.round(sticker.x - (finalWidth - sticker.width) / 2);
+      const top = Math.round(sticker.y - (finalHeight - (sticker.height || sticker.width)) / 2);
       
       composites.push({ input: stickerBuffer, left, top });
-    } catch (e) {
-      warnings.push(`Failed to compose sticker ${sticker.src}: ${e instanceof Error ? e.message : String(e)}`);
+    } catch (error) {
+      warnings.push(`Failed to composite sticker ${sticker.src}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  const finalScreenPng = await sharp({
-    create: { width: frame.width, height: frame.height, channels: 4, background: globalBg.color }
-  }).composite(composites).png().toBuffer();
-  return { finalScreenPng, processedPhotoDataUrls: await Promise.all(processedPhotoBuffers.map(photo => bufferToDataUrl(photo))), warnings };
+  const finalScreenPng = await sharp({ create: { width: frame.width, height: frame.height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite(composites)
+    .png()
+    .toBuffer();
+
+  const processedPhotoDataUrls = await Promise.all(
+    processedPhotoBuffers.map((b) => bufferToDataUrl(b))
+  );
+
+  return { finalScreenPng, processedPhotoDataUrls, warnings };
 }
