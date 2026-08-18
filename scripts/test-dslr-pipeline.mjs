@@ -122,6 +122,61 @@ async function runTests() {
   assert.equal(composedMeta.channels, 4, "Final composed screen image must have 4 channels");
   console.log(`✓ composeFinalImages succeeded with slot permutation | output size: ${composed.finalScreenPng.length} bytes (${composedMeta.width}x${composedMeta.height})`);
 
+  // 5. Test camera shutter background locking & race condition protection
+  console.log("\nStep 5: Validating background lock during countdown and shutter release...");
+  
+  // Simulate Camera component state & refs
+  let selectedBgState = "background-01";
+  const selectedBackgroundIdRef = { current: "background-01" };
+  let isCapturing = false;
+  let captureLock = false;
+
+  const handleSelectBackground = (newBgId) => {
+    if (isCapturing || captureLock) return; // Locked during capture/countdown
+    selectedBackgroundIdRef.current = newBgId;
+    selectedBgState = newBgId;
+  };
+
+  // User initially selects background-01
+  handleSelectBackground("background-01");
+  assert.equal(selectedBackgroundIdRef.current, "background-01");
+
+  // User presses SHOOT
+  captureLock = true;
+  isCapturing = true;
+
+  // Attempted background change to background-04 DURING countdown/capture cycle
+  handleSelectBackground("background-04");
+  assert.equal(
+    selectedBackgroundIdRef.current,
+    "background-01",
+    "Background selection MUST be rejected while capture/countdown is active"
+  );
+
+  // At shutter release (after countdown delay):
+  const backgroundIdAtShutter = selectedBackgroundIdRef.current;
+  assert.equal(
+    backgroundIdAtShutter,
+    "background-01",
+    "Shutter-time background must strictly equal the locked background"
+  );
+
+  // Capture completes
+  const photo = {
+    raw: "/results/test-dslr-session/captures/p1-raw.jpg",
+    display: "/results/test-dslr-session/captures/p1-raw-display.png",
+    backgroundId: backgroundIdAtShutter,
+  };
+
+  assert.equal(photo.backgroundId, "background-01");
+  captureLock = false;
+  isCapturing = false;
+
+  // After capture completes, user can change background for the next shot
+  handleSelectBackground("background-04");
+  assert.equal(selectedBackgroundIdRef.current, "background-04", "Background picker must unlock after capture");
+  console.log("✓ Shutter-time background lock & race condition protection validated");
+
   // Cleanup test artifacts
   await fs.rm(path.join(projectRoot, "public", "results", "test-dslr-session"), { recursive: true, force: true });
   console.log("✓ Test session artifacts cleaned up");

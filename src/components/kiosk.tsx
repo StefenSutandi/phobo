@@ -226,12 +226,14 @@ type BackgroundPickerProps = {
   backgrounds: { id: string; name: string; imageUrl?: string; color: string }[];
   selectedBackgroundId?: string;
   onSelectBackground?: (backgroundId: string) => void;
+  disabled?: boolean;
 };
 
 export function BackgroundPicker({
   backgrounds,
   selectedBackgroundId,
   onSelectBackground,
+  disabled = false,
 }: BackgroundPickerProps) {
   return (
     <RoundedPanel className="background-picker">
@@ -241,6 +243,7 @@ export function BackgroundPicker({
           <button
             type="button"
             className={`background-choice ${selectedBackgroundId === bg.id ? "is-selected" : ""}`}
+            disabled={disabled}
             style={{ 
               width: "100%", 
               aspectRatio: "3/4", 
@@ -248,11 +251,17 @@ export function BackgroundPicker({
               border: selectedBackgroundId === bg.id ? "4px solid #8e44ad" : "4px solid transparent",
               background: bg.imageUrl ? `url('${bg.imageUrl}') center/cover` : bg.color,
               padding: 0,
-              cursor: "pointer"
+              cursor: disabled ? "not-allowed" : "pointer",
+              opacity: disabled ? 0.75 : 1,
+              transition: "opacity 0.2s, border 0.2s"
             }}
             key={bg.id}
             aria-label={bg.name}
-            onClick={() => onSelectBackground?.(bg.id)}
+            onClick={() => {
+              if (!disabled) {
+                onSelectBackground?.(bg.id);
+              }
+            }}
           />
         ))}
       </div>

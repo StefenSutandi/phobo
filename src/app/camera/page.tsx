@@ -61,9 +61,10 @@ export default function Camera() {
   }, [hasHydrated, session?.selectedFrameId, session?.selectedBackgroundId, router, selectBackground]);
 
   const handleSelectBackground = useCallback((bgId: string) => {
+    if (isCapturing || captureLock.current) return;
     selectedBackgroundIdRef.current = bgId;
     selectBackground(bgId);
-  }, [selectBackground]);
+  }, [isCapturing, selectBackground]);
 
   const count = session?.capturedPhotos.length ?? 0;
   const max = session?.maxShots ?? 8;
@@ -77,9 +78,6 @@ export default function Camera() {
     captureLock.current = true;
     setIsCapturing(true);
 
-    // Freeze the exact background selected at shutter trigger time
-    const backgroundIdAtShutter = selectedBackgroundIdRef.current || session.selectedBackgroundId || backgrounds[0].id;
-
     for (let i = 3; i > 0; i--) {
       setCountdown(i);
       await new Promise(res => setTimeout(res, 1000));
@@ -87,6 +85,9 @@ export default function Camera() {
     setCountdown("SMILE!");
     await new Promise(res => setTimeout(res, 500));
     setCountdown(null);
+
+    // Exact shutter-time resolution: resolved immediately at shutter trigger after countdown
+    const backgroundIdAtShutter = selectedBackgroundIdRef.current || session.selectedBackgroundId || backgrounds[0].id;
 
     // 1. Freeze last good browser-video frame to hide Canon HDMI shutter interruption
     const snapshot = live.current?.freezeFrame() || null;
@@ -283,6 +284,7 @@ export default function Camera() {
         backgrounds={backgrounds}
         selectedBackgroundId={session?.selectedBackgroundId || backgrounds[0].id}
         onSelectBackground={handleSelectBackground}
+        disabled={isCapturing}
       />
 
       <footer className="camera-actions">
