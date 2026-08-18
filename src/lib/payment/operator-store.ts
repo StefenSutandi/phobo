@@ -21,7 +21,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const FILE_PATH = path.join(DATA_DIR, "payment-orders.json");
 const EXPIRE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
 
-// In-process mutex for serializing data store reads/writes & suffix allocation
+// In-process mutex for serializing data store reads/writes
 class Mutex {
   private queue: Array<() => void> = [];
   private locked = false;
@@ -145,17 +145,9 @@ export async function createOperatorOrder({
       return existing;
     }
 
-    // 2. Active Suffix Allocation with Collision Avoidance
-    const activePendingUniqueCodes = new Set(
-      orders.filter((o) => o.status === "pending").map((o) => o.uniqueCode)
-    );
-
-    let uniqueCode = Math.floor(Math.random() * 499) + 1;
-    let attempts = 0;
-    while (activePendingUniqueCodes.has(uniqueCode) && attempts < 500) {
-      uniqueCode = Math.floor(Math.random() * 499) + 1;
-      attempts++;
-    }
+    // 2. Base Amount & zero unique code for clean static QRIS
+    const uniqueCode = 0;
+    const payableAmount = baseAmount;
 
     // 3. Collision-resistant Order ID
     let orderId = generateShortId(paymentPurpose);
@@ -166,7 +158,6 @@ export async function createOperatorOrder({
     const now = new Date();
     const expiresAt = new Date(now.getTime() + EXPIRE_DURATION_MS);
 
-    const payableAmount = baseAmount + uniqueCode;
     const newOrder: OperatorPaymentOrder = {
       orderId,
       sessionId,
@@ -248,29 +239,23 @@ export async function updateOperatorOrderStatus(
 
     const currentOrder = orders[index];
 
-    // Idempotency against double-taps
-    if (targetAction === "confirm") {
-      if (currentOrder.status === "confirmed") {
-        return { ok: true, order: currentOrder }; // Already confirmed, return existing result
-      }
-      if (currentOrder.status === "cancelled" || currentOrder.status === "expired") {
-        return { ok: false, error: `Cannot confirm an order that is already ${currentOrder.status}` };
-      }
+    if (currentOrder.status !== "pending") {
+      return {
+        ok: false,
+        error: `Order already ${currentOrder.status}`,
+        order: currentOrder,
+      };
+    }
 
+    if (targetAction === "confirm") {
       currentOrder.status = "confirmed";
       currentOrder.confirmedAt = new Date().toISOString();
     } else if (targetAction === "cancel") {
-      if (currentOrder.status === "cancelled") {
-        return { ok: true, order: currentOrder }; // Already cancelled
-      }
-      if (currentOrder.status === "confirmed") {
-        return { ok: false, error: "Cannot cancel an order that is already confirmed" };
-      }
-
       currentOrder.status = "cancelled";
     }
 
     await rawWriteOrders(orders);
+
     return { ok: true, order: currentOrder };
   } finally {
     unlock();

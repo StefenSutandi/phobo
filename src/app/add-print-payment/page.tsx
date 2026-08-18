@@ -54,7 +54,7 @@ export default function AddPrintPayment() {
               addPrintPaymentOrderId: data.orderId,
               addPrintPaymentRedirectUrl: data.qrisImageUrl || "/assets/payment/qris.png",
               addPrintPayableAmount: data.payableAmount,
-              addPrintUniqueCode: data.uniqueCode,
+              addPrintUniqueCode: data.uniqueCode || 0,
             });
           } else {
             setAddPrintPaymentData({
@@ -178,14 +178,11 @@ export default function AddPrintPayment() {
   };
 
   const basePrice = 20000;
-  const uniqueCode = session?.addPrintUniqueCode ?? 0;
-  const payableAmount = session?.addPrintPayableAmount ?? basePrice;
-  const formattedSuffix = uniqueCode > 0 ? uniqueCode.toString().padStart(3, "0") : "";
 
   return (
     <KioskStage>
       <QrScreen 
-        title={paymentActive ? (isOperatorMode ? "SCAN QRIS OPERATOR" : "SCAN UNTUK BAYAR") : "PAYMENT DISABLED"} 
+        title={paymentActive ? "SCAN UNTUK BAYAR" : "PAYMENT DISABLED"} 
         initialSeconds={120} 
         completionText="PAYMENT TIMEOUT" 
         onComplete={() => {
@@ -221,21 +218,16 @@ export default function AddPrintPayment() {
       <div className="payment-summary">
         {isOperatorMode ? (
           <div>
-            <div style={{fontSize: '15px', color: '#bbb', textTransform: 'uppercase', letterSpacing: '1px'}}>Additional Print</div>
-            <div style={{fontSize: '14px', color: '#aaa', marginTop: '4px'}}>
-              Masukkan nominal pembayaran PERSIS seperti yang tertera.
-            </div>
+            <div style={{fontSize: '16px', color: '#bbb', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold'}}>Additional Print</div>
             <div style={{fontSize: '28px', fontWeight: 'bold', color: '#2ecc71', marginTop: '6px'}}>
-              TOTAL: Rp {payableAmount.toLocaleString("id-ID")}
+              TOTAL: Rp {basePrice.toLocaleString("id-ID")}
             </div>
-            {uniqueCode > 0 && (
-              <div style={{fontSize: '14px', color: '#ffd700', marginTop: '4px', fontWeight: 'bold'}}>
-                Pastikan 3 digit terakhir adalah {formattedSuffix}.
-              </div>
-            )}
+            <div style={{fontSize: '14px', color: '#aaa', marginTop: '6px'}}>
+              Silakan masukkan nominal Rp {basePrice.toLocaleString("id-ID")} pada aplikasi pembayaran.
+            </div>
           </div>
         ) : (
-          <div>Additional Print - Rp 20.000,00</div>
+          <div>Additional Print - Rp 20.000</div>
         )}
 
         {session?.addPrintPaymentOrderId && (

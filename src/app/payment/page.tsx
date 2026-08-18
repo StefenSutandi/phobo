@@ -52,7 +52,7 @@ export default function Payment() {
               paymentOrderId: data.orderId,
               paymentMode: "operator",
               payableAmount: data.payableAmount,
-              uniqueCode: data.uniqueCode,
+              uniqueCode: data.uniqueCode || 0,
               paymentRedirectUrl: data.qrisImageUrl || "/assets/payment/qris.png",
               paymentAmount: session.price,
             });
@@ -110,14 +110,11 @@ export default function Payment() {
   }, [paymentActive, session?.paymentOrderId, router, setPaymentStatus]);
 
   const basePrice = session?.price ?? 0;
-  const uniqueCode = session?.uniqueCode ?? 0;
-  const payableAmount = session?.payableAmount ?? basePrice;
-  const formattedSuffix = uniqueCode > 0 ? uniqueCode.toString().padStart(3, "0") : "";
 
   return (
     <KioskStage>
       <QrScreen 
-        title={paymentActive ? (isOperatorMode ? "SCAN QRIS OPERATOR" : "SCAN UNTUK BAYAR") : "PAYMENT DISABLED"} 
+        title={paymentActive ? "SCAN UNTUK BAYAR" : "PAYMENT DISABLED"} 
         initialSeconds={120} 
         completionText="PAYMENT TIMEOUT" 
         onComplete={() => setPaymentStatus("timeout")} 
@@ -149,21 +146,16 @@ export default function Payment() {
       <div className="payment-summary">
         {isOperatorMode ? (
           <div>
-            <div style={{fontSize: '15px', color: '#bbb', textTransform: 'uppercase', letterSpacing: '1px'}}>{session?.packageName}</div>
-            <div style={{fontSize: '14px', color: '#aaa', marginTop: '4px'}}>
-              Masukkan nominal pembayaran PERSIS seperti yang tertera.
-            </div>
+            <div style={{fontSize: '16px', color: '#bbb', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold'}}>{session?.packageName}</div>
             <div style={{fontSize: '28px', fontWeight: 'bold', color: '#2ecc71', marginTop: '6px'}}>
-              TOTAL: Rp {payableAmount.toLocaleString("id-ID")}
+              TOTAL: Rp {basePrice.toLocaleString("id-ID")}
             </div>
-            {uniqueCode > 0 && (
-              <div style={{fontSize: '14px', color: '#ffd700', marginTop: '4px', fontWeight: 'bold'}}>
-                Pastikan 3 digit terakhir adalah {formattedSuffix}.
-              </div>
-            )}
+            <div style={{fontSize: '14px', color: '#aaa', marginTop: '6px'}}>
+              Silakan masukkan nominal Rp {basePrice.toLocaleString("id-ID")} pada aplikasi pembayaran.
+            </div>
           </div>
         ) : (
-          <div>{session?.packageName} - Rp. {basePrice.toLocaleString("id-ID")},00</div>
+          <div>{session?.packageName} - Rp {basePrice.toLocaleString("id-ID")}</div>
         )}
         
         {session?.paymentOrderId && (

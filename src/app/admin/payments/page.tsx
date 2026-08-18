@@ -271,16 +271,20 @@ export default function OperatorPaymentsPage() {
                 <div style={{ background: "#101014", padding: "16px", borderRadius: "12px", margin: "14px 0" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                     <span style={{ fontSize: "13px", color: "#aaa" }}>TOTAL HARUS DIBAYAR:</span>
-                    <span style={{ fontSize: "13px", color: "#e67e22", fontWeight: "bold" }}>
-                      UNIQUE: {formattedSuffix}
-                    </span>
+                    {order.uniqueCode > 0 && (
+                      <span style={{ fontSize: "13px", color: "#e67e22", fontWeight: "bold" }}>
+                        UNIQUE: {formattedSuffix}
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: "32px", fontWeight: "900", color: "#2ecc71", margin: "4px 0" }}>
                     Rp {order.payableAmount.toLocaleString("id-ID")}
                   </div>
-                  <div style={{ fontSize: "12px", color: "#888" }}>
-                    (Harga Dasar: Rp {order.baseAmount.toLocaleString("id-ID")} + Kode {formattedSuffix})
-                  </div>
+                  {order.uniqueCode > 0 && (
+                    <div style={{ fontSize: "12px", color: "#888" }}>
+                      (Harga Dasar: Rp {order.baseAmount.toLocaleString("id-ID")} + Kode {formattedSuffix})
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ fontSize: "12px", color: "#888", marginBottom: "16px" }}>
