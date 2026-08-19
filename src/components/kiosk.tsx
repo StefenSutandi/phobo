@@ -389,16 +389,13 @@ export function PreviewComposer({
         const slotBgObj = getBackgroundById(slotBgId) || background;
 
         const displayUrl = getPhotoDisplayUrl(photoItem);
-        const rawUrl = getPhotoRawUrl(photoItem);
-        let activeSrc = failedSlots[index] ? rawUrl : displayUrl;
-        if (!isValidImgSrc(activeSrc)) {
-          activeSrc = rawUrl && isValidImgSrc(rawUrl) ? rawUrl : "";
-        }
+        const activeSrc = isValidImgSrc(displayUrl) ? displayUrl : "";
 
         const slotRatio = photoSlot.width / photoSlot.height;
         const useContain = slotRatio < 0.8;
         const isSelected = activeSlotIndex === index;
         const isDragOver = dragOverSlotIndex === index;
+        const isFailed = Boolean(failedSlots[index]);
 
         return (
           <div 
@@ -444,16 +441,19 @@ export function PreviewComposer({
               )
             ) : null}
 
-            {activeSrc ? (
+            {isFailed ? (
+              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.7)", color: "#ff6b6b", fontSize: "11px", fontWeight: "bold", textAlign: "center", padding: "6px", zIndex: 1 }}>
+                <span style={{ fontSize: "18px", marginBottom: "4px" }}>⚠️</span>
+                <span>PREVIEW FOTO GAGAL DIMUAT</span>
+              </div>
+            ) : activeSrc ? (
               <img 
                 src={activeSrc} 
                 alt={`Slot ${index + 1}`} 
                 style={{ position: "absolute", width: "100%", height: "100%", objectFit: useContain ? "contain" : "cover", objectPosition: useContain ? "bottom" : "center", zIndex: 1 }} 
                 onError={() => {
-                  console.warn(`[PreviewComposer Diagnostics] Slot ${index} image failed to load. Tried src: ${activeSrc.slice(0, 40)}...`);
-                  if (!failedSlots[index] && rawUrl && rawUrl !== activeSrc) {
-                    setFailedSlots(prev => ({ ...prev, [index]: true }));
-                  }
+                  console.warn(`[PreviewComposer Diagnostics] Slot ${index} image failed to load. Display URL: ${displayUrl}`);
+                  setFailedSlots(prev => ({ ...prev, [index]: true }));
                 }}
               />
             ) : (
