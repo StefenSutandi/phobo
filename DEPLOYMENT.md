@@ -72,9 +72,11 @@ GOOGLE_OAUTH_REFRESH_TOKEN=your_refresh_token
 
 # Printer Configuration
 PHOBO_PRINTER_MODE=mock
-# When SELPHY is connected:
-# PHOBO_PRINTER_MODE=powershell
+# When SELPHY is connected on Windows Mini PC:
+# PHOBO_PRINTER_MODE=windows
 # PHOBO_PRINTER_NAME=Canon SELPHY CP1500
+# PHOBO_PRINT_COMMAND_MODE=direct-dotnet
+# PHOBO_PRINT_DRY_RUN=false
 ```
 
 ---
@@ -92,6 +94,9 @@ npx tsx scripts/test-payment.mjs
 
 # 3. Test Google Drive OAuth authentication & upload
 npx tsx scripts/test-drive-upload.mjs
+
+# 4. Test Windows direct printer pipeline (dry run)
+npx tsx scripts/test-printer.mjs
 ```
 
 ---

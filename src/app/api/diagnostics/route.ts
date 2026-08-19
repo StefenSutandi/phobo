@@ -27,6 +27,7 @@ export async function GET() {
       cameraTimeoutMs: env.cameraTimeoutMs,
       printerMode: env.printerMode,
       printerNameConfigured: env.printerNameConfigured,
+      printDryRun: env.printDryRun,
       printCommandMode: env.printCommandMode,
       printPaper: env.printPaper,
       printWidthPx: env.printWidthPx,
