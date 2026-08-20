@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { KioskButton, KioskStage, PhotoResultStrip, PreviewComposer, StickerPicker } from "@/components/kiosk";
 import { getFrameById, getBackgroundById } from "@/lib/phobo-data";
@@ -70,6 +70,8 @@ export default function Preview() {
 
   const assignments = session?.photoSlotAssignments ?? Array.from({ length: requiredSlots }, (_, i) => (i < captured.length ? i : null));
 
+  const suppressNextClickRef = useRef(false);
+
   // Pure replace assignment: assign photo P to slot S without modifying or swapping other slots
   const handleAssignPhotoToSlot = useCallback((photoIndex: number, targetSlotIndex: number) => {
     const nextAssignments = assignPhotoToSlot(assignments, photoIndex, targetSlotIndex);
@@ -78,14 +80,18 @@ export default function Preview() {
     setSelectedSlotIdx(null);
   }, [assignments, setPhotoSlotAssignments]);
 
-  // Tap handlers (fallback & accessible interaction)
-  const handleTogglePhoto = (index: number) => {
+  // Click handler (supports keyboard/accessibility clicks, suppresses trailing click after pointer gestures)
+  const handleTogglePhoto = useCallback((index: number) => {
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      return;
+    }
     if (selectedSlotIdx !== null) {
       handleAssignPhotoToSlot(index, selectedSlotIdx);
     } else {
       setSelectedPhotoIdx(prev => (prev === index ? null : index));
     }
-  };
+  }, [selectedSlotIdx, handleAssignPhotoToSlot]);
 
   const handleSlotClick = (slotIndex: number) => {
     if (selectedPhotoIdx !== null) {
@@ -167,6 +173,7 @@ export default function Preview() {
       if (upEvent.pointerId !== pointerId) return;
 
       if (gestureState === "dragging") {
+        suppressNextClickRef.current = true;
         const el = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
         const slotEl = el?.closest("[data-slot-index]");
         if (slotEl) {
@@ -176,13 +183,22 @@ export default function Preview() {
             handleAssignPhotoToSlot(photoIndex, targetIdx);
           }
         }
+      } else if (gestureState === "scrolling") {
+        suppressNextClickRef.current = true;
       } else if (gestureState === "pending") {
         const elapsed = Date.now() - startTime;
         const dx = upEvent.clientX - startX;
         const dy = upEvent.clientY - startY;
         const gesture = classifyPointerGesture(dx, dy);
         if (gesture === "tap" && elapsed < 500) {
-          handleTogglePhoto(photoIndex);
+          suppressNextClickRef.current = true;
+          if (selectedSlotIdx !== null) {
+            handleAssignPhotoToSlot(photoIndex, selectedSlotIdx);
+          } else {
+            setSelectedPhotoIdx(prev => (prev === photoIndex ? null : photoIndex));
+          }
+        } else if (gesture === "scroll") {
+          suppressNextClickRef.current = true;
         }
       }
 

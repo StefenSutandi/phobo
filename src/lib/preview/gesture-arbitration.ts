@@ -33,3 +33,28 @@ export function classifyPointerGesture(
 
   return "pending";
 }
+
+/**
+ * Manages click suppression after pointer gestures (tap, scroll, drag)
+ * to avoid double toggles from synthetic/native DOM click events while
+ * preserving natural keyboard / accessibility activation.
+ */
+export class ClickSuppressionManager {
+  private _suppressNextClick = false;
+
+  shouldSuppressClick(): boolean {
+    if (this._suppressNextClick) {
+      this._suppressNextClick = false;
+      return true;
+    }
+    return false;
+  }
+
+  markGestureHandled(): void {
+    this._suppressNextClick = true;
+  }
+
+  reset(): void {
+    this._suppressNextClick = false;
+  }
+}
