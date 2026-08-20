@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { KioskButton, KioskStage, PhotoResultStrip, PreviewComposer, StickerPicker } from "@/components/kiosk";
-import { getFrameById, getBackgroundById, backgrounds } from "@/lib/phobo-data";
+import { getFrameById, getBackgroundById } from "@/lib/phobo-data";
+import { assignPhotoToSlot } from "@/lib/preview/slot-assignment";
 import { useSessionStore } from "@/lib/session/session-store";
-import { getPhotoDisplayUrl, getPhotoRawUrl, type CapturedPhoto } from "@/lib/session/session-types";
+import { getPhotoDisplayUrl, getPhotoRawUrl } from "@/lib/session/session-types";
 import { getStickers } from "./actions";
 
 export default function Preview() {
@@ -23,11 +24,11 @@ export default function Preview() {
   const [error, setError] = useState("");
   const [stickersList, setStickersList] = useState<string[]>([]);
   
-  // Selection / Interaction states for Tap Fallback and Drag & Drop
+  // Selection / Interaction states for Tap Fallback
   const [selectedPhotoIdx, setSelectedPhotoIdx] = useState<number | null>(null);
   const [selectedSlotIdx, setSelectedSlotIdx] = useState<number | null>(null);
 
-  // Pointer Drag & Drop states
+  // Pointer Drag & Drop states (IR Touch + Mouse)
   const [draggingPhotoIdx, setDraggingPhotoIdx] = useState<number | null>(null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const [dragOverSlotIdx, setDragOverSlotIdx] = useState<number | null>(null);
@@ -43,6 +44,10 @@ export default function Preview() {
   const frame = getFrameById(session?.selectedFrameId);
   const requiredSlots = frame.photoSlots.length;
   const captured = session?.capturedPhotos ?? [];
+
+  // Compute representative photo-slot aspect ratio for thumbnails and drag ghost
+  const representativeSlot = frame.photoSlots[0];
+  const slotRatio = representativeSlot ? representativeSlot.width / representativeSlot.height : 1.5;
 
   // Initialize or validate slot assignments
   useEffect(() => {
@@ -64,27 +69,17 @@ export default function Preview() {
 
   const assignments = session?.photoSlotAssignments ?? Array.from({ length: requiredSlots }, (_, i) => (i < captured.length ? i : null));
 
-  // Swap / assign logic
+  // Pure replace assignment: assign photo P to slot S without modifying or swapping other slots
   const handleAssignPhotoToSlot = useCallback((photoIndex: number, targetSlotIndex: number) => {
-    const nextAssignments = [...assignments];
-    const existingSlotOfPhoto = nextAssignments.findIndex(a => a === photoIndex);
-    const occupantInTarget = nextAssignments[targetSlotIndex];
-
-    if (existingSlotOfPhoto >= 0 && existingSlotOfPhoto !== targetSlotIndex) {
-      // Swap! Place target occupant into photo's old slot
-      nextAssignments[existingSlotOfPhoto] = occupantInTarget !== undefined ? occupantInTarget : null;
-    }
-
-    nextAssignments[targetSlotIndex] = photoIndex;
+    const nextAssignments = assignPhotoToSlot(assignments, photoIndex, targetSlotIndex);
     setPhotoSlotAssignments(nextAssignments);
     setSelectedPhotoIdx(null);
     setSelectedSlotIdx(null);
   }, [assignments, setPhotoSlotAssignments]);
 
-  // Tap handlers
+  // Tap handlers (fallback & accessible interaction)
   const handleTogglePhoto = (index: number) => {
     if (selectedSlotIdx !== null) {
-      // Slot was already selected, assign photo to it
       handleAssignPhotoToSlot(index, selectedSlotIdx);
     } else {
       setSelectedPhotoIdx(prev => (prev === index ? null : index));
@@ -93,55 +88,105 @@ export default function Preview() {
 
   const handleSlotClick = (slotIndex: number) => {
     if (selectedPhotoIdx !== null) {
-      // Photo was already selected, assign to this slot
       handleAssignPhotoToSlot(selectedPhotoIdx, slotIndex);
     } else {
       setSelectedSlotIdx(prev => (prev === slotIndex ? null : slotIndex));
     }
   };
 
-  // Pointer drag & drop handlers for IR Touch + Mouse
+  // Robust Pointer Events Drag & Drop for IR Touch + Mouse
   const handlePointerDownPhoto = (e: React.PointerEvent, photoIndex: number) => {
-    setDraggingPhotoIdx(photoIndex);
-    setDragPos({ x: e.clientX, y: e.clientY });
+    const pointerId = e.pointerId;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startTime = Date.now();
+    let isDragging = false;
+
+    const targetEl = e.currentTarget as HTMLElement;
+    try {
+      targetEl.setPointerCapture?.(pointerId);
+    } catch {
+      // Ignore if setPointerCapture fails on certain touch devices
+    }
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
-      setDragPos({ x: moveEvent.clientX, y: moveEvent.clientY });
+      if (moveEvent.pointerId !== pointerId) return;
 
-      // Detect slot element under cursor
-      const el = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-      const slotEl = el?.closest("[data-slot-index]");
-      if (slotEl) {
-        const slotIdxStr = slotEl.getAttribute("data-slot-index");
-        if (slotIdxStr !== null) {
-          setDragOverSlotIdx(parseInt(slotIdxStr, 10));
-          return;
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      const distance = Math.hypot(dx, dy);
+
+      if (!isDragging) {
+        // Activate drag if moved beyond threshold and gesture is not pure vertical scroll
+        if (distance > 8) {
+          isDragging = true;
+          setDraggingPhotoIdx(photoIndex);
         }
       }
-      setDragOverSlotIdx(null);
+
+      if (isDragging) {
+        setDragPos({ x: moveEvent.clientX, y: moveEvent.clientY });
+
+        // Detect target slot element under pointer
+        const el = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+        const slotEl = el?.closest("[data-slot-index]");
+        if (slotEl) {
+          const slotIdxStr = slotEl.getAttribute("data-slot-index");
+          if (slotIdxStr !== null) {
+            setDragOverSlotIdx(parseInt(slotIdxStr, 10));
+            return;
+          }
+        }
+        setDragOverSlotIdx(null);
+      }
     };
 
-    const handlePointerUp = (upEvent: PointerEvent) => {
+    const cleanup = () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
-
-      const el = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
-      const slotEl = el?.closest("[data-slot-index]");
-      if (slotEl) {
-        const slotIdxStr = slotEl.getAttribute("data-slot-index");
-        if (slotIdxStr !== null) {
-          const targetIdx = parseInt(slotIdxStr, 10);
-          handleAssignPhotoToSlot(photoIndex, targetIdx);
-        }
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      try {
+        targetEl.releasePointerCapture?.(pointerId);
+      } catch {
+        // Ignore
       }
-
       setDraggingPhotoIdx(null);
       setDragPos(null);
       setDragOverSlotIdx(null);
     };
 
+    const handlePointerUp = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== pointerId) return;
+
+      if (isDragging) {
+        const el = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
+        const slotEl = el?.closest("[data-slot-index]");
+        if (slotEl) {
+          const slotIdxStr = slotEl.getAttribute("data-slot-index");
+          if (slotIdxStr !== null) {
+            const targetIdx = parseInt(slotIdxStr, 10);
+            handleAssignPhotoToSlot(photoIndex, targetIdx);
+          }
+        }
+      } else {
+        // Simple tap without dragging
+        const elapsed = Date.now() - startTime;
+        if (elapsed < 500) {
+          handleTogglePhoto(photoIndex);
+        }
+      }
+
+      cleanup();
+    };
+
+    const handlePointerCancel = (cancelEvent: PointerEvent) => {
+      if (cancelEvent.pointerId !== pointerId) return;
+      cleanup();
+    };
+
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
   };
 
   const isReady =
@@ -211,6 +256,9 @@ export default function Preview() {
     ? getBackgroundById(draggedPhotoObj.backgroundId)
     : getBackgroundById(session?.selectedBackgroundId || "background-01");
 
+  const ghostWidth = 110;
+  const ghostHeight = Math.round(ghostWidth / slotRatio);
+
   return (
     <KioskStage>
       <h1 className="preview-heading">PREVIEW FRAME</h1>
@@ -232,6 +280,7 @@ export default function Preview() {
         slotAssignments={assignments}
         selectedPhotoIndex={selectedPhotoIdx}
         selectedBackgroundId={session?.selectedBackgroundId}
+        aspectRatio={slotRatio}
         onTogglePhoto={handleTogglePhoto}
         onPointerDownPhoto={handlePointerDownPhoto}
       />
@@ -252,22 +301,22 @@ export default function Preview() {
 
       {error && <p className="kiosk-message">{error}</p>}
 
-      {/* Floating Drag Avatar */}
+      {/* Floating Landscape Drag Avatar */}
       {draggingPhotoIdx !== null && dragPos && (
         <div
           style={{
             position: "fixed",
-            left: dragPos.x - 40,
-            top: dragPos.y - 40,
-            width: 80,
-            height: 100,
+            left: dragPos.x - ghostWidth / 2,
+            top: dragPos.y - ghostHeight / 2,
+            width: ghostWidth,
+            height: ghostHeight,
             pointerEvents: "none",
             zIndex: 9999,
             borderRadius: "8px",
             overflow: "hidden",
             border: "3px solid #ffd700",
             boxShadow: "0 10px 25px rgba(0,0,0,0.7)",
-            transform: "scale(1.1)",
+            transform: "scale(1.08)",
             background: "#222"
           }}
         >
@@ -279,7 +328,7 @@ export default function Preview() {
           <img
             src={getPhotoDisplayUrl(draggedPhotoObj)}
             alt=""
-            style={{ position: "relative", zIndex: 1, width: "100%", height: "100%", objectFit: "contain" }}
+            style={{ position: "relative", zIndex: 1, width: "100%", height: "100%", objectFit: "cover" }}
           />
         </div>
       )}

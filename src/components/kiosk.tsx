@@ -513,6 +513,7 @@ type PhotoResultStripProps = {
   slotAssignments?: (number | null)[];
   selectedPhotoIndex?: number | null;
   selectedBackgroundId?: string;
+  aspectRatio?: number;
   onTogglePhoto?: (index: number) => void;
   onPointerDownPhoto?: (e: React.PointerEvent, index: number) => void;
 };
@@ -523,6 +524,7 @@ export function PhotoResultStrip({
   slotAssignments,
   selectedPhotoIndex,
   selectedBackgroundId,
+  aspectRatio = 1.5,
   onTogglePhoto,
   onPointerDownPhoto,
 }: PhotoResultStripProps) {
@@ -561,9 +563,14 @@ export function PhotoResultStrip({
               style={{
                 position: "relative",
                 overflow: "hidden",
+                width: "100%",
+                aspectRatio: `${aspectRatio}`,
+                borderRadius: "8px",
                 border: isSelected ? "3px solid #00ffff" : "2px solid transparent",
                 boxShadow: isSelected ? "0 0 10px #00ffff" : "none",
-                touchAction: "none"
+                touchAction: "none",
+                padding: 0,
+                flexShrink: 0
               }}
             >
               {bgObj && (bgObj.imageUrl ? (
@@ -577,7 +584,7 @@ export function PhotoResultStrip({
                   src={activeSrc} 
                   alt="" 
                   className="strip-photo__image" 
-                  style={{ position: "relative", zIndex: 1, objectFit: "contain", width: "100%", height: "100%" }}
+                  style={{ position: "relative", zIndex: 1, objectFit: "cover", width: "100%", height: "100%" }}
                   onError={() => {
                     console.warn(`[PhotoResultStrip Diagnostics] Thumbnail ${index} image failed to load. Tried src: ${activeSrc.slice(0, 40)}...`);
                     if (!failedThumbnails[index] && rawUrl && rawUrl !== activeSrc) {

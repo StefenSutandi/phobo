@@ -20,6 +20,50 @@ type CaptureResponse = {
   error?: string;
 };
 
+// Named constants for HDMI preview recovery during Canon DSLR shutter capture
+const HDMI_RECOVERY_POST_DCC_WAIT_MS = 600;
+const HDMI_RECOVERY_POLL_TIMEOUT_MS = 3000;
+const HDMI_RECOVERY_SETTLE_WINDOW_MS = 900;
+
+async function recoverDccPreview(liveRef: React.RefObject<CameraLiveViewHandle | null>): Promise<boolean> {
+  if (!liveRef.current) return true;
+
+  // 1. Initial wait for physical shutter cycle to complete
+  await new Promise((r) => setTimeout(r, HDMI_RECOVERY_POST_DCC_WAIT_MS));
+
+  // 2. Restart / reacquire browser capture stream while freeze overlay remains visible on top
+  try {
+    if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+      console.log("[Camera Preview] Restarting browser live view stream while freeze overlay is active");
+    }
+    await liveRef.current.restartLiveView();
+  } catch (err) {
+    console.warn("[Camera Preview] restartLiveView error:", err);
+  }
+
+  // 3. Poll until stream reports ready
+  const pollStart = Date.now();
+  let streamActive = false;
+  while (Date.now() - pollStart < HDMI_RECOVERY_POLL_TIMEOUT_MS) {
+    if (liveRef.current.isReady()) {
+      streamActive = true;
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+
+  if (streamActive) {
+    // 4. Additional settle window to allow video frames to stabilize and clear any residual buffer
+    if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+      console.log(`[Camera Preview] Stream active; waiting ${HDMI_RECOVERY_SETTLE_WINDOW_MS}ms settle window before clearing freeze`);
+    }
+    await new Promise((r) => setTimeout(r, HDMI_RECOVERY_SETTLE_WINDOW_MS));
+    return true;
+  }
+
+  return false;
+}
+
 export default function Camera() {
   const router = useRouter();
   const { session, hasHydrated, selectBackground, addCapturedPhoto } = useSessionStore();
@@ -156,44 +200,10 @@ export default function Camera() {
         throw new Error(data.error || "CAMERA CAPTURE GAGAL");
       }
 
-      // 2. HDMI recovery handling (only required when live preview is enabled)
-      if (captureMode === "digicamcontrol" && previewEnabled) {
-        if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
-          console.log("[Camera Preview] DSLR capture completed | waiting for HDMI recovery");
-        }
-
-        const recoveryStartTime = Date.now();
-        await new Promise(r => setTimeout(r, 1200));
-
-        let recovered = false;
-        const pollStart = Date.now();
-
-        while (Date.now() - pollStart < 2000) {
-          if (live.current?.isReady()) {
-            recovered = true;
-            break;
-          }
-          await new Promise(r => setTimeout(r, 200));
-        }
-
-        if (recovered) {
-          const elapsed = Date.now() - recoveryStartTime;
-          if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
-            console.log(`[Camera Preview] video recovered after ${elapsed} ms`);
-          }
-        } else {
-          if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
-            console.log("[Camera Preview] video did not recover; restarting browser stream");
-          }
-          await live.current?.restartLiveView();
-          await new Promise(r => setTimeout(r, 500));
-        }
-      }
-
       if (shotCount.current >= max) return;
       shotCount.current += 1;
 
-      // 3. Save authoritative captured photo with frozen backgroundId and dimensions
+      // 2. Save authoritative captured photo immediately
       addCapturedPhoto({
         raw: rawUrl,
         display: displayUrl as string,
@@ -202,13 +212,26 @@ export default function Camera() {
         height: data.height,
       });
 
-      setMessage(`FOTO ${shotCount.current} TERSIMPAN`);
+      // 3. Robust HDMI recovery if DSLR capture mode with preview is active
+      if (captureMode === "digicamcontrol" && previewEnabled) {
+        setMessage("KAMERA SEDANG MEMULIHKAN PREVIEW...");
+        const recovered = await recoverDccPreview(live);
+        if (recovered) {
+          setFreezeFrameUrl(null);
+          setMessage(`FOTO ${shotCount.current} TERSIMPAN`);
+        } else {
+          setMessage("KAMERA SEDANG MEMULIHKAN PREVIEW");
+        }
+      } else {
+        setFreezeFrameUrl(null);
+        setMessage(`FOTO ${shotCount.current} TERSIMPAN`);
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Foto gagal diambil. Silakan coba lagi.");
+      setFreezeFrameUrl(null);
     } finally {
       captureLock.current = false;
       setIsCapturing(false);
-      setFreezeFrameUrl(null);
     }
   }
 

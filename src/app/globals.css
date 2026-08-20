@@ -445,10 +445,10 @@ button {
 .photo-strip {
   border-radius: 34px;
   height: 83.41%;
-  left: 51.33%;
+  left: 51%;
   overflow: hidden;
   top: 7.05%;
-  width: 19.2%;
+  width: 21.5%;
 }
 
 .strip-title,
@@ -479,25 +479,31 @@ button {
 }
 
 .strip-scroll {
-  display: grid;
-  gap: 13px;
-  height: 265px;
-  left: 38px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 270px;
+  left: 14px;
+  right: 14px;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 0 18px 12px 0;
+  padding: 0 4px 12px 0;
   position: absolute;
-  top: 83px;
-  width: 88px;
+  top: 75px;
+  width: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .strip-photo {
   background: var(--placeholder);
   border: 0;
-  height: 72px;
+  border-radius: 8px;
   overflow: hidden;
-  width: 62px;
+  width: 100%;
+  cursor: pointer;
+  flex-shrink: 0;
+  touch-action: pan-y;
 }
 
 .strip-photo__image {
@@ -871,8 +877,96 @@ button {
 .shot-counter{position:absolute;left:36px;top:22px;z-index:20;background:var(--purple);border-radius:20px;padding:7px 18px;font-size:26px}
 .preview-heading{position:absolute;left:45px;top:18px;font-size:42px;font-weight:400}
 .strip-photo.is-selected,.sticker-choice.is-selected{outline:5px solid #fff;outline-offset:-3px}
-.result-actions{position:absolute;left:35px;right:35px;bottom:18px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
-.result-actions a,.result-actions button{font-size:16px;padding:8px 12px}
+
+/* Dedicated 750x440 Kiosk Result Layout */
+.result-layout {
+  position: absolute;
+  top: 20px;
+  left: 28px;
+  right: 28px;
+  bottom: 60px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 36px;
+  z-index: 10;
+}
+
+.result-preview-panel {
+  flex: 0 0 220px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.result-preview-card {
+  height: 100%;
+  max-height: 290px;
+  aspect-ratio: 1200 / 1800;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.result-preview-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.result-qr-panel {
+  flex: 0 0 280px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.result-title {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: #fff;
+  margin: 0 0 12px 0;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  line-height: 1.1;
+}
+
+.result-qr-box {
+  width: 180px;
+  height: 180px;
+  background-color: #fff;
+  padding: 10px;
+  border-radius: 14px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: center;
+}
+
+.result-qr-timer {
+  margin: 8px 0 0 0;
+  font-size: 15px;
+  color: #ccc;
+}
+
+.result-status-msg {
+  margin: 6px 0 0 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.result-actions{position:absolute;left:20px;right:20px;bottom:12px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;z-index:20}
+.result-actions a,.result-actions button{font-size:15px;padding:6px 14px;border-radius:18px}
 .result-actions button:disabled{opacity:.45}
 .result-actions .add-print{background:var(--orange)}
 .result-message{position:absolute;right:18px;top:18px;font-family:var(--sans-font);font-size:12px}

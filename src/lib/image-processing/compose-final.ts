@@ -159,8 +159,8 @@ export async function composeFinalImages({
       const finalWidth = meta.width ?? sticker.width;
       const finalHeight = meta.height ?? sticker.width;
       
-      const left = Math.round(sticker.x - (finalWidth - sticker.width) / 2);
-      const top = Math.round(sticker.y - (finalHeight - (sticker.height || sticker.width)) / 2);
+      const left = Math.round(sticker.x - finalWidth / 2);
+      const top = Math.round(sticker.y - finalHeight / 2);
       
       composites.push({ input: stickerBuffer, left, top });
     } catch (error) {
