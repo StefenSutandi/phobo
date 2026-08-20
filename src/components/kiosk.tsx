@@ -537,11 +537,8 @@ export function PhotoResultStrip({
       <div className="strip-scroll">
         {visiblePhotos.map((photoItem, index) => {
           const displayUrl = getPhotoDisplayUrl(photoItem);
-          const rawUrl = getPhotoRawUrl(photoItem);
-          let activeSrc = failedThumbnails[index] ? rawUrl : displayUrl;
-          if (!isValidImgSrc(activeSrc)) {
-            activeSrc = rawUrl && isValidImgSrc(rawUrl) ? rawUrl : "";
-          }
+          const activeSrc = isValidImgSrc(displayUrl) ? displayUrl : "";
+          const isFailed = Boolean(failedThumbnails[index]);
 
           let bgId = selectedBackgroundId;
           if (photoItem && typeof photoItem === "object" && photoItem.backgroundId) {
@@ -568,7 +565,7 @@ export function PhotoResultStrip({
                 borderRadius: "8px",
                 border: isSelected ? "3px solid #00ffff" : "2px solid transparent",
                 boxShadow: isSelected ? "0 0 10px #00ffff" : "none",
-                touchAction: "none",
+                touchAction: "pan-y",
                 padding: 0,
                 flexShrink: 0
               }}
@@ -579,17 +576,34 @@ export function PhotoResultStrip({
                 <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", backgroundColor: bgObj.color || "#d9d9d9", zIndex: 0 }} />
               ))}
 
-              {activeSrc ? (
+              {isFailed ? (
+                <div style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "rgba(0,0,0,0.65)",
+                  color: "#ff6b6b",
+                  fontSize: "10px",
+                  fontWeight: "bold",
+                  textAlign: "center",
+                  padding: "4px",
+                  zIndex: 1
+                }}>
+                  <span style={{ fontSize: "14px", marginBottom: "2px" }}>⚠️</span>
+                  <span>FOTO GAGAL DIMUAT</span>
+                </div>
+              ) : activeSrc ? (
                 <img 
                   src={activeSrc} 
                   alt="" 
                   className="strip-photo__image" 
                   style={{ position: "relative", zIndex: 1, objectFit: "cover", width: "100%", height: "100%" }}
                   onError={() => {
-                    console.warn(`[PhotoResultStrip Diagnostics] Thumbnail ${index} image failed to load. Tried src: ${activeSrc.slice(0, 40)}...`);
-                    if (!failedThumbnails[index] && rawUrl && rawUrl !== activeSrc) {
-                      setFailedThumbnails(prev => ({ ...prev, [index]: true }));
-                    }
+                    console.warn(`[PhotoResultStrip Diagnostics] Thumbnail ${index} image failed to load. Display URL: ${displayUrl}`);
+                    setFailedThumbnails(prev => ({ ...prev, [index]: true }));
                   }}
                 />
               ) : (

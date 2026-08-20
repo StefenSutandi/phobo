@@ -22,7 +22,8 @@ type CaptureResponse = {
 
 // Named constants for HDMI preview recovery during Canon DSLR shutter capture
 const HDMI_RECOVERY_POST_DCC_WAIT_MS = 600;
-const HDMI_RECOVERY_POLL_TIMEOUT_MS = 3000;
+const HDMI_RECOVERY_POLL_TIMEOUT_MS = 2500;
+const HDMI_RECOVERY_RETRY_POLL_TIMEOUT_MS = 2000;
 const HDMI_RECOVERY_SETTLE_WINDOW_MS = 900;
 
 async function recoverDccPreview(liveRef: React.RefObject<CameraLiveViewHandle | null>): Promise<boolean> {
@@ -31,14 +32,14 @@ async function recoverDccPreview(liveRef: React.RefObject<CameraLiveViewHandle |
   // 1. Initial wait for physical shutter cycle to complete
   await new Promise((r) => setTimeout(r, HDMI_RECOVERY_POST_DCC_WAIT_MS));
 
-  // 2. Restart / reacquire browser capture stream while freeze overlay remains visible on top
+  // 2. First restart attempt of browser capture stream while freeze overlay remains visible on top
   try {
     if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
       console.log("[Camera Preview] Restarting browser live view stream while freeze overlay is active");
     }
     await liveRef.current.restartLiveView();
   } catch (err) {
-    console.warn("[Camera Preview] restartLiveView error:", err);
+    console.warn("[Camera Preview] restartLiveView error (attempt 1):", err);
   }
 
   // 3. Poll until stream reports ready
@@ -52,8 +53,28 @@ async function recoverDccPreview(liveRef: React.RefObject<CameraLiveViewHandle |
     await new Promise((r) => setTimeout(r, 150));
   }
 
+  // 4. If first attempt failed, perform one additional controlled restart attempt
+  if (!streamActive) {
+    if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+      console.log("[Camera Preview] Attempt 1 did not become ready; retrying controlled restart");
+    }
+    try {
+      await liveRef.current.restartLiveView();
+    } catch (err) {
+      console.warn("[Camera Preview] restartLiveView error (attempt 2):", err);
+    }
+    const retryStart = Date.now();
+    while (Date.now() - retryStart < HDMI_RECOVERY_RETRY_POLL_TIMEOUT_MS) {
+      if (liveRef.current.isReady()) {
+        streamActive = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }
+
   if (streamActive) {
-    // 4. Additional settle window to allow video frames to stabilize and clear any residual buffer
+    // 5. Additional settle window to allow video frames to stabilize and clear any residual buffer
     if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
       console.log(`[Camera Preview] Stream active; waiting ${HDMI_RECOVERY_SETTLE_WINDOW_MS}ms settle window before clearing freeze`);
     }
@@ -220,7 +241,7 @@ export default function Camera() {
           setFreezeFrameUrl(null);
           setMessage(`FOTO ${shotCount.current} TERSIMPAN`);
         } else {
-          setMessage("KAMERA SEDANG MEMULIHKAN PREVIEW");
+          setMessage("PREVIEW KAMERA BELUM PULIH — FOTO TETAP TERSIMPAN");
         }
       } else {
         setFreezeFrameUrl(null);

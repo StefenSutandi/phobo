@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { KioskButton, KioskStage, PhotoResultStrip, PreviewComposer } from "@/components/kiosk";
 import { getFrameById, getBackgroundById } from "@/lib/phobo-data";
 import { assignPhotoToSlot } from "@/lib/preview/slot-assignment";
+import { classifyPointerGesture } from "@/lib/preview/gesture-arbitration";
 import { useSessionStore } from "@/lib/session/session-store";
 import { getPhotoDisplayUrl } from "@/lib/session/session-types";
 
@@ -12,6 +13,7 @@ export default function AdditionalPreview() {
   const router = useRouter();
   const {
     session,
+    hasHydrated,
     setAdditionalPhotoSlotAssignments,
     setAddPrintPaymentStatus,
   } = useSessionStore();
@@ -30,12 +32,33 @@ export default function AdditionalPreview() {
   const requiredSlots = frame ? frame.photoSlots.length : 0;
   const captured = session?.capturedPhotos ?? [];
 
+  // 1. Navigation guard when hydrated
+  useEffect(() => {
+    if (hasHydrated && !session?.additionalFrameId) {
+      router.replace("/additional-frame");
+    }
+  }, [hasHydrated, session?.additionalFrameId, router]);
+
+  // 2. Persist initial slot assignments so pressing NEXT without touching slots works seamlessly
+  useEffect(() => {
+    if (!hasHydrated || !session || !frame || captured.length === 0) return;
+
+    const currentAssignments = session.additionalPhotoSlotAssignments;
+    if (!currentAssignments || currentAssignments.length !== requiredSlots) {
+      const initial = Array.from(
+        { length: requiredSlots },
+        (_, i) => (i < captured.length ? i : null)
+      );
+      setAdditionalPhotoSlotAssignments(initial);
+    }
+  }, [hasHydrated, session, frame, requiredSlots, captured.length, setAdditionalPhotoSlotAssignments]);
+
   const representativeSlot = frame?.photoSlots[0];
   const slotRatio = representativeSlot ? representativeSlot.width / representativeSlot.height : 1.5;
 
   const assignments = session?.additionalPhotoSlotAssignments ?? Array.from({ length: requiredSlots }, (_, i) => (i < captured.length ? i : null));
 
-  // Pure replace assignment
+  // Pure replace assignment: assign photo P to slot S without modifying or swapping other slots
   const handleAssignPhotoToSlot = useCallback((photoIndex: number, targetSlotIndex: number) => {
     const nextAssignments = assignPhotoToSlot(assignments, photoIndex, targetSlotIndex);
     setAdditionalPhotoSlotAssignments(nextAssignments);
@@ -60,36 +83,44 @@ export default function AdditionalPreview() {
     }
   };
 
-  // Robust Pointer Events Drag & Drop for IR Touch + Mouse
+  // Robust Pointer Events Drag & Drop with Gesture Arbitration for IR Touch + Mouse
   const handlePointerDownPhoto = (e: React.PointerEvent, photoIndex: number) => {
     const pointerId = e.pointerId;
     const startX = e.clientX;
     const startY = e.clientY;
     const startTime = Date.now();
-    let isDragging = false;
+    let gestureState: "pending" | "scrolling" | "dragging" = "pending";
 
     const targetEl = e.currentTarget as HTMLElement;
-    try {
-      targetEl.setPointerCapture?.(pointerId);
-    } catch {
-      // Ignore
-    }
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) return;
 
+      if (gestureState === "scrolling") {
+        // Natural vertical scrolling - do not interfere
+        return;
+      }
+
       const dx = moveEvent.clientX - startX;
       const dy = moveEvent.clientY - startY;
-      const distance = Math.hypot(dx, dy);
 
-      if (!isDragging) {
-        if (distance > 8) {
-          isDragging = true;
+      if (gestureState === "pending") {
+        const gesture = classifyPointerGesture(dx, dy);
+        if (gesture === "scroll") {
+          gestureState = "scrolling";
+          return;
+        } else if (gesture === "drag") {
+          gestureState = "dragging";
+          try {
+            targetEl.setPointerCapture?.(pointerId);
+          } catch {
+            // Ignore
+          }
           setDraggingPhotoIdx(photoIndex);
         }
       }
 
-      if (isDragging) {
+      if (gestureState === "dragging") {
         setDragPos({ x: moveEvent.clientX, y: moveEvent.clientY });
 
         const el = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
@@ -122,7 +153,7 @@ export default function AdditionalPreview() {
     const handlePointerUp = (upEvent: PointerEvent) => {
       if (upEvent.pointerId !== pointerId) return;
 
-      if (isDragging) {
+      if (gestureState === "dragging") {
         const el = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
         const slotEl = el?.closest("[data-slot-index]");
         if (slotEl) {
@@ -132,9 +163,12 @@ export default function AdditionalPreview() {
             handleAssignPhotoToSlot(photoIndex, targetIdx);
           }
         }
-      } else {
+      } else if (gestureState === "pending") {
         const elapsed = Date.now() - startTime;
-        if (elapsed < 500) {
+        const dx = upEvent.clientX - startX;
+        const dy = upEvent.clientY - startY;
+        const gesture = classifyPointerGesture(dx, dy);
+        if (gesture === "tap" && elapsed < 500) {
           handleTogglePhoto(photoIndex);
         }
       }

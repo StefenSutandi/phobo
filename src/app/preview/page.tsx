@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { KioskButton, KioskStage, PhotoResultStrip, PreviewComposer, StickerPicker } from "@/components/kiosk";
 import { getFrameById, getBackgroundById } from "@/lib/phobo-data";
 import { assignPhotoToSlot } from "@/lib/preview/slot-assignment";
+import { classifyPointerGesture } from "@/lib/preview/gesture-arbitration";
 import { useSessionStore } from "@/lib/session/session-store";
 import { getPhotoDisplayUrl, getPhotoRawUrl } from "@/lib/session/session-types";
 import { getStickers } from "./actions";
@@ -94,37 +95,44 @@ export default function Preview() {
     }
   };
 
-  // Robust Pointer Events Drag & Drop for IR Touch + Mouse
+  // Robust Pointer Events Drag & Drop with Gesture Arbitration for IR Touch + Mouse
   const handlePointerDownPhoto = (e: React.PointerEvent, photoIndex: number) => {
     const pointerId = e.pointerId;
     const startX = e.clientX;
     const startY = e.clientY;
     const startTime = Date.now();
-    let isDragging = false;
+    let gestureState: "pending" | "scrolling" | "dragging" = "pending";
 
     const targetEl = e.currentTarget as HTMLElement;
-    try {
-      targetEl.setPointerCapture?.(pointerId);
-    } catch {
-      // Ignore if setPointerCapture fails on certain touch devices
-    }
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) return;
 
+      if (gestureState === "scrolling") {
+        // Natural vertical scrolling - do not interfere
+        return;
+      }
+
       const dx = moveEvent.clientX - startX;
       const dy = moveEvent.clientY - startY;
-      const distance = Math.hypot(dx, dy);
 
-      if (!isDragging) {
-        // Activate drag if moved beyond threshold and gesture is not pure vertical scroll
-        if (distance > 8) {
-          isDragging = true;
+      if (gestureState === "pending") {
+        const gesture = classifyPointerGesture(dx, dy);
+        if (gesture === "scroll") {
+          gestureState = "scrolling";
+          return;
+        } else if (gesture === "drag") {
+          gestureState = "dragging";
+          try {
+            targetEl.setPointerCapture?.(pointerId);
+          } catch {
+            // Ignore
+          }
           setDraggingPhotoIdx(photoIndex);
         }
       }
 
-      if (isDragging) {
+      if (gestureState === "dragging") {
         setDragPos({ x: moveEvent.clientX, y: moveEvent.clientY });
 
         // Detect target slot element under pointer
@@ -158,7 +166,7 @@ export default function Preview() {
     const handlePointerUp = (upEvent: PointerEvent) => {
       if (upEvent.pointerId !== pointerId) return;
 
-      if (isDragging) {
+      if (gestureState === "dragging") {
         const el = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
         const slotEl = el?.closest("[data-slot-index]");
         if (slotEl) {
@@ -168,10 +176,12 @@ export default function Preview() {
             handleAssignPhotoToSlot(photoIndex, targetIdx);
           }
         }
-      } else {
-        // Simple tap without dragging
+      } else if (gestureState === "pending") {
         const elapsed = Date.now() - startTime;
-        if (elapsed < 500) {
+        const dx = upEvent.clientX - startX;
+        const dy = upEvent.clientY - startY;
+        const gesture = classifyPointerGesture(dx, dy);
+        if (gesture === "tap" && elapsed < 500) {
           handleTogglePhoto(photoIndex);
         }
       }
