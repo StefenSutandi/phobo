@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { computePrintDestination, type PrintFitMode } from "./print-layout";
 
 const execFileAsync = promisify(execFile);
 
@@ -38,6 +39,10 @@ export type PrintJobResult = {
 
 function getPrinterMode(): PrinterMode {
   return process.env.PHOBO_PRINTER_MODE === "windows" ? "windows" : "mock";
+}
+
+function getPrintFitMode(): PrintFitMode {
+  return process.env.PHOBO_PRINT_FIT === "contain" ? "contain" : "fill";
 }
 
 async function fileExists(filePath: string) {
@@ -98,14 +103,16 @@ async function resolvePrintUrlToLocalFilePath(printUrl: string) {
   return resolvedPath;
 }
 
-function buildDirectPrintScript({
+export function buildDirectPrintScript({
   filePath,
   printerName,
   dryRun,
+  fitMode = "fill",
 }: {
   filePath: string;
   printerName: string;
   dryRun: boolean;
+  fitMode?: PrintFitMode;
 }): string {
   const escapedFilePath = filePath.replace(/'/g, "''");
   const escapedPrinterName = printerName.replace(/'/g, "''");
@@ -116,6 +123,7 @@ function buildDirectPrintScript({
     `$filePath = '${escapedFilePath}'`,
     `$targetPrinter = '${escapedPrinterName}'`,
     `$isDryRun = $${dryRun ? "True" : "False"}`,
+    `$fitMode = '${fitMode}'`,
     ``,
     `# 1. Validate file exists on disk`,
     `if (-not (Test-Path -LiteralPath $filePath)) {`,
@@ -157,25 +165,64 @@ function buildDirectPrintScript({
     `    # Suppress all GUI dialogs/progress popups`,
     `    $doc.PrintController = New-Object System.Drawing.Printing.StandardPrintController`,
     ``,
-    `    # Automatically set orientation based on image dimensions`,
+    `    # 4. Zero software margins & disable origin offset at margins (print full-bleed/physical page)`,
+    `    $doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)`,
+    `    $doc.OriginAtMargins = $false`,
+    ``,
+    `    # 5. Search driver paper sizes for 4R / Postcard media if available`,
+    `    try {`,
+    `        $paperSizes = $doc.PrinterSettings.PaperSizes`,
+    `        $selectedPaper = $null`,
+    `        foreach ($ps in $paperSizes) {`,
+    `            $name = $ps.PaperName.ToLower()`,
+    `            if ($name -like "*postcard*" -or $name -like "*hagaki*" -or $name -like "*4x6*" -or $name -like "*4 x 6*" -or $name -like "*4r*" -or $name -like "*100x148*" -or $name -like "*100 x 148*") {`,
+    `                $selectedPaper = $ps`,
+    `                break`,
+    `            }`,
+    `        }`,
+    `        if (-not $selectedPaper) {`,
+    `            foreach ($ps in $paperSizes) {`,
+    `                $w = $ps.Width`,
+    `                $h = $ps.Height`,
+    `                if (($w -ge 380 -and $w -le 420 -and $h -ge 580 -and $h -le 620) -or ($w -ge 580 -and $w -le 620 -and $h -ge 380 -and $h -le 420)) {`,
+    `                    $selectedPaper = $ps`,
+    `                    break`,
+    `                }`,
+    `            }`,
+    `        }`,
+    `        if ($selectedPaper) {`,
+    `            $doc.DefaultPageSettings.PaperSize = $selectedPaper`,
+    `        }`,
+    `    } catch {`,
+    `        # Keep driver default paper size if paper search fails`,
+    `    }`,
+    ``,
+    `    # 6. Automatically set orientation based on image dimensions`,
     `    $isLandscape = $img.Width -gt $img.Height`,
     `    $doc.DefaultPageSettings.Landscape = $isLandscape`,
     ``,
     `    $doc.add_PrintPage({`,
     `        param($sender, $e)`,
-    `        $bounds = $e.MarginBounds`,
-    `        if ($bounds.Width -le 0 -or $bounds.Height -le 0) {`,
-    `            $bounds = $e.PageBounds`,
-    `        }`,
+    `        # Use physical PageBounds (0 software margins)`,
+    `        $bounds = $e.PageBounds`,
     ``,
     `        $imgW = $img.Width`,
     `        $imgH = $img.Height`,
-    `        $scale = [Math]::Min($bounds.Width / $imgW, $bounds.Height / $imgH)`,
     ``,
-    `        $destW = [int]($imgW * $scale)`,
-    `        $destH = [int]($imgH * $scale)`,
-    `        $destX = $bounds.X + [int](($bounds.Width - $destW) / 2)`,
-    `        $destY = $bounds.Y + [int](($bounds.Height - $destH) / 2)`,
+    `        $scaleX = [double]$bounds.Width / [double]$imgW`,
+    `        $scaleY = [double]$bounds.Height / [double]$imgH`,
+    ``,
+    `        if ($fitMode -eq 'contain') {`,
+    `            $scale = [Math]::Min($scaleX, $scaleY)`,
+    `        } else {`,
+    `            # Default: fill / cover`,
+    `            $scale = [Math]::Max($scaleX, $scaleY)`,
+    `        }`,
+    ``,
+    `        $destW = [int][Math]::Round($imgW * $scale)`,
+    `        $destH = [int][Math]::Round($imgH * $scale)`,
+    `        $destX = [int][Math]::Round($bounds.X + ($bounds.Width - $destW) / 2.0)`,
+    `        $destY = [int][Math]::Round($bounds.Y + ($bounds.Height - $destH) / 2.0)`,
     ``,
     `        # Render image with high-quality bicubic interpolation`,
     `        $e.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic`,
@@ -187,13 +234,35 @@ function buildDirectPrintScript({
     `        $e.HasMorePages = $false`,
     `    })`,
     ``,
-    `    $w = $img.Width`,
-    `    $h = $img.Height`,
+    `    # Calculate layout diagnostics for logging and dry-run reporting`,
+    `    $paperSize = $doc.DefaultPageSettings.PaperSize`,
+    `    $paperName = if ($paperSize) { $paperSize.PaperName } else { "Default" }`,
+    `    $paperW = if ($paperSize) { $paperSize.Width } else { 600 }`,
+    `    $paperH = if ($paperSize) { $paperSize.Height } else { 400 }`,
+    ``,
+    `    $calcPageW = if ($isLandscape) { [Math]::Max($paperW, $paperH) } else { [Math]::Min($paperW, $paperH) }`,
+    `    $calcPageH = if ($isLandscape) { [Math]::Min($paperW, $paperH) } else { [Math]::Max($paperW, $paperH) }`,
+    `    $calcScaleX = [double]$calcPageW / [double]$img.Width`,
+    `    $calcScaleY = [double]$calcPageH / [double]$img.Height`,
+    `    $calcScale = if ($fitMode -eq 'contain') { [Math]::Min($calcScaleX, $calcScaleY) } else { [Math]::Max($calcScaleX, $calcScaleY) }`,
+    `    $calcDestW = [int][Math]::Round($img.Width * $calcScale)`,
+    `    $calcDestH = [int][Math]::Round($img.Height * $calcScale)`,
+    `    $calcDestX = [int][Math]::Round(($calcPageW - $calcDestW) / 2.0)`,
+    `    $calcDestY = [int][Math]::Round(($calcPageH - $calcDestH) / 2.0)`,
+    ``,
+    `    Write-Output "[Printer Layout]"`,
+    `    Write-Output "Printer=$matchedPrinter"`,
+    `    Write-Output "Image=$($img.Width)x$($img.Height) (Landscape=$isLandscape)"`,
+    `    Write-Output "FitMode=$fitMode"`,
+    `    Write-Output "Paper=$paperName ($($paperW)x$($paperH))"`,
+    `    Write-Output "PageDimensions=$calcPageW x $calcPageH"`,
+    `    Write-Output "Destination=X=$calcDestX,Y=$calcDestY,W=$calcDestW,H=$calcDestH"`,
+    ``,
     `    if ($isDryRun) {`,
-    `        Write-Output "DRY_RUN_OK: Image=$($w)x$($h), Landscape=$isLandscape, Printer=$matchedPrinter"`,
+    `        Write-Output "DRY_RUN_OK: Image=$($img.Width)x$($img.Height), Landscape=$isLandscape, Printer=$matchedPrinter, Paper=$paperName, Fit=$fitMode, Dest=[$calcDestX,$calcDestY,$calcDestW,$calcDestH]"`,
     `    } else {`,
     `        $doc.Print()`,
-    `        Write-Output "PRINT_OK: Image=$($w)x$($h), Landscape=$isLandscape, Printer=$matchedPrinter"`,
+    `        Write-Output "PRINT_OK: Image=$($img.Width)x$($img.Height), Landscape=$isLandscape, Printer=$matchedPrinter, Paper=$paperName, Fit=$fitMode, Dest=[$calcDestX,$calcDestY,$calcDestW,$calcDestH]"`,
     `    }`,
     `} finally {`,
     `    if ($doc) { $doc.Dispose() }`,
@@ -249,6 +318,7 @@ export class PrinterAdapter {
     }
 
     const dryRun = process.env.PHOBO_PRINT_DRY_RUN === "true";
+    const fitMode = getPrintFitMode();
 
     let localFilePath = "";
     let script = "";
@@ -259,9 +329,10 @@ export class PrinterAdapter {
         filePath: localFilePath,
         printerName,
         dryRun,
+        fitMode,
       });
 
-      console.log(`[Printer] Mode: ${mode} | Printer: ${printerName} | DryRun: ${dryRun}`);
+      console.log(`[Printer] Mode: ${mode} | Printer: ${printerName} | DryRun: ${dryRun} | FitMode: ${fitMode}`);
       console.log(`[Printer] File: ${localFilePath}`);
 
       const base64Script = Buffer.from(script, "utf16le").toString("base64");
@@ -279,7 +350,7 @@ export class PrinterAdapter {
       const outStr = stdout.toString().trim();
       const errStr = stderr.toString().trim();
 
-      console.log(`[Printer] Success. Stdout: ${outStr || "none"}, Stderr: ${errStr || "none"}`);
+      console.log(`[Printer] Success. Stdout:\n${outStr || "none"}\nStderr: ${errStr || "none"}`);
 
       return {
         ok: true,
