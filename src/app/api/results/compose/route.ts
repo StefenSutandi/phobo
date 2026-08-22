@@ -2,13 +2,14 @@ import { mkdir, writeFile, readFile, access } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { composeFinalImages } from "@/lib/image-processing/compose-final";
-import { generate4RPrintTemplate } from "@/lib/print/print-template";
+import { generatePostcardPrint } from "@/lib/print/print-template";
 import { sanitizeSessionId } from "@/lib/results/result-storage";
 import { bufferToDataUrl } from "@/lib/image-processing/load-image";
 import { uploadFileToGoogleDrive } from "@/lib/storage/google-drive";
 import { getPhoboEnv } from "@/lib/config/phobo-env";
 
 export const runtime = "nodejs";
+export const PRINT_LAYOUT_VERSION = "single-postcard-v1";
 
 type ComposeRequest = {
   sessionId?: unknown;
@@ -50,7 +51,7 @@ function parseOptions(options: unknown): ComposeOptions {
 export async function POST(request: Request) {
   try {
     const { composeFinalImages } = await import("@/lib/image-processing/compose-final");
-    const { generate4RPrintTemplate } = await import("@/lib/print/print-template");
+    const { generatePostcardPrint } = await import("@/lib/print/print-template");
     const { sanitizeSessionId } = await import("@/lib/results/result-storage");
     const { bufferToDataUrl } = await import("@/lib/image-processing/load-image");
     const { uploadFileToGoogleDrive } = await import("@/lib/storage/google-drive");
@@ -119,6 +120,7 @@ export async function POST(request: Request) {
       slotAssignments,
       stickers,
       options: body.options,
+      printLayoutVersion: PRINT_LAYOUT_VERSION,
     });
 
     try {
@@ -154,8 +156,9 @@ export async function POST(request: Request) {
       stickers,
       options: parseOptions(body.options),
     });
-    const printBuffer = await generate4RPrintTemplate({
+    const printBuffer = await generatePostcardPrint({
       sessionId: body.sessionId,
+      finalImageBuffer: composed.finalScreenPng,
       finalImageUrl: await bufferToDataUrl(composed.finalScreenPng),
       selectedFrameId: body.selectedFrameId,
       selectedBackgroundId: body.selectedBackgroundId,

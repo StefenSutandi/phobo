@@ -3,8 +3,8 @@ export function getPhoboEnv() {
     process.env.PHOBO_CAMERA_CAPTURE_TIMEOUT_MS || "15000",
     10,
   );
-  const printWidthPx = Number.parseInt(process.env.PHOBO_PRINT_WIDTH_PX || "1748", 10);
-  const printHeightPx = Number.parseInt(process.env.PHOBO_PRINT_HEIGHT_PX || "1181", 10);
+  const printWidthPx = Number.parseInt(process.env.PHOBO_PRINT_WIDTH_PX || "1181", 10);
+  const printHeightPx = Number.parseInt(process.env.PHOBO_PRINT_HEIGHT_PX || "1748", 10);
 
   return {
     cameraMode: (process.env.PHOBO_CAMERA_MODE === "command" || process.env.PHOBO_CAMERA_MODE === "eos-watch" || process.env.PHOBO_CAMERA_MODE === "browser-video" || process.env.PHOBO_CAMERA_MODE === "digicam-live")
@@ -23,8 +23,8 @@ export function getPhoboEnv() {
     printDryRun: process.env.PHOBO_PRINT_DRY_RUN === "true",
     printCommandMode: process.env.PHOBO_PRINT_COMMAND_MODE || "direct-dotnet",
     printPaper: process.env.PHOBO_PRINT_PAPER || "4R",
-    printWidthPx: Number.isFinite(printWidthPx) ? printWidthPx : 1748,
-    printHeightPx: Number.isFinite(printHeightPx) ? printHeightPx : 1181,
+    printWidthPx: Number.isFinite(printWidthPx) ? printWidthPx : 1181,
+    printHeightPx: Number.isFinite(printHeightPx) ? printHeightPx : 1748,
     storageMode: process.env.PHOBO_STORAGE_MODE || "local",
     driveEnabled: process.env.PHOBO_DRIVE_ENABLED === "true",
     resultsDir: process.env.PHOBO_RESULTS_DIR || "public/results",

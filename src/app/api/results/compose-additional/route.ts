@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { composeFinalImages } from "@/lib/image-processing/compose-final";
-import { generate4RPrintTemplate } from "@/lib/print/print-template";
+import { generatePostcardPrint } from "@/lib/print/print-template";
 import { getPhoboEnv } from "@/lib/config/phobo-env";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -27,7 +27,6 @@ export async function POST(request: Request) {
     const safeSessionId = body.sessionId.replace(/[^a-zA-Z0-9_-]/g, "");
     const outputDirectory = path.join(process.cwd(), "public", "results", safeSessionId);
     
-    // We only need the print template, but composeFinalImages gives us the final screen PNG first
     // Save to additional_screen.png and additional_print.jpg
     const additionalScreenPath = path.join(outputDirectory, "additional_screen.png");
     const additionalPrintPath = path.join(outputDirectory, "additional_print.jpg");
@@ -66,8 +65,9 @@ export async function POST(request: Request) {
       options: parseOptions(body.options),
     });
 
-    const printBuffer = await generate4RPrintTemplate({
+    const printBuffer = await generatePostcardPrint({
       sessionId: body.sessionId,
+      finalImageBuffer: composed.finalScreenPng,
       finalImageUrl: await bufferToDataUrl(composed.finalScreenPng),
       selectedFrameId: body.additionalFrameId,
       selectedBackgroundId: body.selectedBackgroundId,
