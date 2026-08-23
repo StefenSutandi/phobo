@@ -151,21 +151,36 @@ async function runPrinterTests() {
   assert.ok(scriptContent.includes("Margins(0, 0, 0, 0)"), "Script must set 0 margins");
   assert.ok(scriptContent.includes("$doc.OriginAtMargins = $false"), "Script must disable origin at margins");
   assert.ok(scriptContent.includes("postcard"), "Script must search for postcard media");
-  assert.ok(scriptContent.includes("[Printer Layout]"), "Script must output layout diagnostics");
+  assert.ok(scriptContent.includes("Copies = 1"), "Script must explicitly set Copies = 1");
+  assert.ok(scriptContent.includes("[Printer Physical Layout]"), "Script must output physical layout diagnostics");
   assert.ok(scriptContent.includes("DRY_RUN_OK"), "Script must report dry-run completion with dimensions");
-  console.log("✓ PowerShell print script verified: zero margins, postcard selection, and layout diagnostics present");
+  console.log("✓ PowerShell print script verified: zero margins, postcard selection, Copies=1, and physical layout diagnostics present");
 
   // ================================================================
-  // PART 4: End-to-End Adapter Execution with Portrait Asset
+  // PART 4: End-to-End Adapter Execution & Validation (Tasks 2, 3, 8)
   // ================================================================
   // Create a synthetic 1181x1748 test print JPEG image on disk
   const testDir = path.join(projectRoot, "public", "results", "test-print-session");
   await fs.mkdir(testDir, { recursive: true });
   const testImagePath = path.join(testDir, "final_print.jpg");
+  const legacyImagePath = path.join(testDir, "legacy_landscape_print.jpg");
+  const wrongSizeImagePath = path.join(testDir, "wrong_size_print.jpg");
 
   console.log("\nStep 4: Writing synthetic 1181x1748 print JPEG image on disk...");
   await fs.writeFile(testImagePath, postcardBuffer);
   console.log(`✓ Synthetic print image created: ${testImagePath}`);
+
+  // Create legacy 1748x1181 landscape image for rejection testing
+  const legacyBuffer = await sharp({
+    create: { width: 1748, height: 1181, channels: 3, background: "white" }
+  }).jpeg().toBuffer();
+  await fs.writeFile(legacyImagePath, legacyBuffer);
+
+  // Create 1200x1800 unformatted screen image for rejection testing
+  const wrongSizeBuffer = await sharp({
+    create: { width: 1200, height: 1800, channels: 3, background: "white" }
+  }).jpeg().toBuffer();
+  await fs.writeFile(wrongSizeImagePath, wrongSizeBuffer);
 
   // Test 4A: Mock Mode Print
   console.log("\nStep 5: Testing Mock printer mode...");
@@ -179,8 +194,8 @@ async function runPrinterTests() {
   console.log("✓ Mock printer mode succeeded");
 
   if (process.platform === "win32") {
-    // Test 4B: Windows Direct Print - Dry Run Mode with Portrait Asset
-    console.log("\nStep 6: Testing Windows Direct Print in Dry Run mode (Canon SELPHY CP1500)...");
+    // Test 4B: Windows Direct Print - Dry Run Mode with Valid Portrait Asset (1181x1748)
+    console.log("\nStep 6: Testing Windows Direct Print in Dry Run mode (1181x1748 portrait)...");
     process.env.PHOBO_PRINTER_MODE = "windows";
     process.env.PHOBO_PRINTER_NAME = "Canon SELPHY CP1500";
     process.env.PHOBO_PRINT_DRY_RUN = "true";
@@ -196,11 +211,55 @@ async function runPrinterTests() {
     assert.ok(dryRunResult.stdout?.includes("DRY_RUN_OK"), "Stdout must confirm DRY_RUN_OK");
     assert.ok(dryRunResult.stdout?.includes("ImagePx=1181x1748"), "Stdout must confirm ImagePx=1181x1748");
     assert.ok(dryRunResult.stdout?.includes("Landscape=False"), "Stdout must confirm Landscape=False for portrait asset");
+    assert.ok(dryRunResult.stdout?.includes("Copies=1"), "Stdout must confirm Copies=1");
     assert.ok(dryRunResult.stdout?.includes("[Printer Layout]"), "Stdout must report [Printer Layout]");
     console.log(`✓ Dry Run Windows Direct Print validated with portrait layout diagnostics:\n${dryRunResult.stdout?.trim()}`);
 
-    // Test 4C: Missing Print Image File
-    console.log("\nStep 7: Testing error handling for missing print file...");
+    // Test 4C: Rejection of legacy 1748x1181 landscape image before sending to printer
+    console.log("\nStep 7: Testing server-side rejection of legacy 1748x1181 landscape asset...");
+    const legacyRejectResult = await printerAdapter.printImage({
+      sessionId: "test-print-session",
+      printUrl: "/results/test-print-session/legacy_landscape_print.jpg",
+    });
+    assert.equal(legacyRejectResult.ok, false, "Legacy landscape print must be rejected");
+    assert.ok(
+      legacyRejectResult.error?.includes("Legacy or invalid print asset") ||
+      legacyRejectResult.error?.includes("expected 1181x1748"),
+      `Error must explain legacy asset rejection: ${legacyRejectResult.error}`
+    );
+    console.log(`✓ Stale/legacy landscape asset properly rejected before consuming paper: ${legacyRejectResult.error}`);
+
+    // Test 4D: Rejection of wrong-sized 1200x1800 image
+    console.log("\nStep 8: Testing server-side rejection of non-1181x1748 asset...");
+    const wrongSizeRejectResult = await printerAdapter.printImage({
+      sessionId: "test-print-session",
+      printUrl: "/results/test-print-session/wrong_size_print.jpg",
+    });
+    assert.equal(wrongSizeRejectResult.ok, false, "Wrong-sized print asset must be rejected");
+    assert.ok(
+      wrongSizeRejectResult.error?.includes("Legacy or invalid print asset"),
+      `Error must explain size mismatch: ${wrongSizeRejectResult.error}`
+    );
+    console.log(`✓ Non-standard dimension asset properly rejected: ${wrongSizeRejectResult.error}`);
+
+    // Test 4E: Regeneration flow - old legacy file on disk regenerated via generatePostcardPrint
+    console.log("\nStep 9: Testing print asset regeneration over stale file on disk...");
+    const regeneratedBuffer = await generatePostcardPrint({
+      finalImageBuffer: syntheticFinalScreen,
+    });
+    await fs.writeFile(legacyImagePath, regeneratedBuffer);
+    const regeneratedMeta = await sharp(legacyImagePath).metadata();
+    assert.equal(regeneratedMeta.width, 1181);
+    assert.equal(regeneratedMeta.height, 1748);
+    const regenPrintResult = await printerAdapter.printImage({
+      sessionId: "test-print-session",
+      printUrl: "/results/test-print-session/legacy_landscape_print.jpg",
+    });
+    assert.equal(regenPrintResult.ok, true, "Regenerated file must now pass print validation");
+    console.log("✓ Stale file successfully replaced with freshly regenerated 1181x1748 postcard");
+
+    // Test 4F: Missing Print Image File
+    console.log("\nStep 10: Testing error handling for missing print file...");
     const missingResult = await printerAdapter.printImage({
       sessionId: "test-print-session",
       printUrl: "/results/test-print-session/nonexistent_print.jpg",
@@ -209,8 +268,8 @@ async function runPrinterTests() {
     assert.ok(missingResult.error?.includes("does not exist"), "Error must state file does not exist");
     console.log(`✓ Missing file properly rejected: ${missingResult.error}`);
 
-    // Test 4D: Nonexistent / Invalid Printer Name
-    console.log("\nStep 8: Testing error handling for invalid/uninstalled printer name...");
+    // Test 4G: Nonexistent / Invalid Printer Name
+    console.log("\nStep 11: Testing error handling for invalid/uninstalled printer name...");
     process.env.PHOBO_PRINTER_NAME = "Nonexistent_Printer_99999";
     const invalidPrinterResult = await printerAdapter.printImage({
       sessionId: "test-print-session",

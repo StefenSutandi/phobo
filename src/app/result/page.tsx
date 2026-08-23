@@ -9,11 +9,12 @@ import { useSessionStore } from "@/lib/session/session-store";
 
 export default function Result() {
   const router = useRouter();
-  const { session, setPrintStatus } = useSessionStore();
+  const { session, setPrintStatus, setPrintImageUrl } = useSessionStore();
   const [url, setUrl] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [showPrintAsset, setShowPrintAsset] = useState(false);
 
   useEffect(() => {
     if (session?.driveUrl) {
@@ -26,20 +27,37 @@ export default function Result() {
   }, [session?.finalImageUrl, session?.driveUrl]);
 
   async function print() {
-    const printTargetUrl = session?.printImageUrl || session?.finalImageUrl;
-    if (!printTargetUrl) return;
+    if (!session?.sessionId || !session?.finalImageUrl) return;
 
     setPrintStatus("queued");
     setBusy(true);
-    setMsg("MENGIRIM KE PRINTER...");
+    setMsg("MENYIAPKAN FILE CETAK...");
 
     try {
+      // 1. Always regenerate fresh single portrait postcard print asset from authoritative finalImageUrl
+      const regenRes = await fetch("/api/results/print-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: session.sessionId,
+          finalImageUrl: session.finalImageUrl,
+        }),
+      });
+      const regenData = await regenRes.json();
+      if (!regenRes.ok || !regenData.ok || !regenData.printUrl) {
+        throw new Error(regenData.error || "Gagal menyiapkan file cetak");
+      }
+
+      setPrintImageUrl(regenData.printUrl);
+
+      // 2. Send freshly validated print asset to printer
+      setMsg("MENGIRIM KE PRINTER...");
       const r = await fetch("/api/printer/print", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sessionId: session.sessionId,
-          printUrl: printTargetUrl,
+          printUrl: regenData.printUrl,
         }),
       });
       const d = await r.json();
@@ -54,6 +72,7 @@ export default function Result() {
   }
 
   const finalImageUrl = session?.finalImageUrl;
+  const printImageUrl = session?.printImageUrl;
 
   return (
     <KioskStage>
@@ -106,6 +125,56 @@ export default function Result() {
               <span style={{ marginTop: "6px", fontSize: "13px" }}>Memuat hasil foto...</span>
             </div>
           )}
+
+          {/* Operator Diagnostic: Expandable Print Asset Preview (Task 7) */}
+          {printImageUrl && (
+            <div style={{ marginTop: "8px", width: "100%", maxWidth: "360px" }}>
+              <button
+                type="button"
+                onClick={() => setShowPrintAsset((prev) => !prev)}
+                style={{
+                  background: "transparent",
+                  border: "1px solid #444",
+                  borderRadius: "6px",
+                  color: "#888",
+                  fontSize: "11px",
+                  padding: "4px 8px",
+                  cursor: "pointer",
+                  width: "100%",
+                  textAlign: "center",
+                }}
+              >
+                {showPrintAsset ? "HIDE PRINT ASSET (DIAGNOSTIC)" : "PREVIEW PRINT ASSET (DIAGNOSTIC)"}
+              </button>
+              {showPrintAsset && (
+                <div
+                  style={{
+                    marginTop: "6px",
+                    padding: "8px",
+                    background: "#111",
+                    border: "1px solid #333",
+                    borderRadius: "6px",
+                    textAlign: "center",
+                  }}
+                >
+                  <p style={{ fontSize: "10px", color: "#aaa", margin: "0 0 4px 0", fontWeight: "bold" }}>
+                    PRINT ASSET (1181x1748 Portrait Postcard)
+                  </p>
+                  <img
+                    src={printImageUrl}
+                    alt="Print Asset"
+                    style={{
+                      maxHeight: "180px",
+                      objectFit: "contain",
+                      border: "1px solid #555",
+                      borderRadius: "4px",
+                      background: "#000",
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right: Title, QR Code & Session Countdown Timer */}
@@ -154,7 +223,7 @@ export default function Result() {
             </a>
             <button
               onClick={print}
-              disabled={busy || (!session?.printImageUrl && !session?.finalImageUrl)}
+              disabled={busy || !session?.finalImageUrl}
             >
               {busy ? "PRINTING..." : "PRINT / MOCK PRINT"}
             </button>

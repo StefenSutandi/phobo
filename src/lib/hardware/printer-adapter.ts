@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import sharp from "sharp";
 import { computePrintDestination, type PrintFitMode } from "./print-layout";
 
 const execFileAsync = promisify(execFile);
@@ -197,9 +198,12 @@ export function buildDirectPrintScript({
     `        # Keep driver default paper size if paper search fails`,
     `    }`,
     ``,
-    `    # 6. Automatically set orientation based on image dimensions`,
+    `    # 6. Automatically set orientation based on image dimensions (Landscape=False for 1181x1748 portrait)`,
     `    $isLandscape = $img.Width -gt $img.Height`,
     `    $doc.DefaultPageSettings.Landscape = $isLandscape`,
+    ``,
+    `    # 7. Single physical copy per print invocation (One image = One physical postcard)`,
+    `    $doc.PrinterSettings.Copies = 1`,
     ``,
     `    $doc.add_PrintPage({`,
     `        param($sender, $e)`,
@@ -224,6 +228,20 @@ export function buildDirectPrintScript({
     `        $destX = [int][Math]::Round($bounds.X + ($bounds.Width - $destW) / 2.0)`,
     `        $destY = [int][Math]::Round($bounds.Y + ($bounds.Height - $destH) / 2.0)`,
     ``,
+    `        # Real driver event diagnostics`,
+    `        $ePageBounds = "X=$($e.PageBounds.X),Y=$($e.PageBounds.Y),W=$($e.PageBounds.Width),H=$($e.PageBounds.Height)"`,
+    `        $eMarginBounds = "X=$($e.MarginBounds.X),Y=$($e.MarginBounds.Y),W=$($e.MarginBounds.Width),H=$($e.MarginBounds.Height)"`,
+    `        $ePrintArea = "X=$($e.PageSettings.PrintableArea.X),Y=$($e.PageSettings.PrintableArea.Y),W=$($e.PageSettings.PrintableArea.Width),H=$($e.PageSettings.PrintableArea.Height)"`,
+    `        $eHardMargin = "X=$($e.PageSettings.HardMarginX),Y=$($e.PageSettings.HardMarginY)"`,
+    `        $eDestRect = "X=$destX,Y=$destY,W=$destW,H=$destH"`,
+    ``,
+    `        Write-Output "[Printer Physical Layout]"`,
+    `        Write-Output "e.PageBounds=$ePageBounds"`,
+    `        Write-Output "e.MarginBounds=$eMarginBounds"`,
+    `        Write-Output "e.PrintableArea=$ePrintArea"`,
+    `        Write-Output "e.HardMargin=$eHardMargin"`,
+    `        Write-Output "DestinationRect=$eDestRect"`,
+    ``,
     `        # Render image with high-quality bicubic interpolation`,
     `        $e.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic`,
     `        $e.Graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality`,
@@ -234,11 +252,12 @@ export function buildDirectPrintScript({
     `        $e.HasMorePages = $false`,
     `    })`,
     ``,
-    `    # Calculate layout diagnostics for logging and dry-run reporting`,
+    `    # Calculate layout diagnostics from in-memory DefaultPageSettings`,
     `    $paperSize = $doc.DefaultPageSettings.PaperSize`,
     `    $paperName = if ($paperSize) { $paperSize.PaperName } else { "Default" }`,
-    `    $paperW = if ($paperSize) { $paperSize.Width } else { 600 }`,
-    `    $paperH = if ($paperSize) { $paperSize.Height } else { 400 }`,
+    `    $paperW = if ($paperSize) { $paperSize.Width } else { 394 }`,
+    `    $paperH = if ($paperSize) { $paperSize.Height } else { 583 }`,
+    `    $isColor = $doc.DefaultPageSettings.Color`,
     ``,
     `    $calcPageW = if ($isLandscape) { [Math]::Max($paperW, $paperH) } else { [Math]::Min($paperW, $paperH) }`,
     `    $calcPageH = if ($isLandscape) { [Math]::Min($paperW, $paperH) } else { [Math]::Max($paperW, $paperH) }`,
@@ -254,17 +273,19 @@ export function buildDirectPrintScript({
     `    Write-Output "Printer=$matchedPrinter"`,
     `    Write-Output "ImagePx=$($img.Width)x$($img.Height)"`,
     `    Write-Output "PaperName=$paperName"`,
-    `    Write-Output "PaperHundredthsInch=$($paperW)x$($paperH)"`,
+    `    Write-Output "PaperSize=$($paperW)x$($paperH)"`,
     `    Write-Output "Landscape=$isLandscape"`,
-    `    Write-Output "EffectivePageBounds=$calcPageW x $calcPageH"`,
     `    Write-Output "Margins=0,0,0,0"`,
+    `    Write-Output "Color=$isColor"`,
+    `    Write-Output "Copies=$($doc.PrinterSettings.Copies)"`,
+    `    Write-Output "EffectivePageBounds=$calcPageW x $calcPageH"`,
     `    Write-Output "DestinationRect=X=$calcDestX,Y=$calcDestY,W=$calcDestW,H=$calcDestH"`,
     ``,
     `    if ($isDryRun) {`,
-    `        Write-Output "DRY_RUN_OK: ImagePx=$($img.Width)x$($img.Height), Landscape=$isLandscape, Printer=$matchedPrinter, Paper=$paperName ($($paperW)x$($paperH)), Dest=[$calcDestX,$calcDestY,$calcDestW,$calcDestH]"`,
+    `        Write-Output "DRY_RUN_OK: ImagePx=$($img.Width)x$($img.Height), Landscape=$isLandscape, Printer=$matchedPrinter, Paper=$paperName ($($paperW)x$($paperH)), Copies=1, Dest=[$calcDestX,$calcDestY,$calcDestW,$calcDestH]"`,
     `    } else {`,
     `        $doc.Print()`,
-    `        Write-Output "PRINT_OK: ImagePx=$($img.Width)x$($img.Height), Landscape=$isLandscape, Printer=$matchedPrinter, Paper=$paperName ($($paperW)x$($paperH)), Dest=[$calcDestX,$calcDestY,$calcDestW,$calcDestH]"`,
+    `        Write-Output "PRINT_OK: ImagePx=$($img.Width)x$($img.Height), Landscape=$isLandscape, Printer=$matchedPrinter, Paper=$paperName ($($paperW)x$($paperH)), Copies=1, Dest=[$calcDestX,$calcDestY,$calcDestW,$calcDestH]"`,
     `    }`,
     `} finally {`,
     `    if ($doc) { $doc.Dispose() }`,
@@ -327,6 +348,21 @@ export class PrinterAdapter {
 
     try {
       localFilePath = await resolvePrintUrlToLocalFilePath(printUrl);
+
+      // Server-side validation: inspect print asset with Sharp
+      const metadata = await sharp(localFilePath).metadata();
+      const assetWidth = metadata.width || 0;
+      const assetHeight = metadata.height || 0;
+      const isPortrait = assetHeight > assetWidth;
+
+      console.log(`[Printer Asset] Path=${localFilePath} | Width=${assetWidth} | Height=${assetHeight} | Orientation=${isPortrait ? "Portrait" : "Landscape"}`);
+
+      if (assetWidth !== 1181 || assetHeight !== 1748 || !isPortrait) {
+        throw new Error(
+          `Legacy or invalid print asset: expected 1181x1748 portrait postcard (got ${assetWidth}x${assetHeight} ${isPortrait ? "portrait" : "landscape"})`
+        );
+      }
+
       script = buildDirectPrintScript({
         filePath: localFilePath,
         printerName,
