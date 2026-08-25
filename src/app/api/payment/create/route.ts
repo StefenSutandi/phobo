@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { createSnapTransaction } from "@/lib/payment/midtrans";
 import { createOperatorOrder } from "@/lib/payment/operator-store";
 import { getPhoboEnv } from "@/lib/config/phobo-env";
+import { getPayments, savePayments } from "@/lib/payment-db";
 
 export const runtime = "nodejs";
 
@@ -28,6 +29,20 @@ export async function POST(request: Request) {
         paymentPurpose: paymentPurpose === "add-print" ? "add-print" : "main-package",
         baseAmount: Number(amount),
       });
+
+      // --- TAMBAHAN UNTUK POLLING OPERATOR ---
+      const payments = getPayments();
+      payments.push({
+        orderId: order.orderId,
+        sessionId,
+        packageName,
+        // Gunakan payableAmount jika ada (misal ada kode unik), jika tidak pakai baseAmount
+        amount: order.payableAmount || order.baseAmount, 
+        status: "pending",
+        createdAt: new Date().toISOString()
+      });
+      savePayments(payments);
+      // ---------------------------------------
 
       return NextResponse.json({
         ok: true,
