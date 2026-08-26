@@ -142,7 +142,7 @@ async function runPaymentTests() {
 
     const { GET: getPaymentStatusRoute } = await import("../src/app/api/payment/status/route.ts");
     const { POST: operatorActionRoute } = await import("../src/app/api/payment/operator/action/route.ts");
-    const { isOperatorAuthenticated, parseCookieValue, COOKIE_NAME, SESSION_SECRET } = await import("../src/lib/payment/operator-auth.ts");
+    const { isOperatorAuthenticated, isOperatorCookieSecure, parseCookieValue, COOKIE_NAME, SESSION_SECRET } = await import("../src/lib/payment/operator-auth.ts");
 
     // A. Create new operator payment order -> status pending
     console.log("\nTransition A: Create operator payment -> status pending...");
@@ -355,8 +355,51 @@ async function runPaymentTests() {
     assert.equal(res4Prefix.status, 401, "Cookie value with prefix must return 401 Unauthorized");
     console.log("✓ Cookie value with suffix/prefix properly rejected (401)");
 
+    // 5. Operator cookie secure flag behavior
+    console.log("\nAuth Test 5: Operator cookie secure flag configuration...");
+    delete process.env.PHOBO_OPERATOR_COOKIE_SECURE;
+    assert.equal(isOperatorCookieSecure(), false, "Default must be false for LAN HTTP");
+    process.env.PHOBO_OPERATOR_COOKIE_SECURE = "false";
+    assert.equal(isOperatorCookieSecure(), false, "Explicit 'false' must be false");
+    process.env.PHOBO_OPERATOR_COOKIE_SECURE = "true";
+    assert.equal(isOperatorCookieSecure(), true, "Explicit 'true' must be true");
+    process.env.PHOBO_OPERATOR_COOKIE_SECURE = "false";
+    console.log("✓ Operator cookie secure flag verified (defaults to false for LAN)");
+
+    // ================================================================
+    // PART 4: Asset & Route Validation (/admin/payment -> /admin/payments, qris.png)
+    // ================================================================
     console.log("\n==================================================");
-    console.log("ALL OPERATOR PAYMENT, TRANSITION & AUTH TESTS PASSED!");
+    console.log("TESTING ASSETS & ROUTES (/admin/payment ALIAS, QRIS)");
+    console.log("==================================================");
+
+    // 1. Validate public/assets/payment/qris.png exists
+    const qrisAssetPath = path.join(projectRoot, "public", "assets", "payment", "qris.png");
+    const qrisStat = await fs.stat(qrisAssetPath);
+    assert.ok(qrisStat.isFile(), "public/assets/payment/qris.png must be a file");
+    assert.ok(qrisStat.size > 1000, "public/assets/payment/qris.png must be a non-empty image");
+    console.log(`✓ QRIS asset verified on disk: ${qrisAssetPath} (${qrisStat.size} bytes)`);
+
+    // 2. Validate /admin/payment redirects to /admin/payments
+    const { default: AdminPaymentRedirect } = await import("../src/app/admin/payment/page.tsx");
+    let redirectedTo = "";
+    try {
+      AdminPaymentRedirect();
+    } catch (redirectError) {
+      // Next.js redirect throws a NEXT_REDIRECT digest
+      if (redirectError && typeof redirectError === "object" && "digest" in redirectError) {
+        const digest = String(redirectError.digest);
+        assert.ok(digest.includes("/admin/payments"), `Redirect digest must target /admin/payments: ${digest}`);
+        redirectedTo = "/admin/payments";
+      } else {
+        throw redirectError;
+      }
+    }
+    assert.equal(redirectedTo, "/admin/payments", "/admin/payment must redirect to /admin/payments");
+    console.log("✓ /admin/payment route cleanly redirects to /admin/payments");
+
+    console.log("\n==================================================");
+    console.log("ALL OPERATOR PAYMENT, TRANSITION, AUTH & ASSET TESTS PASSED!");
     console.log("==================================================");
   } finally {
     // Restore original file if it existed

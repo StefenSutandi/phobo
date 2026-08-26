@@ -56,11 +56,15 @@ export async function isOperatorAuthenticated(request?: NextRequest | Request): 
   return false;
 }
 
+export function isOperatorCookieSecure(): boolean {
+  return process.env.PHOBO_OPERATOR_COOKIE_SECURE === "true";
+}
+
 export async function setOperatorSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, SESSION_SECRET, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isOperatorCookieSecure(),
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 12, // 12 hours

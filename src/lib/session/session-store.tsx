@@ -7,7 +7,14 @@ const KEY = "phobo.activeSession";
 const tuning: GreenScreenTuning = { applyChromaKey: true, greenMin: 70, greenTolerance: 35, spillReduction: 30, edgeSoftness: 2 };
 const now = () => new Date().toISOString();
 function fresh(): KioskSession {
-  const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      id = crypto.randomUUID();
+    }
+  } catch {
+    // Insecure HTTP LAN fallback
+  }
   return { sessionId: `session-${id}`, paymentStatus: "idle", capturedPhotos: [], selectedPhotoIndices: [], stickers: [], printStatus: "idle", greenScreenTuning: tuning, createdAt: now(), updatedAt: now(), addPrintPaymentStatus: "unpaid" };
 }
 function update(current: KioskSession | null, patch: Partial<KioskSession>) { return { ...(current ?? fresh()), ...patch, updatedAt: now() }; }
