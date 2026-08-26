@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPaymentStatus } from "@/lib/payment/status-store";
+import { getOperatorOrder } from "@/lib/payment/operator-store";
 import { getPhoboEnv } from "@/lib/config/phobo-env";
-import { getPayments } from "@/lib/payment-db";
 
 export const runtime = "nodejs";
 
@@ -16,15 +16,12 @@ export async function GET(request: Request) {
   const env = getPhoboEnv();
   let status = "pending";
 
-  if (env.paymentProvider === "operator") {
-    // Membaca status dari file JSON jika mode operator
-    const payments = getPayments();
-    const payment = payments.find((p: any) => p.orderId === orderId);
-    
-    if (payment) {
-      status = payment.status;
+  if (process.env.PHOBO_PAYMENT_PROVIDER === "qris" && process.env.PHOBO_OPERATOR_PAYMENT_ENABLED === "true") {
+    // Membaca status dari operator-store.ts jika mode operator
+    const order = await getOperatorOrder(orderId);
+    if (order) {
+      status = order.status;
     } else {
-      // Fallback jika tidak ada di JSON tapi mungkin tersimpan di operator-store bawaanmu
       status = await getPaymentStatus(orderId);
     }
   } else {

@@ -150,26 +150,9 @@ export default function Payment() {
             <div style={{fontSize: '28px', fontWeight: 'bold', color: '#2ecc71', marginTop: '6px'}}>
               TOTAL: Rp {basePrice.toLocaleString("id-ID")}
             </div>
-            <div style={{fontSize: '14px', color: '#aaa', marginTop: '6px'}}>
-              Silakan masukkan nominal Rp {basePrice.toLocaleString("id-ID")} pada aplikasi pembayaran.
-            </div>
           </div>
         ) : (
           <div>{session?.packageName} - Rp {basePrice.toLocaleString("id-ID")}</div>
-        )}
-        
-        {session?.paymentOrderId && (
-          <div style={{ marginTop: '12px', padding: '8px 14px', backgroundColor: '#222', borderRadius: '8px', border: '1px solid #444', textAlign: 'center' }}>
-            <p style={{ fontSize: '12px', color: '#aaa', margin: '0 0 3px 0' }}>Jika terjadi kendala, silakan foto layar ini</p>
-            <p style={{ fontSize: '18px', fontFamily: 'monospace', margin: '0', color: '#fff', letterSpacing: '2px', fontWeight: 'bold' }}>
-              Order ID: {session.paymentOrderId}
-            </p>
-            {isOperatorMode && (
-              <span style={{fontSize: '12px', color: session?.paymentStatus === "cancelled" || session?.paymentStatus === "expired" ? "#e74c3c" : "#2ecc71", fontWeight: 'bold', display: 'block', marginTop: '4px'}}>
-                Status: {session?.paymentStatus === "cancelled" ? "TRANSAKSI DIBATALKAN" : session?.paymentStatus === "expired" ? "TRANSAKSI KEDALUWARSA" : "MENUNGGU KONFIRMASI OPERATOR"}
-              </span>
-            )}
-          </div>
         )}
 
         {!paymentActive && !isInitializing && (
