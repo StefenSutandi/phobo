@@ -12,6 +12,7 @@ export default function Payment() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [qrisConfigured, setQrisConfigured] = useState(true);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const hasRoutedRef = useRef(false);
   
   const paymentUrl = session?.paymentRedirectUrl || process.env.NEXT_PUBLIC_PHOTOBO_PAYMENT_URL || "https://payment.invalid/phobo-demo";
   const isOperatorMode = session?.paymentMode === "operator";
@@ -89,6 +90,8 @@ export default function Payment() {
         const data = await res.json();
         if (data.ok && data.status) {
           if (data.status === "confirmed") {
+            if (hasRoutedRef.current) return;
+            hasRoutedRef.current = true;
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             setPaymentStatus("confirmed");
             router.push("/frames");
@@ -149,6 +152,30 @@ export default function Payment() {
             <div style={{fontSize: '16px', color: '#bbb', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold'}}>{session?.packageName}</div>
             <div style={{fontSize: '28px', fontWeight: 'bold', color: '#2ecc71', marginTop: '6px'}}>
               TOTAL: Rp {basePrice.toLocaleString("id-ID")}
+            </div>
+            <div style={{ marginTop: '10px', textAlign: 'center' }}>
+              <span
+                style={{
+                  fontSize: '13px',
+                  color:
+                    session?.paymentStatus === 'cancelled' ||
+                    session?.paymentStatus === 'expired' ||
+                    session?.paymentStatus === 'failed'
+                      ? '#e74c3c'
+                      : '#2ecc71',
+                  fontWeight: 'bold',
+                  display: 'block',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                {session?.paymentStatus === 'cancelled'
+                  ? 'TRANSAKSI DIBATALKAN'
+                  : session?.paymentStatus === 'expired'
+                    ? 'TRANSAKSI KEDALUWARSA'
+                    : session?.paymentStatus === 'failed'
+                      ? 'PEMBAYARAN GAGAL'
+                      : 'MENUNGGU KONFIRMASI OPERATOR'}
+              </span>
             </div>
           </div>
         ) : (

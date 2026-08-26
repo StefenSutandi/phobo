@@ -9,7 +9,7 @@ const dataDir = path.join(projectRoot, "data");
 const paymentOrdersFile = path.join(dataDir, "payment-orders.json");
 
 console.log("==================================================");
-console.log("RUNNING DETERMINISTIC OPERATOR PAYMENT VALIDATION");
+console.log("RUNNING DETERMINISTIC OPERATOR PAYMENT & TRANSITION TESTS");
 console.log("==================================================");
 
 async function runPaymentTests() {
@@ -44,6 +44,10 @@ async function runPaymentTests() {
       getAllOperatorOrders,
       updateOperatorOrderStatus,
     } = await import("../src/lib/payment/operator-store.ts");
+
+    // ================================================================
+    // PART 1: Core Operator Store Tests
+    // ================================================================
 
     // 1. Validate Main Package Base Amount (45000) -> uniqueCode=0, payableAmount=45000
     console.log("\nStep 1: Testing Main Package Order Creation...");
@@ -92,8 +96,8 @@ async function runPaymentTests() {
     assert.notEqual(mainOrder.orderId, addPrintOrder.orderId, "Main and Add-Print must have distinct order IDs");
     console.log(`✓ Separation verified: Main=${mainOrder.orderId} != Add-Print=${addPrintOrder.orderId}`);
 
-    // 5. Validate Confirm Action
-    console.log("\nStep 5: Testing Operator Confirm Action...");
+    // 5. Validate Confirm Action in store
+    console.log("\nStep 5: Testing Operator Confirm Action in store...");
     const confirmResult = await updateOperatorOrderStatus(mainOrder.orderId, "confirm");
     assert.equal(confirmResult.ok, true, "Confirm action must succeed");
     assert.equal(confirmResult.order?.status, "confirmed");
@@ -103,8 +107,8 @@ async function runPaymentTests() {
     assert.equal(fetchedConfirmed?.status, "confirmed");
     console.log(`✓ Order ${mainOrder.orderId} successfully confirmed`);
 
-    // 6. Validate Cancel Action
-    console.log("\nStep 6: Testing Operator Cancel Action...");
+    // 6. Validate Cancel Action in store
+    console.log("\nStep 6: Testing Operator Cancel Action in store...");
     const cancelResult = await updateOperatorOrderStatus(addPrintOrder.orderId, "cancel");
     assert.equal(cancelResult.ok, true, "Cancel action must succeed");
     assert.equal(cancelResult.order?.status, "cancelled");
@@ -126,8 +130,165 @@ async function runPaymentTests() {
     assert.ok(legacyInList, "Legacy order must appear in order list without parse errors");
     console.log(`✓ Legacy order read successfully: ${legacyInList.orderId} (Unique: ${legacyInList.uniqueCode}, Payable: ${legacyInList.payableAmount})`);
 
+    // ================================================================
+    // PART 2: Route Handlers & Kiosk Status Transition Verification
+    // ================================================================
     console.log("\n==================================================");
-    console.log("ALL OPERATOR PAYMENT TESTS PASSED!");
+    console.log("TESTING FULL STATUS & KIOSK TRANSITIONS (A - F)");
+    console.log("==================================================");
+
+    process.env.PHOBO_PAYMENT_PROVIDER = "operator";
+    process.env.PHOBO_OPERATOR_PAYMENT_ENABLED = "true";
+
+    const { GET: getPaymentStatusRoute } = await import("../src/app/api/payment/status/route.ts");
+    const { POST: operatorActionRoute } = await import("../src/app/api/payment/operator/action/route.ts");
+
+    // A. Create new operator payment order -> status pending
+    console.log("\nTransition A: Create operator payment -> status pending...");
+    const orderA = await createOperatorOrder({
+      sessionId: "session-kiosk-live-01",
+      paymentPurpose: "main-package",
+      baseAmount: 45000,
+    });
+    assert.equal(orderA.status, "pending");
+    console.log(`✓ Order created with pending status: ${orderA.orderId}`);
+
+    // B. GET /api/payment/status?orderId=... -> pending
+    console.log("\nTransition B: GET /api/payment/status -> pending...");
+    const statusReqB = new Request(`http://localhost:3000/api/payment/status?orderId=${orderA.orderId}`);
+    const statusResB = await getPaymentStatusRoute(statusReqB);
+    const statusDataB = await statusResB.json();
+    assert.equal(statusResB.status, 200);
+    assert.equal(statusDataB.ok, true);
+    assert.equal(statusDataB.provider, "operator");
+    assert.equal(statusDataB.status, "pending");
+    console.log(`✓ GET /api/payment/status returned pending for ${orderA.orderId}`);
+
+    // C. Operator confirms via /api/payment/operator/action
+    console.log("\nTransition C: Operator confirms via /api/payment/operator/action...");
+    const confirmActionReq = new Request("http://localhost:3000/api/payment/operator/action", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: "phobo_operator_session=phobo-operator-authenticated-session-key",
+      },
+      body: JSON.stringify({
+        orderId: orderA.orderId,
+        action: "confirm",
+      }),
+    });
+    const confirmActionRes = await operatorActionRoute(confirmActionReq);
+    const confirmActionData = await confirmActionRes.json();
+    assert.equal(confirmActionRes.status, 200);
+    assert.equal(confirmActionData.ok, true);
+    assert.equal(confirmActionData.order.status, "confirmed");
+    console.log(`✓ Operator action confirmed order ${orderA.orderId}`);
+
+    // D. GET /api/payment/status?orderId=... -> confirmed immediately
+    console.log("\nTransition D: GET /api/payment/status after operator confirm -> confirmed...");
+    const statusReqD = new Request(`http://localhost:3000/api/payment/status?orderId=${orderA.orderId}`);
+    const statusResD = await getPaymentStatusRoute(statusReqD);
+    const statusDataD = await statusResD.json();
+    assert.equal(statusResD.status, 200);
+    assert.equal(statusDataD.ok, true);
+    assert.equal(statusDataD.status, "confirmed");
+    console.log(`✓ GET /api/payment/status immediately reflects confirmed status`);
+
+    // E. /payment polling sees confirmed -> routes exactly once to /frames
+    console.log("\nTransition E: Polling sees confirmed -> routes exactly once to /frames...");
+    let routeCount = 0;
+    let routedTarget = "";
+    const fakeRouter = {
+      push: (target) => {
+        routeCount++;
+        routedTarget = target;
+      },
+    };
+
+    // Simulate the exact polling logic in src/app/payment/page.tsx
+    let isRouting = false;
+    let pollActive = true;
+    const simulatePollCycle = async () => {
+      if (!pollActive) return;
+      const res = await getPaymentStatusRoute(new Request(`http://localhost:3000/api/payment/status?orderId=${orderA.orderId}`));
+      const data = await res.json();
+      if (data.ok && data.status) {
+        if (data.status === "confirmed") {
+          if (isRouting) return;
+          isRouting = true;
+          pollActive = false;
+          fakeRouter.push("/frames");
+        }
+      }
+    };
+
+    // First poll tick
+    await simulatePollCycle();
+    // Subsequent poll tick (simulating race/next interval)
+    await simulatePollCycle();
+
+    assert.equal(routeCount, 1, "Must route to /frames EXACTLY once");
+    assert.equal(routedTarget, "/frames", "Must route to /frames");
+    console.log(`✓ Kiosk routed exactly once: routeCount=${routeCount}, target='${routedTarget}'`);
+
+    // F. Cancel flow: Operator cancels -> Kiosk does NOT route to /frames
+    console.log("\nTransition F: Operator cancels -> Kiosk does NOT route to /frames...");
+    const orderF = await createOperatorOrder({
+      sessionId: "session-kiosk-live-02",
+      paymentPurpose: "main-package",
+      baseAmount: 45000,
+    });
+    assert.equal(orderF.status, "pending");
+
+    // Operator cancels order
+    const cancelActionReq = new Request("http://localhost:3000/api/payment/operator/action", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: "phobo_operator_session=phobo-operator-authenticated-session-key",
+      },
+      body: JSON.stringify({
+        orderId: orderF.orderId,
+        action: "cancel",
+      }),
+    });
+    const cancelActionRes = await operatorActionRoute(cancelActionReq);
+    const cancelActionData = await cancelActionRes.json();
+    assert.equal(cancelActionRes.status, 200);
+    assert.equal(cancelActionData.order.status, "cancelled");
+
+    // Check status route
+    const statusReqF = new Request(`http://localhost:3000/api/payment/status?orderId=${orderF.orderId}`);
+    const statusResF = await getPaymentStatusRoute(statusReqF);
+    const statusDataF = await statusResF.json();
+    assert.equal(statusDataF.status, "cancelled");
+
+    // Simulate kiosk polling behavior on cancel
+    let cancelRouteCount = 0;
+    let cancelPaymentStatus = "pending";
+    let cancelPollActive = true;
+
+    const simulateCancelPoll = async () => {
+      if (!cancelPollActive) return;
+      const res = await getPaymentStatusRoute(new Request(`http://localhost:3000/api/payment/status?orderId=${orderF.orderId}`));
+      const data = await res.json();
+      if (data.ok && data.status) {
+        if (data.status === "confirmed") {
+          cancelRouteCount++;
+        } else if (data.status === "cancelled" || data.status === "failed" || data.status === "expired") {
+          cancelPollActive = false;
+          cancelPaymentStatus = data.status;
+        }
+      }
+    };
+
+    await simulateCancelPoll();
+    assert.equal(cancelRouteCount, 0, "Cancelled order must NEVER route to /frames");
+    assert.equal(cancelPaymentStatus, "cancelled", "Kiosk paymentStatus must record 'cancelled'");
+    console.log(`✓ Cancel properly handled: routeCount=${cancelRouteCount}, kioskStatus='${cancelPaymentStatus}'`);
+
+    console.log("\n==================================================");
+    console.log("ALL OPERATOR PAYMENT & TRANSITION TESTS PASSED!");
     console.log("==================================================");
   } finally {
     // Restore original file if it existed

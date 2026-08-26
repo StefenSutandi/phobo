@@ -13,14 +13,23 @@ export function validateOperatorPin(inputPin: string): boolean {
   return typeof inputPin === "string" && inputPin.trim() === expectedPin.trim();
 }
 
-export async function isOperatorAuthenticated(request?: NextRequest): Promise<boolean> {
+export async function isOperatorAuthenticated(request?: NextRequest | Request): Promise<boolean> {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(COOKIE_NAME)?.value;
-    return token === SESSION_SECRET;
-  } catch (err) {
-    return false;
+    if (token === SESSION_SECRET) return true;
+  } catch {
+    // Outside Next.js server async storage context (e.g. tests or direct requests)
   }
+
+  if (request) {
+    const cookieHeader = request.headers.get("cookie");
+    if (cookieHeader && cookieHeader.includes(`${COOKIE_NAME}=${SESSION_SECRET}`)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export async function setOperatorSessionCookie(): Promise<void> {

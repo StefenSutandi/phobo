@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPaymentStatus } from "@/lib/payment/status-store";
 import { getOperatorOrder } from "@/lib/payment/operator-store";
 import { getPhoboEnv } from "@/lib/config/phobo-env";
+import type { PaymentStatus } from "@/lib/session/session-types";
 
 export const runtime = "nodejs";
 
@@ -14,10 +15,9 @@ export async function GET(request: Request) {
   }
 
   const env = getPhoboEnv();
-  let status = "pending";
+  let status: PaymentStatus = "pending";
 
-  if (process.env.PHOBO_PAYMENT_PROVIDER === "qris" && process.env.PHOBO_OPERATOR_PAYMENT_ENABLED === "true") {
-    // Membaca status dari operator-store.ts jika mode operator
+  if (env.paymentProvider === "operator" && env.operatorPaymentEnabled) {
     const order = await getOperatorOrder(orderId);
     if (order) {
       status = order.status;
@@ -25,7 +25,6 @@ export async function GET(request: Request) {
       status = await getPaymentStatus(orderId);
     }
   } else {
-    // Logika asli untuk Midtrans / mock
     status = await getPaymentStatus(orderId);
   }
 
