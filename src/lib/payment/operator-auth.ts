@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { type NextRequest } from "next/server";
 
-const COOKIE_NAME = "phobo_operator_session";
-const SESSION_SECRET = "phobo-operator-authenticated-session-key";
+export const COOKIE_NAME = "phobo_operator_session";
+export const SESSION_SECRET = "phobo-operator-authenticated-session-key";
 
 export function getExpectedOperatorPin(): string {
   return process.env.PHOBO_OPERATOR_PIN || "1234";
@@ -11,6 +11,29 @@ export function getExpectedOperatorPin(): string {
 export function validateOperatorPin(inputPin: string): boolean {
   const expectedPin = getExpectedOperatorPin();
   return typeof inputPin === "string" && inputPin.trim() === expectedPin.trim();
+}
+
+/**
+ * Pure exact cookie parser helper.
+ * Parses a standard Cookie header string and returns the exact value for the given cookie name,
+ * ensuring no prefix, suffix, or substring collisions.
+ */
+export function parseCookieValue(cookieHeader: string | null | undefined, cookieName: string): string | null {
+  if (!cookieHeader) return null;
+
+  const parts = cookieHeader.split(";");
+  for (const part of parts) {
+    const trimmed = part.trim();
+    const equalIdx = trimmed.indexOf("=");
+    if (equalIdx === -1) continue;
+
+    const key = trimmed.slice(0, equalIdx).trim();
+    if (key === cookieName) {
+      return trimmed.slice(equalIdx + 1).trim();
+    }
+  }
+
+  return null;
 }
 
 export async function isOperatorAuthenticated(request?: NextRequest | Request): Promise<boolean> {
@@ -24,7 +47,8 @@ export async function isOperatorAuthenticated(request?: NextRequest | Request): 
 
   if (request) {
     const cookieHeader = request.headers.get("cookie");
-    if (cookieHeader && cookieHeader.includes(`${COOKIE_NAME}=${SESSION_SECRET}`)) {
+    const token = parseCookieValue(cookieHeader, COOKIE_NAME);
+    if (token === SESSION_SECRET) {
       return true;
     }
   }
