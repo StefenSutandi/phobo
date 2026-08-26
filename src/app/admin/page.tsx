@@ -99,7 +99,7 @@ export default function Admin() {
   function addOperatorLog(message: string) {
     setOperatorLog((current) => [
       {
-        id: Date.now().toString(36) + Math.random().toString(36).substring(2),
+        id: crypto.randomUUID(),
         timestamp: new Date().toLocaleTimeString(),
         message,
       },
