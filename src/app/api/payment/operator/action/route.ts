@@ -6,7 +6,7 @@ import { isOperatorAuthenticated } from "@/lib/payment/operator-auth";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const authenticated = await isOperatorAuthenticated();
+  const authenticated = await isOperatorAuthenticated(request);
   if (!authenticated) {
     return NextResponse.json({ ok: false, error: "Unauthorized operator session" }, { status: 401 });
   }

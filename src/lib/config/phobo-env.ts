@@ -36,5 +36,6 @@ export function getPhoboEnv() {
       : (process.env.MIDTRANS_ENABLED === "true" ? "midtrans" : (process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" ? "mock" : "operator")),
     operatorQrisImage: process.env.PHOBO_OPERATOR_QRIS_IMAGE || "/assets/payment/qris.png",
     operatorPaymentEnabled: process.env.PHOBO_OPERATOR_PAYMENT_ENABLED !== "false",
+    operatorCookieSecure: process.env.PHOBO_OPERATOR_COOKIE_SECURE === "true",
   };
 }
