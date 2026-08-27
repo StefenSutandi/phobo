@@ -122,7 +122,7 @@ export default function OperatorPaymentsPage() {
 
   if (authenticated === null) {
     return (
-      <div style={{ minHeight: "100vh", backgroundColor: "#0f0f12", color: "#fff", display: "grid", placeItems: "center" }}>
+      <div style={{ height: "100vh", overflowY: "auto", backgroundColor: "#0f0f12", color: "#fff", display: "grid", placeItems: "center" }}>
         Memeriksa sesi operator...
       </div>
     );
@@ -130,7 +130,7 @@ export default function OperatorPaymentsPage() {
 
   if (!authenticated) {
     return (
-      <div style={{ minHeight: "100vh", backgroundColor: "#0f0f12", color: "#fff", display: "grid", placeItems: "center", fontFamily: "system-ui, -apple-system, sans-serif", padding: "20px" }}>
+      <div style={{ height: "100vh", overflowY: "auto", backgroundColor: "#0f0f12", color: "#fff", display: "grid", placeItems: "center", fontFamily: "system-ui, -apple-system, sans-serif", padding: "20px" }}>
         <form onSubmit={handleLogin} style={{ backgroundColor: "#1c1c22", padding: "32px", borderRadius: "16px", border: "1px solid #333340", width: "100%", maxWidth: "380px", textAlign: "center", boxShadow: "0 8px 30px rgba(0,0,0,0.5)" }}>
           <div style={{ fontSize: "40px", marginBottom: "10px" }}>🔐</div>
           <h1 style={{ fontSize: "22px", margin: "0 0 8px 0" }}>Phobo Operator</h1>
@@ -159,26 +159,27 @@ export default function OperatorPaymentsPage() {
   const displayedOrders = filter === "pending" ? pendingOrders : orders;
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#0f0f12", color: "#f1f1f1", fontFamily: "system-ui, -apple-system, sans-serif", padding: "16px", maxWidth: "800px", margin: "0 auto" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", borderBottom: "1px solid #222", paddingBottom: "16px" }}>
-        <div>
-          <h1 style={{ fontSize: "20px", margin: 0, color: "#fff", display: "flex", alignItems: "center", gap: "10px" }}>
-            <span>💳 Dashboard Pembayaran Operator</span>
-          </h1>
-          <p style={{ margin: "4px 0 0 0", color: "#888", fontSize: "13px" }}>Phobo LAN Static QRIS & Operator Confirmation</p>
-        </div>
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <Link href="/admin" style={{ padding: "8px 12px", background: "#222", color: "#ccc", borderRadius: "8px", textDecoration: "none", fontSize: "12px" }}>
-            Admin
-          </Link>
-          <button
-            onClick={handleLogout}
-            style={{ padding: "8px 12px", background: "#2c1c1c", color: "#ff6b6b", border: "1px solid #522", borderRadius: "8px", cursor: "pointer", fontSize: "12px" }}
-          >
-            Keluar
-          </button>
-        </div>
-      </header>
+    <div className="operator-payments-page">
+      <div className="operator-payments-content">
+        <header style={{ display: "flex", flexWrap: "wrap", gap: "12px", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", borderBottom: "1px solid #222", paddingBottom: "16px" }}>
+          <div>
+            <h1 style={{ fontSize: "20px", margin: 0, color: "#fff", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <span>💳 Dashboard Pembayaran Operator</span>
+            </h1>
+            <p style={{ margin: "4px 0 0 0", color: "#888", fontSize: "13px" }}>Phobo LAN Static QRIS & Operator Confirmation</p>
+          </div>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <Link href="/admin" style={{ padding: "8px 12px", background: "#222", color: "#ccc", borderRadius: "8px", textDecoration: "none", fontSize: "12px" }}>
+              Admin
+            </Link>
+            <button
+              onClick={handleLogout}
+              style={{ padding: "8px 12px", background: "#2c1c1c", color: "#ff6b6b", border: "1px solid #522", borderRadius: "8px", cursor: "pointer", fontSize: "12px" }}
+            >
+              Keluar
+            </button>
+          </div>
+        </header>
 
       {/* Filter Tabs */}
       <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
@@ -242,14 +243,16 @@ export default function OperatorPaymentsPage() {
                   borderRadius: "16px",
                   padding: "20px",
                   boxShadow: isPending ? "0 4px 20px rgba(230, 126, 34, 0.15)" : "none",
+                  overflowWrap: "anywhere",
+                  wordBreak: "break-word",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
                   <div>
                     <span style={{ fontSize: "11px", background: order.paymentPurpose === "add-print" ? "#8e44ad" : "#2980b9", color: "#fff", padding: "3px 8px", borderRadius: "6px", fontWeight: "bold", letterSpacing: "1px", textTransform: "uppercase" }}>
                       {order.paymentPurpose === "add-print" ? "ADDITIONAL PRINT" : "MAIN PACKAGE"}
                     </span>
-                    <h2 style={{ fontFamily: "monospace", fontSize: "22px", margin: "8px 0 0 0", letterSpacing: "2px", color: "#fff" }}>
+                    <h2 style={{ fontFamily: "monospace", fontSize: "22px", margin: "8px 0 0 0", letterSpacing: "2px", color: "#fff", overflowWrap: "anywhere", wordBreak: "break-word" }}>
                       {order.orderId}
                     </h2>
                   </div>
@@ -292,12 +295,12 @@ export default function OperatorPaymentsPage() {
                 </div>
 
                 {isPending && (
-                  <div style={{ display: "flex", gap: "12px" }}>
+                  <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                     <button
                       onClick={() => handleAction(order.orderId, "confirm")}
                       disabled={actionBusy === order.orderId}
                       style={{
-                        flex: 2,
+                        flex: "2 1 200px",
                         padding: "16px",
                         borderRadius: "12px",
                         background: "#2ecc71",
@@ -315,7 +318,7 @@ export default function OperatorPaymentsPage() {
                       onClick={() => handleAction(order.orderId, "cancel")}
                       disabled={actionBusy === order.orderId}
                       style={{
-                        flex: 1,
+                        flex: "1 1 100px",
                         padding: "16px",
                         borderRadius: "12px",
                         background: "#2a1a1a",
@@ -335,6 +338,7 @@ export default function OperatorPaymentsPage() {
           })}
         </div>
       )}
+      </div>
     </div>
   );
 }

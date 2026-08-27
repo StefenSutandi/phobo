@@ -598,6 +598,35 @@ button {
   line-height: 1.35;
 }
 
+.operator-payments-page {
+  height: 100vh;
+  min-height: 0;
+  box-sizing: border-box;
+
+  overflow-x: hidden;
+  overflow-y: scroll;
+
+  background: #0f0f12;
+  color: #f1f1f1;
+
+  font-family: system-ui, -apple-system, sans-serif;
+
+  padding: 16px;
+
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+
+  scrollbar-gutter: stable;
+}
+
+.operator-payments-content {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding-bottom: 32px;
+  box-sizing: border-box;
+}
+
 .admin-button {
   background: var(--purple);
   border-radius: 999px;
