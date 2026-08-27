@@ -340,11 +340,17 @@ export default function Admin() {
     ? `Open this folder in File Explorer: public\\results\\${session.sessionId.replace(/[^a-zA-Z0-9_-]/g, "")}`
     : "No active session. Results are stored under public\\results\\{sessionId}.";
 
+  const isLiveHardware = cameraMode !== "mock" || printerMode !== "mock";
+
   return (
     <main className="admin-page">
       <div className="admin-header">
         <div>
-          <span className="mock-badge">MOCK</span>
+          {isLiveHardware ? (
+            <span className="mock-badge" style={{ backgroundColor: "#2ecc71", color: "#fff" }}>LIVE</span>
+          ) : (
+            <span className="mock-badge">MOCK</span>
+          )}
           <h1>Admin Dashboard</h1>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
@@ -501,7 +507,7 @@ export default function Admin() {
                 }}
               /> Apply Chroma Key
             </label>
-            <p className="kiosk-message" style={{fontSize: "0.8rem"}}>Toggle whether background removal is applied.</p>
+            <p className="admin-help-text">Toggle whether background removal is applied.</p>
           </div>
           <div>
             <label style={{ display: "block", marginBottom: "0.5rem" }}>
@@ -520,7 +526,7 @@ export default function Admin() {
                 }
               }}
             />
-            <p className="kiosk-message" style={{fontSize: "0.8rem"}}>Increase if subject is being erased. Decrease if green background remains.</p>
+            <p className="admin-help-text">Increase if subject is being erased. Decrease if green background remains.</p>
           </div>
           <div>
             <label style={{ display: "block", marginBottom: "0.5rem" }}>
@@ -539,7 +545,7 @@ export default function Admin() {
                 }
               }}
             />
-            <p className="kiosk-message" style={{fontSize: "0.8rem"}}>Increase if too much green remains. Decrease if subject edges are damaged.</p>
+            <p className="admin-help-text">Increase if too much green remains. Decrease if subject edges are damaged.</p>
           </div>
           <div>
             <label style={{ display: "block", marginBottom: "0.5rem" }}>

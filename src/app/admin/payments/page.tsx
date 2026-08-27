@@ -165,7 +165,7 @@ export default function OperatorPaymentsPage() {
           <h1 style={{ fontSize: "20px", margin: 0, color: "#fff", display: "flex", alignItems: "center", gap: "10px" }}>
             <span>💳 Dashboard Pembayaran Operator</span>
           </h1>
-          <p style={{ margin: "4px 0 0 0", color: "#888", fontSize: "13px" }}>Phobo LAN Static QRIS & Unique Amount Verification</p>
+          <p style={{ margin: "4px 0 0 0", color: "#888", fontSize: "13px" }}>Phobo LAN Static QRIS & Operator Confirmation</p>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <Link href="/admin" style={{ padding: "8px 12px", background: "#222", color: "#ccc", borderRadius: "8px", textDecoration: "none", fontSize: "12px" }}>

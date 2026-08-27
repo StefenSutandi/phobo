@@ -153,30 +153,6 @@ export default function Payment() {
             <div style={{fontSize: '28px', fontWeight: 'bold', color: '#2ecc71', marginTop: '6px'}}>
               TOTAL: Rp {basePrice.toLocaleString("id-ID")}
             </div>
-            <div style={{ marginTop: '10px', textAlign: 'center' }}>
-              <span
-                style={{
-                  fontSize: '13px',
-                  color:
-                    session?.paymentStatus === 'cancelled' ||
-                    session?.paymentStatus === 'expired' ||
-                    session?.paymentStatus === 'failed'
-                      ? '#e74c3c'
-                      : '#2ecc71',
-                  fontWeight: 'bold',
-                  display: 'block',
-                  letterSpacing: '0.5px',
-                }}
-              >
-                {session?.paymentStatus === 'cancelled'
-                  ? 'TRANSAKSI DIBATALKAN'
-                  : session?.paymentStatus === 'expired'
-                    ? 'TRANSAKSI KEDALUWARSA'
-                    : session?.paymentStatus === 'failed'
-                      ? 'PEMBAYARAN GAGAL'
-                      : 'MENUNGGU KONFIRMASI OPERATOR'}
-              </span>
-            </div>
           </div>
         ) : (
           <div>{session?.packageName} - Rp {basePrice.toLocaleString("id-ID")}</div>
@@ -190,6 +166,30 @@ export default function Payment() {
           </div>
         )}
       </div>
+
+      {isOperatorMode && (
+        <div className="payment-operator-status">
+          <span
+            style={{
+              color:
+                session?.paymentStatus === 'cancelled' ||
+                session?.paymentStatus === 'expired' ||
+                session?.paymentStatus === 'failed'
+                  ? '#e74c3c'
+                  : '#2ecc71',
+              letterSpacing: '0.5px',
+            }}
+          >
+            {session?.paymentStatus === 'cancelled'
+              ? 'TRANSAKSI DIBATALKAN'
+              : session?.paymentStatus === 'expired'
+                ? 'TRANSAKSI KEDALUWARSA'
+                : session?.paymentStatus === 'failed'
+                  ? 'PEMBAYARAN GAGAL'
+                  : 'MENUNGGU KONFIRMASI OPERATOR'}
+          </span>
+        </div>
+      )}
       
       {process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" && (
         <button 
