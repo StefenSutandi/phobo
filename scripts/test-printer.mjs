@@ -12,7 +12,7 @@ console.log("RUNNING DETERMINISTIC DIRECT PRINTER & SIZING TESTS");
 console.log("==================================================");
 
 async function runPrinterTests() {
-  const { computePrintDestination } = await import("../src/lib/hardware/print-layout.ts");
+  const { computePrintDestination, selectCanonPostcardPaper } = await import("../src/lib/hardware/print-layout.ts");
   const { PrinterAdapter, buildDirectPrintScript } = await import("../src/lib/hardware/printer-adapter.ts");
   const { generatePostcardPrint, PRINT_WIDTH_PX, PRINT_HEIGHT_PX } = await import("../src/lib/print/print-template.ts");
   const printerAdapter = new PrinterAdapter();
@@ -138,9 +138,74 @@ async function runPrinterTests() {
   console.log(`✓ Standard 4R Portrait Postcard FILL: 1181x1748 -> [${standard4RPortrait.destination.x}, ${standard4RPortrait.destination.y}, ${standard4RPortrait.destination.width}, ${standard4RPortrait.destination.height}]`);
 
   // ================================================================
-  // PART 3: PowerShell Script Generation Verification
+  // PART 3: Deterministic Canon Driver Paper Selection Tests
   // ================================================================
-  console.log("\nStep 3: Validating Generated PowerShell Script Properties...");
+  console.log("\nStep 3: Validating Deterministic Canon Driver Paper Selection...");
+
+  // Test 3A: Installed papers containing Metric Photo L, Japanese Postcard, Credit Card
+  const driverPapers1 = [
+    { paperName: "Metric Photo L", width: 350, height: 468 },
+    { paperName: "Japanese Postcard", width: 394, height: 583 },
+    { paperName: "Credit Card", width: 213, height: 337 },
+  ];
+  const selected1 = selectCanonPostcardPaper(driverPapers1);
+  assert.ok(selected1, "Must select a paper");
+  assert.equal(selected1.paperName, "Japanese Postcard", "Must prefer exact 'Japanese Postcard' over Metric Photo L and Credit Card");
+  console.log(`✓ Preferred exact 'Japanese Postcard' from list [Metric Photo L, Japanese Postcard, Credit Card]`);
+
+  // Test 3B: Case-insensitive match ("japanese postcard", "JAPANESE POSTCARD")
+  const driverPapersLower = [
+    { paperName: "metric photo l", width: 350, height: 468 },
+    { paperName: "japanese postcard", width: 394, height: 583 },
+  ];
+  const selectedLower = selectCanonPostcardPaper(driverPapersLower);
+  assert.ok(selectedLower);
+  assert.equal(selectedLower.paperName, "japanese postcard", "Must match case-insensitively");
+  console.log(`✓ Case-insensitive 'japanese postcard' matched successfully`);
+
+  const driverPapersUpper = [
+    { paperName: "METRIC PHOTO L", width: 350, height: 468 },
+    { paperName: "JAPANESE POSTCARD", width: 394, height: 583 },
+  ];
+  const selectedUpper = selectCanonPostcardPaper(driverPapersUpper);
+  assert.ok(selectedUpper);
+  assert.equal(selectedUpper.paperName, "JAPANESE POSTCARD", "Must match uppercase");
+  console.log(`✓ Uppercase 'JAPANESE POSTCARD' matched successfully`);
+
+  // Test 3C: Keyword match (Hagaki, KP, 4R, 100x148)
+  const driverPapersHagaki = [
+    { paperName: "Metric Photo L", width: 350, height: 468 },
+    { paperName: "Canon KP-108 Postcard", width: 394, height: 583 },
+  ];
+  const selectedHagaki = selectCanonPostcardPaper(driverPapersHagaki);
+  assert.ok(selectedHagaki);
+  assert.equal(selectedHagaki.paperName, "Canon KP-108 Postcard", "Must match keyword Postcard");
+  console.log(`✓ Keyword match 'Canon KP-108 Postcard' matched successfully`);
+
+  // Test 3D: Dimensional fallback (394 x 583 hundredths of an inch)
+  const driverPapersDimensional = [
+    { paperName: "Unknown Media 1", width: 350, height: 468 },
+    { paperName: "Custom 100x148 Media", width: 394, height: 583 },
+    { paperName: "Unknown Media 2", width: 213, height: 337 },
+  ];
+  const selectedDimensional = selectCanonPostcardPaper(driverPapersDimensional);
+  assert.ok(selectedDimensional);
+  assert.equal(selectedDimensional.paperName, "Custom 100x148 Media", "Must match dimensional fallback (~394x583)");
+  console.log(`✓ Dimensional fallback (~394x583) matched successfully`);
+
+  // Test 3E: Metric Photo L and Credit Card only -> must NOT select Metric Photo L
+  const driverPapersNoPostcard = [
+    { paperName: "Metric Photo L", width: 350, height: 468 },
+    { paperName: "Credit Card", width: 213, height: 337 },
+  ];
+  const selectedNone = selectCanonPostcardPaper(driverPapersNoPostcard);
+  assert.equal(selectedNone, null, "Must NOT select 'Metric Photo L' or 'Credit Card' as 100x148mm postcard");
+  console.log(`✓ Verified 'Metric Photo L' is correctly rejected/ignored when searching for 100x148mm postcard media`);
+
+  // ================================================================
+  // PART 4: PowerShell Script Generation Verification
+  // ================================================================
+  console.log("\nStep 4: Validating Generated PowerShell Script Properties...");
   const scriptContent = buildDirectPrintScript({
     filePath: "C:\\dummy\\final_print.jpg",
     printerName: "Canon SELPHY CP1500",
@@ -150,11 +215,12 @@ async function runPrinterTests() {
 
   assert.ok(scriptContent.includes("Margins(0, 0, 0, 0)"), "Script must set 0 margins");
   assert.ok(scriptContent.includes("$doc.OriginAtMargins = $false"), "Script must disable origin at margins");
-  assert.ok(scriptContent.includes("postcard"), "Script must search for postcard media");
+  assert.ok(scriptContent.includes("Japanese Postcard"), "Script must prefer Japanese Postcard media");
   assert.ok(scriptContent.includes("Copies = 1"), "Script must explicitly set Copies = 1");
+  assert.ok(scriptContent.includes("[Printer Driver Selection]"), "Script must output driver selection diagnostics");
   assert.ok(scriptContent.includes("[Printer Physical Layout]"), "Script must output physical layout diagnostics");
   assert.ok(scriptContent.includes("DRY_RUN_OK"), "Script must report dry-run completion with dimensions");
-  console.log("✓ PowerShell print script verified: zero margins, postcard selection, Copies=1, and physical layout diagnostics present");
+  console.log("✓ PowerShell print script verified: zero margins, Japanese Postcard selection, Copies=1, and physical layout diagnostics present");
 
   // ================================================================
   // PART 4: End-to-End Adapter Execution & Validation (Tasks 2, 3, 8)
@@ -212,6 +278,8 @@ async function runPrinterTests() {
     assert.ok(dryRunResult.stdout?.includes("ImagePx=1181x1748"), "Stdout must confirm ImagePx=1181x1748");
     assert.ok(dryRunResult.stdout?.includes("Landscape=False"), "Stdout must confirm Landscape=False for portrait asset");
     assert.ok(dryRunResult.stdout?.includes("Copies=1"), "Stdout must confirm Copies=1");
+    assert.ok(dryRunResult.stdout?.includes("[Printer Driver Selection]"), "Stdout must report [Printer Driver Selection]");
+    assert.ok(dryRunResult.stdout?.includes("SelectedPaperName="), "Stdout must report SelectedPaperName");
     assert.ok(dryRunResult.stdout?.includes("[Printer Layout]"), "Stdout must report [Printer Layout]");
     console.log(`✓ Dry Run Windows Direct Print validated with portrait layout diagnostics:\n${dryRunResult.stdout?.trim()}`);
 

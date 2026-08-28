@@ -80,3 +80,72 @@ export function computePrintDestination({
     fillRatio,
   };
 }
+
+export interface DriverPaperSize {
+  paperName: string;
+  width?: number;
+  height?: number;
+}
+
+/**
+ * Deterministically selects the Canon Postcard (100x148mm) paper size from a list of driver paper definitions.
+ *
+ * Selection priority:
+ * 1. Exact case-sensitive "Japanese Postcard"
+ * 2. Exact case-insensitive "Japanese Postcard"
+ * 3. Keyword Postcard / Hagaki / KP / 4R / 100x148 / 4x6
+ * 4. Dimensional fallback approximately 394 x 583 hundredths inch (100x148mm)
+ */
+export function selectCanonPostcardPaper<T extends DriverPaperSize>(paperSizes: T[]): T | null {
+  if (!paperSizes || paperSizes.length === 0) return null;
+
+  // 1. Exact case-sensitive "Japanese Postcard"
+  for (const ps of paperSizes) {
+    if (ps.paperName === "Japanese Postcard") {
+      return ps;
+    }
+  }
+
+  // 2. Exact case-insensitive "Japanese Postcard"
+  for (const ps of paperSizes) {
+    if (ps.paperName.trim().toLowerCase() === "japanese postcard") {
+      return ps;
+    }
+  }
+
+  // 3. Keyword Postcard / Hagaki / KP / 4R / 100x148 / 4x6
+  const keywords = [
+    "postcard",
+    "hagaki",
+    "4x6",
+    "4 x 6",
+    "4r",
+    "kp",
+    "100x148",
+    "100 x 148",
+    "148x100",
+    "148 x 100",
+  ];
+  for (const ps of paperSizes) {
+    const name = ps.paperName.toLowerCase();
+    if (keywords.some((k) => name.includes(k))) {
+      return ps;
+    }
+  }
+
+  // 4. Dimensional fallback approximately 394 x 583 hundredths inch (100x148mm)
+  for (const ps of paperSizes) {
+    if (typeof ps.width === "number" && typeof ps.height === "number") {
+      const w = ps.width;
+      const h = ps.height;
+      if (
+        (w >= 370 && w <= 430 && h >= 560 && h <= 630) ||
+        (w >= 560 && w <= 630 && h >= 370 && h <= 430)
+      ) {
+        return ps;
+      }
+    }
+  }
+
+  return null;
+}
