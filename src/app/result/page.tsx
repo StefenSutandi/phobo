@@ -50,19 +50,36 @@ export default function Result() {
 
       setPrintImageUrl(regenData.printUrl);
 
-      // 2. Send freshly validated print asset to printer
-      setMsg("MENGIRIM KE PRINTER...");
-      const r = await fetch("/api/printer/print", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: session.sessionId,
-          printUrl: regenData.printUrl,
-        }),
-      });
-      const d = await r.json();
-      setPrintStatus(r.ok && d.ok ? "printed" : "failed");
-      setMsg(d.message || d.error || (r.ok && d.ok ? "PRINT SUCCESS" : "PRINT FAILED"));
+      // 2. Send sequential print jobs according to includedPrintCount (Copies=1 per job)
+      const totalPrints = session.includedPrintCount ?? session.printCount ?? 1;
+      let successCount = 0;
+
+      for (let i = 1; i <= totalPrints; i++) {
+        setMsg(totalPrints > 1 ? `Printing ${i} of ${totalPrints}...` : "MENGIRIM KE PRINTER...");
+        const r = await fetch("/api/printer/print", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: session.sessionId,
+            printUrl: regenData.printUrl,
+            count: 1,
+          }),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+          const errReason = d.error || d.message || "Print job failed";
+          const partialMsg = totalPrints > 1
+            ? `Print ${successCount}/${totalPrints} succeeded, print ${i}/${totalPrints} failed: ${errReason}`
+            : `Print failed: ${errReason}`;
+          setPrintStatus("failed");
+          setMsg(partialMsg);
+          return;
+        }
+        successCount++;
+      }
+
+      setPrintStatus("printed");
+      setMsg(totalPrints > 1 ? `PRINT SUCCESS (${totalPrints} COPIES)` : "PRINT SUCCESS");
     } catch (e) {
       setPrintStatus("failed");
       setMsg(e instanceof Error ? e.message : "PRINT ERROR");

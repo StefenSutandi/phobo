@@ -980,7 +980,7 @@ button {
   overflow: hidden;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
   border: 2px solid rgba(255, 255, 255, 0.2);
-  background: #000;
+  background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;

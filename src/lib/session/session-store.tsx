@@ -64,25 +64,45 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => { if (!hasHydrated) return; if (session) localStorage.setItem(KEY, JSON.stringify(session)); else localStorage.removeItem(KEY); }, [hasHydrated, session]);
   const createNewSession = useCallback(() => { const s = fresh(); setSession(s); return s; }, []);
   const resetSession = useCallback(() => setSession(null), []);
-  const selectPackage = useCallback((id: string) => { const p = getPackageById(id); if (!p) return; const s = fresh(); setSession({ ...s, selectedPackageId: id, packageId: id, packageName: p.name, frameCount: p.frameCount, printCount: p.printCount, maxShots: p.maxShots, durationMinutes: p.durationMinutes, price: p.price, paymentStatus: "pending" }); }, []);
+  const selectPackage = useCallback((id: string) => {
+    const p = getPackageById(id);
+    if (!p) return;
+    const s = fresh();
+    setSession({
+      ...s,
+      selectedPackageId: id,
+      packageId: id,
+      packageName: p.name,
+      requiredFrameCount: p.requiredFrameCount,
+      requiredShotCount: p.requiredShotCount,
+      includedPrintCount: p.includedPrintCount,
+      frameCount: p.requiredFrameCount,
+      printCount: p.includedPrintCount,
+      maxShots: p.requiredShotCount,
+      durationMinutes: p.durationMinutes,
+      price: p.price,
+      paymentStatus: "pending",
+    });
+  }, []);
   const patch = useCallback((value: Partial<KioskSession>) => setSession(s => update(s, value)), []);
   const setPaymentStatus = useCallback((paymentStatus: PaymentStatus) => patch({ paymentStatus }), [patch]);
   const setPaymentData = useCallback((data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number }) => patch(data), [patch]);
-  const selectFrame = useCallback((selectedFrameId: string) => patch({ selectedFrameId, finalImageUrl: undefined, printImageUrl: undefined, photoSlotAssignments: undefined }), [patch]);
-  const selectBackground = useCallback((selectedBackgroundId: string) => patch({ selectedBackgroundId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
+  const selectFrame = useCallback((selectedFrameId: string) => patch({ selectedFrameId, finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined, photoSlotAssignments: undefined }), [patch]);
+  const selectBackground = useCallback((selectedBackgroundId: string) => patch({ selectedBackgroundId, finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined }), [patch]);
   const addCapturedPhoto = useCallback((photo: CapturedPhoto | string) => setSession(s => {
     const active = s ?? fresh();
     const activeBg = active.selectedBackgroundId || "background-01";
     const photoObj: CapturedPhoto = typeof photo === 'string' 
       ? { raw: photo, display: photo, backgroundId: activeBg } 
       : { raw: photo.raw || photo.display, display: photo.display || photo.raw, backgroundId: photo.backgroundId || activeBg };
-    return active.capturedPhotos.length >= (active.maxShots ?? 8) ? active : update(active, { capturedPhotos: [...active.capturedPhotos, photoObj], finalImageUrl: undefined, printImageUrl: undefined });
+    const maxShots = active.requiredShotCount ?? active.maxShots ?? 8;
+    return active.capturedPhotos.length >= maxShots ? active : update(active, { capturedPhotos: [...active.capturedPhotos, photoObj], finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined });
   }), []);
-  const clearCapturedPhotos = useCallback(() => patch({ capturedPhotos: [], selectedPhotoIndices: [], photoSlotAssignments: undefined, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
-  const selectPhotos = useCallback((selectedPhotoIndices: number[]) => patch({ selectedPhotoIndices, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
-  const setPhotoSlotAssignments = useCallback((photoSlotAssignments: (number | null)[]) => patch({ photoSlotAssignments, selectedPhotoIndices: photoSlotAssignments.filter((x): x is number => x !== null && x !== undefined), finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
-  const selectSticker = useCallback((selectedStickerId: string) => patch({ selectedStickerId, finalImageUrl: undefined, printImageUrl: undefined }), [patch]);
-  const clearFinalResult = useCallback(() => patch({ finalImageUrl: undefined, printImageUrl: undefined, printStatus: "idle" }), [patch]);
+  const clearCapturedPhotos = useCallback(() => patch({ capturedPhotos: [], selectedPhotoIndices: [], photoSlotAssignments: undefined, finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined }), [patch]);
+  const selectPhotos = useCallback((selectedPhotoIndices: number[]) => patch({ selectedPhotoIndices, finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined }), [patch]);
+  const setPhotoSlotAssignments = useCallback((photoSlotAssignments: (number | null)[]) => patch({ photoSlotAssignments, selectedPhotoIndices: photoSlotAssignments.filter((x): x is number => x !== null && x !== undefined), finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined }), [patch]);
+  const selectSticker = useCallback((selectedStickerId: string) => patch({ selectedStickerId, finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined }), [patch]);
+  const clearFinalResult = useCallback(() => patch({ finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined, printStatus: "idle" }), [patch]);
   const addSticker = useCallback((sticker: Omit<StickerPlacement, "id">) => setSession(s => { const active = s ?? fresh(); return update(active, { stickers: [...active.stickers, { ...sticker, id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2)}` }] }); }), []);
   const updateSticker = useCallback((id: string, stickerPatch: Partial<StickerPlacement>) => setSession(s => { const active = s ?? fresh(); return update(active, { stickers: active.stickers.map(st => st.id === id ? { ...st, ...stickerPatch } : st) }); }), []);
   const removeSticker = useCallback((id: string) => setSession(s => { const active = s ?? fresh(); return update(active, { stickers: active.stickers.filter(st => st.id !== id) }); }), []);

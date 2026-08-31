@@ -100,6 +100,7 @@ export async function generatePostcardPrint({
   }
 
   return sharp(sourceBuffer)
+    .flatten({ background: "#ffffff" })
     .resize(PRINT_WIDTH_PX, PRINT_HEIGHT_PX, {
       fit: "cover",
       position: "centre",

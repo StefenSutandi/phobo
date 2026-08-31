@@ -486,3 +486,57 @@ export class PrinterAdapter {
 }
 
 export const printer = new PrinterAdapter();
+
+export type SequentialPrintJobResult = {
+  ok: boolean;
+  totalJobs: number;
+  completedJobs: number;
+  results: PrintJobResult[];
+  error?: string;
+  message?: string;
+};
+
+export async function executeSequentialPrintJobs({
+  sessionId,
+  printUrl,
+  count = 1,
+  printerAdapter = printer,
+}: {
+  sessionId: string;
+  printUrl: string;
+  count?: number;
+  printerAdapter?: { printImage: (req: PrintJobRequest) => Promise<PrintJobResult> };
+}): Promise<SequentialPrintJobResult> {
+  const totalJobs = Math.max(1, count);
+  const results: PrintJobResult[] = [];
+
+  for (let i = 1; i <= totalJobs; i++) {
+    const jobRes = await printerAdapter.printImage({
+      sessionId,
+      printUrl,
+    });
+    results.push(jobRes);
+
+    if (!jobRes.ok) {
+      const errorMsg = totalJobs > 1
+        ? `Print ${i - 1}/${totalJobs} succeeded, print ${i}/${totalJobs} failed: ${jobRes.error || "Unknown printer error"}`
+        : (jobRes.error || "Print job failed");
+      return {
+        ok: false,
+        totalJobs,
+        completedJobs: i - 1,
+        results,
+        error: errorMsg,
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    totalJobs,
+    completedJobs: totalJobs,
+    results,
+    message: totalJobs > 1 ? `Print ${totalJobs}/${totalJobs} completed successfully` : "Print completed successfully",
+  };
+}
+

@@ -134,7 +134,7 @@ export default function Camera() {
   }, [isCapturing, selectBackground]);
 
   const count = session?.capturedPhotos.length ?? 0;
-  const max = session?.maxShots ?? 8;
+  const max = session?.requiredShotCount ?? session?.maxShots ?? 8;
   const required = max; // require full package shot count
   const maxReached = count >= max;
   shotCount.current = count;

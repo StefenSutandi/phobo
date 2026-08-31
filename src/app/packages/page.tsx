@@ -29,9 +29,9 @@ export default function Packages() {
                   />
                 </div>
                 <div className="package-details-grid">
-                  <div>{item.frameCount} Frame</div>
-                  <div>{item.printCount}x Cetak</div>
-                  <div>{item.maxShots} Shoot</div>
+                  <div>{item.requiredFrameCount} Frame</div>
+                  <div>{item.includedPrintCount}x Cetak</div>
+                  <div>{item.requiredShotCount} Shoot</div>
                   <div>{item.durationMinutes} menit</div>
                 </div>
               </div>

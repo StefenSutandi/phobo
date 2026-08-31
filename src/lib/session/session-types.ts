@@ -34,6 +34,9 @@ export type KioskSession = {
   selectedPackageId?: string;
   packageId?: string;
   packageName?: string;
+  requiredFrameCount?: number;
+  requiredShotCount?: number;
+  includedPrintCount?: number;
   frameCount?: number;
   printCount?: number;
   maxShots?: number;

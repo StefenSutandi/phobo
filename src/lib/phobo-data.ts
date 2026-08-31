@@ -3,12 +3,16 @@ import frameSlots from "../../public/assets/frames/frame-slots.json";
 export type PackageData = {
   id: string;
   name: string;
-  frameCount: number;
-  printCount: number;
-  maxShots: number;
+  requiredFrameCount: number;
+  requiredShotCount: number;
+  includedPrintCount: number;
   durationMinutes: number;
   price: number;
   color: "orange" | "brown" | "purple";
+  // Backward compatibility aliases
+  frameCount: number;
+  printCount: number;
+  maxShots: number;
 };
 
 export type PhotoSlot = {
@@ -38,9 +42,45 @@ export type BackgroundData = {
 };
 
 export const packages: PackageData[] = [
-  { id: "basic", name: "BASIC", frameCount: 1, printCount: 1, maxShots: 8, durationMinutes: 5, price: 45000, color: "orange" },
-  { id: "duo", name: "DUO", frameCount: 2, printCount: 2, maxShots: 8, durationMinutes: 7, price: 60000, color: "brown" },
-  { id: "premium", name: "PREMIUM", frameCount: 2, printCount: 2, maxShots: 16, durationMinutes: 10, price: 65000, color: "purple" },
+  {
+    id: "basic",
+    name: "BASIC",
+    requiredFrameCount: 1,
+    requiredShotCount: 8,
+    includedPrintCount: 1,
+    durationMinutes: 5,
+    frameCount: 1,
+    printCount: 1,
+    maxShots: 8,
+    price: 45000,
+    color: "orange",
+  },
+  {
+    id: "duo",
+    name: "DUO",
+    requiredFrameCount: 1,
+    requiredShotCount: 8,
+    includedPrintCount: 2,
+    durationMinutes: 7,
+    frameCount: 1,
+    printCount: 2,
+    maxShots: 8,
+    price: 60000,
+    color: "brown",
+  },
+  {
+    id: "premium",
+    name: "PREMIUM",
+    requiredFrameCount: 1,
+    requiredShotCount: 16,
+    includedPrintCount: 2,
+    durationMinutes: 10,
+    frameCount: 1,
+    printCount: 2,
+    maxShots: 16,
+    price: 65000,
+    color: "purple",
+  },
 ];
 
 export const frames: FrameData[] = frameSlots as FrameData[];
