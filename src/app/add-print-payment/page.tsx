@@ -222,12 +222,21 @@ export default function AddPrintPayment() {
   return (
     <KioskStage>
       <QrScreen 
-        title={paymentActive ? "SCAN UNTUK BAYAR" : "PAYMENT DISABLED"} 
+        title={session?.addPrintPaymentStatus === "paid" ? "PEMBAYARAN DITERIMA" : (paymentActive ? "SCAN UNTUK BAYAR" : "PAYMENT DISABLED")} 
         initialSeconds={120} 
-        completionText="PAYMENT TIMEOUT" 
+        completionText={session?.addPrintPaymentStatus === "paid" ? "MEMPROSES..." : "PAYMENT TIMEOUT"} 
         onComplete={() => {
-          setAddPrintPaymentStatus("failed");
-          router.push("/result");
+          const isPaidOrCommitted = Boolean(
+            session?.addPrintPaymentStatus === "paid" ||
+            session?.additionalPrintCommitted ||
+            session?.additionalPrintStatus === "composing" ||
+            session?.additionalPrintStatus === "queued" ||
+            session?.additionalPrintStatus === "printed"
+          );
+          if (!isPaidOrCommitted) {
+            setAddPrintPaymentStatus("failed");
+            router.push("/result");
+          }
         }} 
         qrContent={
           !isInitializing 

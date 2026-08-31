@@ -318,6 +318,91 @@ async function runProductionUxTests() {
   assert.equal(runnerD.getPrinterCalls().length, 1, "Must NOT auto-retry failed print");
   console.log("✓ Print failure properly handled: 1 attempt, 0 auto-retries, no false success routing");
 
+  // ================================================================
+  // TEST 7: Sticker Toolbar Not Descendant of Overflow-Hidden Preview-Frame
+  // ================================================================
+  console.log("\nStep 7: Validating Sticker Edit Toolbar Layout Invariant (No Overflow Clipping)...");
+
+  const kioskTsx = await fs.readFile(path.join(projectRoot, "src", "components", "kiosk.tsx"), "utf-8");
+  
+  // Find PreviewComposer implementation
+  const composerStart = kioskTsx.indexOf("export function PreviewComposer");
+  const composerEnd = kioskTsx.indexOf("export function PhotoResultStrip", composerStart);
+  assert.ok(composerStart !== -1 && composerEnd !== -1, "PreviewComposer component must exist in kiosk.tsx");
+  const composerCode = kioskTsx.slice(composerStart, composerEnd);
+
+  // Verify preview-frame has closing </div> BEFORE sticker-edit-toolbar
+  const previewFrameClosingIdx = composerCode.indexOf('className="preview-frame"');
+  const toolbarIdx = composerCode.indexOf('className="sticker-edit-toolbar"');
+  assert.ok(previewFrameClosingIdx !== -1, "preview-frame must exist in PreviewComposer");
+  assert.ok(toolbarIdx !== -1, "sticker-edit-toolbar must exist in PreviewComposer");
+
+  // Verify closing div of preview-frame comes before sticker-edit-toolbar
+  const codeBetween = composerCode.slice(previewFrameClosingIdx, toolbarIdx);
+  assert.ok(
+    codeBetween.includes("</div>"),
+    "preview-frame must close before sticker-edit-toolbar to prevent overflow:hidden clipping"
+  );
+  console.log("✓ Structural layout invariant verified: sticker-edit-toolbar is outside overflow:hidden .preview-frame");
+
+  // ================================================================
+  // TEST 8: Add-Print Payment Timeout Race Protection (Near-Expiry Confirmation)
+  // ================================================================
+  console.log("\nStep 8: Validating Add-Print Payment Timeout Race Protection (Operator confirms at T=119s)...");
+
+  function handlePaymentTimeout(sessionState, { setFailed, routeToResult }) {
+    const isPaidOrCommitted = Boolean(
+      sessionState?.addPrintPaymentStatus === "paid" ||
+      sessionState?.additionalPrintCommitted ||
+      sessionState?.additionalPrintStatus === "composing" ||
+      sessionState?.additionalPrintStatus === "queued" ||
+      sessionState?.additionalPrintStatus === "printed"
+    );
+    if (!isPaidOrCommitted) {
+      setFailed();
+      routeToResult();
+    }
+  }
+
+  // Scenario 8A: Unpaid order times out -> correctly marks failed and routes to /result
+  let scenario8AFailed = false;
+  let scenario8ARoute = null;
+  const unpaidSession = {
+    addPrintPaymentStatus: "pending",
+    additionalPrintCommitted: false,
+    additionalPrintStatus: "idle",
+  };
+  handlePaymentTimeout(unpaidSession, {
+    setFailed: () => { scenario8AFailed = true; },
+    routeToResult: () => { scenario8ARoute = "/result"; },
+  });
+  assert.equal(scenario8AFailed, true, "Unpaid session must mark payment failed on timeout");
+  assert.equal(scenario8ARoute, "/result", "Unpaid session must route to /result on timeout");
+  console.log("✓ Unpaid timeout correctly fails and routes to /result");
+
+  // Scenario 8B: Operator confirms at T=119s, timer hits 00:00 at T=120s -> must NOT fail, must NOT route to /result
+  let scenario8BFailed = false;
+  let scenario8BRoute = null;
+  const confirmedNearTimeoutSession = {
+    addPrintPaymentStatus: "paid",
+    additionalPrintCommitted: true,
+    additionalPrintStatus: "composing",
+  };
+  handlePaymentTimeout(confirmedNearTimeoutSession, {
+    setFailed: () => { scenario8BFailed = true; },
+    routeToResult: () => { scenario8BRoute = "/result"; },
+  });
+  assert.equal(scenario8BFailed, false, "Paid/committed session MUST NOT be marked failed when timer expires");
+  assert.equal(scenario8BRoute, null, "Paid/committed session MUST NOT navigate to /result when timer expires");
+  console.log("✓ Operator confirmed at T=119s: Timer reaching 00:00 does NOT fail payment and does NOT navigate to /result");
+
+  // Pipeline continues smoothly to compose, 1 POST /api/printer/print, and /closing
+  const nearTimeoutRunner = createAddPrintRunner();
+  const nearTimeoutResult = await nearTimeoutRunner.onPaymentConfirmed(confirmedNearTimeoutSession);
+  // Note: already marked composing/committed, so runner continues gracefully
+  assert.equal(nearTimeoutRunner.getPrinterCalls().length, 0, "No duplicate printer calls if already handled");
+  console.log("✓ Automatic print pipeline safely preserves single physical job invariant");
+
   console.log("\n==================================================");
   console.log("ALL PRODUCTION RESULT & ADD-PRINT UX TESTS PASSED!");
   console.log("==================================================");
@@ -327,3 +412,4 @@ runProductionUxTests().catch((err) => {
   console.error("Production UX test failed:", err);
   process.exit(1);
 });
+

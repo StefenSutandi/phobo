@@ -496,34 +496,48 @@ export function PreviewComposer({
         );
       })}
       <img src={frame.templateUrl} alt={frame.name} className="preview-frame__template" style={{ position: "absolute", zIndex: 10, pointerEvents: "none", width: "100%", height: "100%", top: 0, left: 0 }} />
-      {activeStickers.map(sticker => {
-        const isActive = activeStickerId === sticker.id;
-        return (
-          <div key={sticker.id} style={{
-            position: 'absolute',
-            left: `${(sticker.x / 1200) * 100}%`,
-            top: `${(sticker.y / 1800) * 100}%`,
-            width: `${(sticker.width / 1200) * 100}%`,
-            transform: `translate(-50%, -50%) rotate(${sticker.rotation}deg)`,
-            zIndex: sticker.zIndex,
-            border: isActive ? '3px dashed #00f' : 'none'
-          }}>
-            <img src={sticker.src} style={{ width: '100%', height: 'auto', display: 'block', touchAction: 'none' }} onPointerDown={(e) => handlePointerDown(e, sticker.id, 'drag')} />
-          </div>
-        )
-      })}
-      {activeStickerId && Boolean(activeStickers.find(s => s.id === activeStickerId)) && (
-        <div style={{ position: 'absolute', right: '-70px', top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: '12px', zIndex: 100 }}>
-          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const st = activeStickers.find(s => s.id === activeStickerId); if (st) updateStickerFn(activeStickerId, { width: Math.max(50, st.width - 50) }); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>-</button>
-          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const st = activeStickers.find(s => s.id === activeStickerId); if (st) updateStickerFn(activeStickerId, { width: st.width + 50 }); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>+</button>
-          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const st = activeStickers.find(s => s.id === activeStickerId); if (st) updateStickerFn(activeStickerId, { rotation: st.rotation - 15 }); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>↺</button>
-          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const st = activeStickers.find(s => s.id === activeStickerId); if (st) updateStickerFn(activeStickerId, { rotation: st.rotation + 15 }); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>↻</button>
-          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); removeStickerFn(activeStickerId); setActiveStickerId(null); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#e74c3c', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>🗑</button>
-          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setActiveStickerId(null); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#95a5a6', color: 'white', border: 'none', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>OK</button>
+          {activeStickers.map(sticker => {
+            const isActive = activeStickerId === sticker.id;
+            return (
+              <div key={sticker.id} style={{
+                position: 'absolute',
+                left: `${(sticker.x / 1200) * 100}%`,
+                top: `${(sticker.y / 1800) * 100}%`,
+                width: `${(sticker.width / 1200) * 100}%`,
+                transform: `translate(-50%, -50%) rotate(${sticker.rotation}deg)`,
+                zIndex: sticker.zIndex,
+                border: isActive ? '3px dashed #00f' : 'none'
+              }}>
+                <img src={sticker.src} style={{ width: '100%', height: 'auto', display: 'block', touchAction: 'none' }} onPointerDown={(e) => handlePointerDown(e, sticker.id, 'drag')} />
+              </div>
+            )
+          })}
         </div>
-      )}
-    </div>
-    </RoundedPanel>
+
+        {/* Active sticker edit toolbar rendered outside preview-frame to avoid overflow:hidden clipping */}
+        {activeStickerId && Boolean(activeStickers.find(s => s.id === activeStickerId)) && (
+          <div
+            className="sticker-edit-toolbar"
+            style={{
+              position: 'absolute',
+              right: '12px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              zIndex: 100,
+            }}
+          >
+            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const st = activeStickers.find(s => s.id === activeStickerId); if (st) updateStickerFn(activeStickerId, { width: Math.max(50, st.width - 50) }); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>-</button>
+            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const st = activeStickers.find(s => s.id === activeStickerId); if (st) updateStickerFn(activeStickerId, { width: st.width + 50 }); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>+</button>
+            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const st = activeStickers.find(s => s.id === activeStickerId); if (st) updateStickerFn(activeStickerId, { rotation: st.rotation - 15 }); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>↺</button>
+            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const st = activeStickers.find(s => s.id === activeStickerId); if (st) updateStickerFn(activeStickerId, { rotation: st.rotation + 15 }); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>↻</button>
+            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); removeStickerFn(activeStickerId); setActiveStickerId(null); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#e74c3c', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>🗑</button>
+            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setActiveStickerId(null); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#95a5a6', color: 'white', border: 'none', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>OK</button>
+          </div>
+        )}
+      </RoundedPanel>
   );
 }
 
