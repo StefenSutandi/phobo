@@ -285,6 +285,9 @@ button {
   align-items: stretch;
   padding: 20px;
   gap: 20px;
+  box-sizing: border-box;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .selected-frame-preview {
@@ -308,19 +311,36 @@ button {
 .frame-scroller {
   width: 320px;
   height: 100%;
+  min-height: 0;
   position: relative;
   top: auto;
   left: auto;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: scroll;
   padding-right: 12px;
-  padding-bottom: 0;
+  padding-bottom: 24px;
   padding-top: 0;
+  box-sizing: border-box;
   overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
   flex-shrink: 0;
 }
 
-.frame-scroller::-webkit-scrollbar,
+.frame-scroller::-webkit-scrollbar {
+  width: 8px;
+}
+
+.frame-scroller::-webkit-scrollbar-track {
+  background: var(--placeholder);
+  border-radius: 4px;
+}
+
+.frame-scroller::-webkit-scrollbar-thumb {
+  background: var(--brown);
+  border-radius: 4px;
+  min-height: 32px;
+}
+
 .background-grid::-webkit-scrollbar,
 .strip-scroll::-webkit-scrollbar,
 .sticker-scroll::-webkit-scrollbar {
@@ -328,7 +348,6 @@ button {
   height: 8px;
 }
 
-.frame-scroller::-webkit-scrollbar-track,
 .background-grid::-webkit-scrollbar-track,
 .strip-scroll::-webkit-scrollbar-track,
 .sticker-scroll::-webkit-scrollbar-track {
@@ -336,7 +355,6 @@ button {
   border-radius: 4px;
 }
 
-.frame-scroller::-webkit-scrollbar-thumb,
 .background-grid::-webkit-scrollbar-thumb,
 .strip-scroll::-webkit-scrollbar-thumb,
 .sticker-scroll::-webkit-scrollbar-thumb {
@@ -346,9 +364,11 @@ button {
 
 .frame-grid {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  grid-template-columns: repeat(3, 1fr);
   width: 100%;
+  padding-bottom: 8px;
+  box-sizing: border-box;
 }
 
 /* Replaced by refined frame-choice styling below */

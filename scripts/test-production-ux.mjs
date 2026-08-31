@@ -843,6 +843,35 @@ async function runProductionUxTests() {
   assert.equal(synRectStyle.maskUrl, undefined, "Synthetic rect must have undefined maskUrl");
   console.log("✓ Rectangular Fallback: Slot without maskUrl and without shape behaves as plain rect");
 
+  // ================================================================
+  // TEST 17: Frame Picker Bottom Scroll Hardening & Shared Parity
+  // ================================================================
+  console.log("\nStep 17: Validating Frame Picker Bottom Scroll Hardening & Shared Parity...");
+
+  const { frames: allFrames } = await import("../src/lib/phobo-data.ts");
+  assert.equal(allFrames.length, 18, "Phobo must have exactly 18 frames");
+  console.log("✓ 18 frame cards verified (6 rows x 3 columns)");
+
+  const framesPageCode = await fs.readFile(path.join(projectRoot, "src/app/frames/page.tsx"), "utf-8");
+  const addFramesPageCode = await fs.readFile(path.join(projectRoot, "src/app/additional-frame/page.tsx"), "utf-8");
+
+  assert.ok(framesPageCode.includes("<FrameGridScroller"), "/frames must use shared FrameGridScroller");
+  assert.ok(addFramesPageCode.includes("<FrameGridScroller"), "/additional-frame must use shared FrameGridScroller");
+  console.log("✓ Shared FrameGridScroller component used by both /frames and /additional-frame");
+
+  // Verify globals.css structural layout contract
+  assert.ok(cssContent.includes(".frame-panel {"), ".frame-panel rule must exist");
+  assert.ok(cssContent.includes("overflow: hidden;"), ".frame-panel must have overflow: hidden");
+  assert.ok(cssContent.includes(".frame-scroller {"), ".frame-scroller rule must exist");
+  assert.ok(cssContent.includes("overflow-y: scroll;"), ".frame-scroller must have overflow-y: scroll");
+  assert.ok(cssContent.includes("padding-bottom: 24px;"), ".frame-scroller must have positive bottom breathing padding");
+  assert.ok(cssContent.includes("scrollbar-gutter: stable;"), ".frame-scroller must have scrollbar-gutter: stable");
+  assert.ok(cssContent.includes(".frame-grid {"), ".frame-grid rule must exist");
+  assert.ok(cssContent.includes("minmax(0, 1fr)"), ".frame-grid must use 3 columns minmax layout");
+  assert.ok(cssContent.includes("min-height: 32px;"), ".frame-scroller scrollbar thumb must have min-height for visibility");
+
+  console.log("✓ Frame scroller CSS contract verified: overflow ownership in scroller, bottom breathing padding 24px+8px, stable scrollbar track");
+
   console.log("\n==================================================");
   console.log("ALL PRODUCTION RESULT & ADD-PRINT UX TESTS PASSED!");
   console.log("==================================================");
