@@ -36,53 +36,18 @@ export type ComposeFinalRequest = {
 export type ComposedFinalImages = { finalScreenPng: Buffer; processedPhotoDataUrls: string[]; warnings: string[] };
 
 async function getSlotApertureMaskBuffer(
-  templatePngBuffer: Buffer,
-  frameWidth: number,
-  frameHeight: number,
-  photoSlot: { x: number; y: number; width: number; height: number; maskUrl?: string; shape?: string; borderRadius?: number }
+  photoSlot: { maskUrl?: string }
 ): Promise<Buffer | null> {
-  // 1. Try loading precomputed mask file if available
   if (photoSlot.maskUrl) {
     try {
       const maskPath = path.join(process.cwd(), "public", photoSlot.maskUrl);
       await fs.access(maskPath);
       return await fs.readFile(maskPath);
     } catch {
-      // Fallback to dynamic derivation
+      return null;
     }
   }
-
-  // 2. Derive dynamically from template PNG alpha crop
-  try {
-    const rawTemplate = await sharp(templatePngBuffer)
-      .resize({ width: frameWidth, height: frameHeight, fit: "fill" })
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-
-    const maskRaw = Buffer.alloc(photoSlot.width * photoSlot.height * 4);
-    for (let py = 0; py < photoSlot.height; py++) {
-      for (let px = 0; px < photoSlot.width; px++) {
-        const globalX = Math.max(0, Math.min(frameWidth - 1, photoSlot.x + px));
-        const globalY = Math.max(0, Math.min(frameHeight - 1, photoSlot.y + py));
-        const srcIdx = (globalY * frameWidth + globalX) * 4;
-        const templateAlpha = rawTemplate.data[srcIdx + 3];
-        const maskAlpha = 255 - templateAlpha;
-
-        const destIdx = (py * photoSlot.width + px) * 4;
-        maskRaw[destIdx + 0] = 255;
-        maskRaw[destIdx + 1] = 255;
-        maskRaw[destIdx + 2] = 255;
-        maskRaw[destIdx + 3] = maskAlpha;
-      }
-    }
-
-    return await sharp(maskRaw, {
-      raw: { width: photoSlot.width, height: photoSlot.height, channels: 4 }
-    }).png().toBuffer();
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 export async function composeFinalImages({
@@ -181,7 +146,7 @@ export async function composeFinalImages({
         .toBuffer();
 
       // 4. Apply template alpha aperture mask (with shape fallback)
-      let maskBuffer = await getSlotApertureMaskBuffer(template, frame.width, frame.height, photoSlot);
+      let maskBuffer = await getSlotApertureMaskBuffer(photoSlot);
 
       if (!maskBuffer && photoSlot.shape && photoSlot.shape !== "rect") {
         let svgShape = "";

@@ -419,10 +419,19 @@ export function PreviewComposer({
         const isSelected = activeSlotIndex === index;
         const isDragOver = dragOverSlotIndex === index;
         const isFailed = Boolean(failedSlots[index]);
+        
+        const hasTemplateMask = Boolean(photoSlot.maskUrl);
+        const maskUrl = photoSlot.maskUrl;
+
         const isEllipse = photoSlot.shape === "ellipse" || photoSlot.shape === "circle";
         const isRounded = photoSlot.shape === "rounded";
-        const slotBorderRadius = isEllipse ? "50%" : isRounded ? `${photoSlot.borderRadius || 16}px` : undefined;
-        const maskUrl = photoSlot.maskUrl || `/assets/frames/masks/${frame.id}-slot-${index}.png`;
+        const slotBorderRadius = !hasTemplateMask
+          ? isEllipse
+            ? "50%"
+            : isRounded
+              ? `${photoSlot.borderRadius || 16}px`
+              : undefined
+          : undefined;
 
         return (
           <div 
@@ -441,12 +450,12 @@ export function PreviewComposer({
               transform:photoSlot.rotation?`rotate(${photoSlot.rotation}deg)`:undefined, 
               overflow: 'hidden',
               borderRadius: slotBorderRadius,
-              WebkitMaskImage: `url('${maskUrl}')`,
-              maskImage: `url('${maskUrl}')`,
-              WebkitMaskSize: '100% 100%',
-              maskSize: '100% 100%',
-              WebkitMaskRepeat: 'no-repeat',
-              maskRepeat: 'no-repeat',
+              WebkitMaskImage: hasTemplateMask && maskUrl ? `url('${maskUrl}')` : undefined,
+              maskImage: hasTemplateMask && maskUrl ? `url('${maskUrl}')` : undefined,
+              WebkitMaskSize: hasTemplateMask ? '100% 100%' : undefined,
+              maskSize: hasTemplateMask ? '100% 100%' : undefined,
+              WebkitMaskRepeat: hasTemplateMask ? 'no-repeat' : undefined,
+              maskRepeat: hasTemplateMask ? 'no-repeat' : undefined,
               cursor: 'pointer',
               border: isDragOver 
                 ? '3px solid #ffd700' 

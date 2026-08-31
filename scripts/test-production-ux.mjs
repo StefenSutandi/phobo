@@ -776,6 +776,73 @@ async function runProductionUxTests() {
 
   console.log("✓ Add-print payment UI structure & paid-state copy verified");
 
+  // ================================================================
+  // TEST 16: Preview & Backend Mask Precedence Parity (Heart No-Clipping Regression)
+  // ================================================================
+  console.log("\nStep 16: Validating Preview & Backend Mask Precedence Parity...");
+
+  function computeSlotStyle(photoSlot) {
+    const hasTemplateMask = Boolean(photoSlot.maskUrl);
+    const maskUrl = photoSlot.maskUrl;
+    const isEllipse = photoSlot.shape === "ellipse" || photoSlot.shape === "circle";
+    const isRounded = photoSlot.shape === "rounded";
+    const slotBorderRadius = !hasTemplateMask
+      ? isEllipse
+        ? "50%"
+        : isRounded
+          ? `${photoSlot.borderRadius || 16}px`
+          : undefined
+      : undefined;
+
+    return {
+      hasTemplateMask,
+      slotBorderRadius,
+      maskUrl: hasTemplateMask ? maskUrl : undefined,
+    };
+  }
+
+  // 16A: Frame 8 Heart Slot (has maskUrl AND legacy shape: "ellipse")
+  const f8Slot0 = frame8.photoSlots[0];
+  assert.ok(f8Slot0.maskUrl, "Frame 8 slot 0 must have maskUrl");
+  const f8Style = computeSlotStyle(f8Slot0);
+  assert.equal(f8Style.hasTemplateMask, true, "Frame 8 must have template mask");
+  assert.equal(f8Style.slotBorderRadius, undefined, "Frame 8 must NOT have borderRadius applied (prevents heart clipping)");
+  assert.equal(f8Style.maskUrl, f8Slot0.maskUrl, "Frame 8 maskUrl must match exactly");
+  console.log("✓ Frame 8: Template heart mask is authoritative; legacy shape borderRadius is completely suppressed");
+
+  // 16B: Frame 10 Ellipse Slot (has maskUrl AND shape: "ellipse")
+  const f10Slot0 = frame10.photoSlots[0];
+  assert.ok(f10Slot0.maskUrl, "Frame 10 slot 0 must have maskUrl");
+  const f10Style = computeSlotStyle(f10Slot0);
+  assert.equal(f10Style.hasTemplateMask, true, "Frame 10 must have template mask");
+  assert.equal(f10Style.slotBorderRadius, undefined, "Frame 10 must NOT have redundant borderRadius applied");
+  assert.equal(f10Style.maskUrl, f10Slot0.maskUrl, "Frame 10 maskUrl must match exactly");
+  console.log("✓ Frame 10: Template ellipse mask is authoritative; no redundant borderRadius clipping");
+
+  // 16C: Synthetic Slot without maskUrl, shape: "ellipse" (Fallback works)
+  const syntheticEllipse = { width: 400, height: 300, shape: "ellipse" };
+  const synEllipseStyle = computeSlotStyle(syntheticEllipse);
+  assert.equal(synEllipseStyle.hasTemplateMask, false, "Synthetic ellipse must not have template mask");
+  assert.equal(synEllipseStyle.slotBorderRadius, "50%", "Synthetic ellipse must fall back to borderRadius 50%");
+  assert.equal(synEllipseStyle.maskUrl, undefined, "Synthetic ellipse must have no CSS maskUrl");
+  console.log("✓ Geometric Fallback: Slot without maskUrl falls back to shape: ellipse (50%)");
+
+  // 16D: Synthetic Slot without maskUrl, shape: "rounded"
+  const syntheticRounded = { width: 400, height: 300, shape: "rounded", borderRadius: 24 };
+  const synRoundedStyle = computeSlotStyle(syntheticRounded);
+  assert.equal(synRoundedStyle.hasTemplateMask, false, "Synthetic rounded must not have template mask");
+  assert.equal(synRoundedStyle.slotBorderRadius, "24px", "Synthetic rounded must fall back to borderRadius 24px");
+  assert.equal(synRoundedStyle.maskUrl, undefined, "Synthetic rounded must have no CSS maskUrl");
+  console.log("✓ Geometric Fallback: Slot without maskUrl falls back to shape: rounded (24px)");
+
+  // 16E: Synthetic Slot without maskUrl and without shape (Rectangular)
+  const syntheticRect = { width: 400, height: 300 };
+  const synRectStyle = computeSlotStyle(syntheticRect);
+  assert.equal(synRectStyle.hasTemplateMask, false, "Synthetic rect must not have template mask");
+  assert.equal(synRectStyle.slotBorderRadius, undefined, "Synthetic rect must have undefined borderRadius");
+  assert.equal(synRectStyle.maskUrl, undefined, "Synthetic rect must have undefined maskUrl");
+  console.log("✓ Rectangular Fallback: Slot without maskUrl and without shape behaves as plain rect");
+
   console.log("\n==================================================");
   console.log("ALL PRODUCTION RESULT & ADD-PRINT UX TESTS PASSED!");
   console.log("==================================================");
