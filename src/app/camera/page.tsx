@@ -87,7 +87,7 @@ async function recoverDccPreview(liveRef: React.RefObject<CameraLiveViewHandle |
 
 export default function Camera() {
   const router = useRouter();
-  const { session, hasHydrated, selectBackground, addCapturedPhoto } = useSessionStore();
+  const { session, hasHydrated, selectBackground, addCapturedPhoto, initCameraTimer } = useSessionStore();
   const live = useRef<CameraLiveViewHandle>(null);
   const captureLock = useRef(false);
   const shotCount = useRef(0);
@@ -102,6 +102,40 @@ export default function Camera() {
   const [previewEnabled, setPreviewEnabled] = useState(true);
   const [countdown, setCountdown] = useState<number | string | null>(null);
   const [freezeFrameUrl, setFreezeFrameUrl] = useState<string | null>(null);
+
+  // Persistent Camera Session Countdown Timer
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
+    if (session?.cameraDeadlineAt) {
+      const diff = Math.max(0, Math.floor((new Date(session.cameraDeadlineAt).getTime() - Date.now()) / 1000));
+      return diff;
+    }
+    const dur = session?.durationMinutes ?? 5;
+    return dur * 60;
+  });
+
+  useEffect(() => {
+    if (!hasHydrated || !session) return;
+    if (!session.cameraDeadlineAt) {
+      initCameraTimer(session.durationMinutes);
+    }
+  }, [hasHydrated, session, initCameraTimer]);
+
+  useEffect(() => {
+    if (!session?.cameraDeadlineAt) return;
+    const updateTimer = () => {
+      const diff = Math.max(0, Math.floor((new Date(session.cameraDeadlineAt!).getTime() - Date.now()) / 1000));
+      setRemainingSeconds(diff);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 500);
+    return () => clearInterval(interval);
+  }, [session?.cameraDeadlineAt]);
+
+  const mins = Math.floor(remainingSeconds / 60);
+  const secs = remainingSeconds % 60;
+  const formattedTimer = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  const isUrgent = remainingSeconds <= 60 && remainingSeconds > 0;
+  const isExpired = remainingSeconds === 0;
 
   useEffect(() => {
     fetch("/api/diagnostics")
@@ -260,8 +294,42 @@ export default function Camera() {
 
   return (
     <KioskStage>
-      <div className="shot-counter">
-        Shoot {maxReached ? max : count + 1} / {max}
+      <div
+        className="camera-session-hud"
+        style={{
+          position: "absolute",
+          left: "36px",
+          top: "22px",
+          zIndex: 25,
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+        }}
+      >
+        <div
+          className="camera-timer-badge"
+          style={{
+            background: isExpired ? "#c0392b" : isUrgent ? "#d35400" : "var(--purple)",
+            borderRadius: "20px",
+            padding: "7px 18px",
+            fontSize: "24px",
+            fontWeight: "bold",
+            color: "#ffffff",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            boxShadow: isUrgent || isExpired ? "0 0 15px rgba(231, 76, 60, 0.6)" : "none",
+            transition: "background-color 0.3s ease",
+          }}
+        >
+          <span style={{ fontSize: "20px" }}>⏱</span>
+          <span>{formattedTimer}</span>
+          {isExpired && <span style={{ fontSize: "12px", marginLeft: "4px" }}>WAKTU FOTO HABIS</span>}
+        </div>
+
+        <div className="shot-counter" style={{ position: "static" }}>
+          Shoot {maxReached ? max : count + 1} / {max}
+        </div>
       </div>
 
       {previewEnabled ? (

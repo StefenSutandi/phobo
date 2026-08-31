@@ -110,7 +110,6 @@ export async function composeFinalImages({
         const { r, g, b } = parseHexColor(slotBg.color);
         bgBuffer = await sharp({ create: { width: photoSlot.width, height: photoSlot.height, channels: 4, background: { r, g, b, alpha: 1 } } }).png().toBuffer();
       }
-      composites.push({ input: bgBuffer, left: photoSlot.x, top: photoSlot.y });
 
       // 3. Draw transparent subject into the slot using computePhotoFit
       const meta = await sharp(transparentSubject).metadata();
@@ -126,10 +125,44 @@ export async function composeFinalImages({
         height: fit.sh
       }).resize({ width: fit.dw, height: fit.dh }).toBuffer();
       
-      composites.push({ input: extractedSubject, left: photoSlot.x + fit.dx, top: photoSlot.y + fit.dy });
+      let slotComposedBuffer = await sharp(bgBuffer)
+        .composite([{ input: extractedSubject, left: fit.dx, top: fit.dy }])
+        .png()
+        .toBuffer();
+
+      // 4. Apply shape alpha mask for non-rectangular openings (ellipse, circle, rounded)
+      if (photoSlot.shape && photoSlot.shape !== "rect") {
+        let svgShape = "";
+        if (photoSlot.shape === "ellipse") {
+          const rx = photoSlot.width / 2;
+          const ry = photoSlot.height / 2;
+          svgShape = `<ellipse cx="${rx}" cy="${ry}" rx="${rx}" ry="${ry}" fill="#ffffff" />`;
+        } else if (photoSlot.shape === "circle") {
+          const r = Math.min(photoSlot.width, photoSlot.height) / 2;
+          const cx = photoSlot.width / 2;
+          const cy = photoSlot.height / 2;
+          svgShape = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#ffffff" />`;
+        } else if (photoSlot.shape === "rounded") {
+          const br = photoSlot.borderRadius || 16;
+          svgShape = `<rect width="${photoSlot.width}" height="${photoSlot.height}" rx="${br}" ry="${br}" fill="#ffffff" />`;
+        }
+
+        if (svgShape) {
+          const svgMask = Buffer.from(
+            `<svg width="${photoSlot.width}" height="${photoSlot.height}" xmlns="http://www.w3.org/2000/svg">${svgShape}</svg>`
+          );
+          slotComposedBuffer = await sharp(slotComposedBuffer)
+            .ensureAlpha()
+            .composite([{ input: svgMask, blend: "dest-in" }])
+            .png()
+            .toBuffer();
+        }
+      }
+
+      composites.push({ input: slotComposedBuffer, left: photoSlot.x, top: photoSlot.y });
 
       if (env.debugLogs || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
-        console.log(`[Compose Slot] Slot ${index} | bg=${slotBgId} | photoRaw=${slotRaw.slice(0, 30)} | sDims=${sWidth}x${sHeight} | slotDims=${photoSlot.width}x${photoSlot.height} | fitMode=${fit.finalMode} | extract=(${fit.sx},${fit.sy},${fit.sw},${fit.sh}) -> dest=(${photoSlot.x + fit.dx},${photoSlot.y + fit.dy},${fit.dw},${fit.dh})`);
+        console.log(`[Compose Slot] Slot ${index} | shape=${photoSlot.shape || 'rect'} | bg=${slotBgId} | photoRaw=${slotRaw.slice(0, 30)} | sDims=${sWidth}x${sHeight} | slotDims=${photoSlot.width}x${photoSlot.height} | fitMode=${fit.finalMode} | extract=(${fit.sx},${fit.sy},${fit.sw},${fit.sh}) -> dest=(${photoSlot.x + fit.dx},${photoSlot.y + fit.dy},${fit.dw},${fit.dh})`);
       }
     } catch (error) {
       warnings.push(`Failed to compose slot ${index}: ${error instanceof Error ? error.message : String(error)}`);

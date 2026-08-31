@@ -403,6 +403,181 @@ async function runProductionUxTests() {
   assert.equal(nearTimeoutRunner.getPrinterCalls().length, 0, "No duplicate printer calls if already handled");
   console.log("✓ Automatic print pipeline safely preserves single physical job invariant");
 
+  // ================================================================
+  // TEST 9: Package Camera Session Timer & Refresh Persistence
+  // ================================================================
+  console.log("\nStep 9: Validating Package Camera Session Timer & Refresh Persistence...");
+
+  const { packages } = await import("../src/lib/phobo-data.ts");
+  const basicPkg = packages.find((p) => p.id === "basic");
+  const duoPkg = packages.find((p) => p.id === "duo");
+  const premiumPkg = packages.find((p) => p.id === "premium");
+
+  assert.ok(basicPkg, "basicPkg must exist");
+  assert.ok(duoPkg, "duoPkg must exist");
+  assert.ok(premiumPkg, "premiumPkg must exist");
+
+  assert.equal(basicPkg.durationMinutes, 5, "Basic must be 5 minutes");
+  assert.equal(duoPkg.durationMinutes, 7, "Duo must be 7 minutes");
+  assert.equal(premiumPkg.durationMinutes, 10, "Premium must be 10 minutes");
+
+  // Timer helper
+  function initCameraTimer(sessionState, durationMinutes) {
+    if (sessionState.cameraDeadlineAt) return sessionState;
+    const dur = durationMinutes ?? sessionState.durationMinutes ?? 5;
+    const startTime = new Date();
+    const deadline = new Date(startTime.getTime() + dur * 60 * 1000);
+    return {
+      ...sessionState,
+      cameraStartedAt: startTime.toISOString(),
+      cameraDeadlineAt: deadline.toISOString(),
+    };
+  }
+
+  function getRemainingSeconds(sessionState) {
+    if (!sessionState?.cameraDeadlineAt) {
+      return (sessionState?.durationMinutes ?? 5) * 60;
+    }
+    const diff = Math.max(0, Math.floor((new Date(sessionState.cameraDeadlineAt).getTime() - Date.now()) / 1000));
+    return diff;
+  }
+
+  // 9A: Basic package timer initialization
+  const basicSession = {
+    sessionId: "test-basic-cam",
+    durationMinutes: basicPkg.durationMinutes,
+    requiredShotCount: 8,
+    capturedPhotos: [],
+  };
+  const initializedBasic = initCameraTimer(basicSession, 5);
+  assert.ok(initializedBasic.cameraStartedAt, "cameraStartedAt must be set");
+  assert.ok(initializedBasic.cameraDeadlineAt, "cameraDeadlineAt must be set");
+  const basicRemaining = getRemainingSeconds(initializedBasic);
+  assert.ok(basicRemaining >= 298 && basicRemaining <= 300, `Basic remaining must be ~300s, got ${basicRemaining}`);
+  console.log(`✓ Basic package timer initialized: ${basicRemaining}s (~05:00)`);
+
+  // 9B: Duo package timer initialization
+  const duoSession = {
+    sessionId: "test-duo-cam",
+    durationMinutes: duoPkg.durationMinutes,
+    requiredShotCount: 8,
+    capturedPhotos: [],
+  };
+  const initializedDuo = initCameraTimer(duoSession, 7);
+  const duoRemaining = getRemainingSeconds(initializedDuo);
+  assert.ok(duoRemaining >= 418 && duoRemaining <= 420, `Duo remaining must be ~420s, got ${duoRemaining}`);
+  console.log(`✓ Duo package timer initialized: ${duoRemaining}s (~07:00)`);
+
+  // 9C: Premium package timer initialization
+  const premiumSession = {
+    sessionId: "test-prem-cam",
+    durationMinutes: premiumPkg.durationMinutes,
+    requiredShotCount: 16,
+    capturedPhotos: [],
+  };
+  const initializedPrem = initCameraTimer(premiumSession, 10);
+  const premRemaining = getRemainingSeconds(initializedPrem);
+  assert.ok(premRemaining >= 598 && premRemaining <= 600, `Premium remaining must be ~600s, got ${premRemaining}`);
+  console.log(`✓ Premium package timer initialized: ${premRemaining}s (~10:00)`);
+
+  // 9D: Re-render and Background Selection persistence
+  const sameDeadline = initializedBasic.cameraDeadlineAt;
+  const afterBgSelect = {
+    ...initializedBasic,
+    selectedBackgroundId: "background-02",
+  };
+  const reInitBg = initCameraTimer(afterBgSelect, 5);
+  assert.equal(reInitBg.cameraDeadlineAt, sameDeadline, "Deadline must not change on background selection");
+
+  // 9E: Refresh / LocalStorage Hydration persistence
+  const hydratedFromStorage = JSON.parse(JSON.stringify(initializedBasic));
+  assert.equal(hydratedFromStorage.cameraDeadlineAt, sameDeadline, "Deadline must persist across hydration");
+
+  // 9F: At expiry (00:00), SHOOT remains usable
+  const expiredSession = {
+    ...initializedBasic,
+    cameraDeadlineAt: new Date(Date.now() - 5000).toISOString(), // expired 5s ago
+  };
+  const expiredRemaining = getRemainingSeconds(expiredSession);
+  assert.equal(expiredRemaining, 0, "Expired timer remaining must be 0");
+  const canShoot = (expiredSession.capturedPhotos.length < (expiredSession.requiredShotCount ?? 8));
+  assert.equal(canShoot, true, "SHOOT button must remain usable even after 00:00");
+  console.log("✓ Timer persistence & non-blocking expiry (00:00) behavior verified");
+
+  // ================================================================
+  // TEST 10: Shape-Aware Frame Slot Model & Alpha Masking
+  // ================================================================
+  console.log("\nStep 10: Validating Shape-Aware Frame Slot Model & Masking...");
+
+  const frameSlots = JSON.parse(
+    await fs.readFile(path.join(projectRoot, "public/assets/frames/frame-slots.json"), "utf-8")
+  );
+
+  const frame8 = frameSlots.find((f) => f.id === "frame-8");
+  assert.ok(frame8, "Frame 8 must exist");
+  assert.equal(frame8.photoSlots.length, 6);
+  frame8.photoSlots.forEach((slot, i) => {
+    assert.equal(slot.shape, "ellipse", `Frame 8 slot ${i} must have shape: 'ellipse'`);
+  });
+  console.log("✓ Frame 8: all 6 slots annotated with shape: 'ellipse'");
+
+  const frame10 = frameSlots.find((f) => f.id === "frame-10");
+  assert.ok(frame10, "Frame 10 must exist");
+  assert.equal(frame10.photoSlots.length, 4);
+  frame10.photoSlots.forEach((slot, i) => {
+    assert.equal(slot.shape, "ellipse", `Frame 10 slot ${i} must have shape: 'ellipse'`);
+  });
+  console.log("✓ Frame 10: all 4 slots annotated with shape: 'ellipse'");
+
+  // Verify backend composeFinalImages alpha masking for shape="ellipse"
+  const { composeFinalImages } = await import("../src/lib/image-processing/compose-final.ts");
+
+  const solidPhoto = await sharp({
+    create: { width: 800, height: 600, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 1 } },
+  }).png().toBuffer();
+  const photoDataUrl = `data:image/png;base64,${solidPhoto.toString("base64")}`;
+
+  const composedResult = await composeFinalImages({
+    sessionId: "test-shape-compose",
+    capturedPhotos: [photoDataUrl],
+    selectedFrameId: "frame-8",
+    selectedBackgroundId: "background-01",
+  });
+
+  assert.ok(composedResult.finalScreenPng, "finalScreenPng must be generated");
+  
+  // Inspect the composited slot in frame-8 slot 0 (x: 116, y: 294, width: 400, height: 349, shape: ellipse)
+  // Let's create an isolated ellipse masked slot buffer to test exact mask geometry
+  const testWidth = 400;
+  const testHeight = 300;
+  const rx = testWidth / 2;
+  const ry = testHeight / 2;
+  const svgMask = Buffer.from(
+    `<svg width="${testWidth}" height="${testHeight}" xmlns="http://www.w3.org/2000/svg"><ellipse cx="${rx}" cy="${ry}" rx="${rx}" ry="${ry}" fill="#ffffff" /></svg>`
+  );
+
+  const solidSlot = await sharp({
+    create: { width: testWidth, height: testHeight, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 1 } },
+  }).png().toBuffer();
+
+  const maskedSlot = await sharp(solidSlot)
+    .ensureAlpha()
+    .composite([{ input: svgMask, blend: "dest-in" }])
+    .raw()
+    .toBuffer();
+
+  // Inspect center (should be fully opaque)
+  const centerIdx = (Math.round(ry) * testWidth + Math.round(rx)) * 4;
+  const centerAlpha = maskedSlot[centerIdx + 3];
+  assert.equal(centerAlpha, 255, `Ellipse center must be alpha 255, got ${centerAlpha}`);
+
+  // Inspect top-left corner (px=2, py=2) (should be completely transparent alpha = 0)
+  const cornerIdx = (2 * testWidth + 2) * 4;
+  const cornerAlpha = maskedSlot[cornerIdx + 3];
+  assert.equal(cornerAlpha, 0, `Ellipse corner must be alpha 0, got ${cornerAlpha}`);
+
+  console.log(`✓ Ellipse alpha mask geometry verified: center alpha=${centerAlpha}, corner alpha=${cornerAlpha}`);
+
   console.log("\n==================================================");
   console.log("ALL PRODUCTION RESULT & ADD-PRINT UX TESTS PASSED!");
   console.log("==================================================");

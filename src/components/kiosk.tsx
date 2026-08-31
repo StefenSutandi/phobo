@@ -419,6 +419,9 @@ export function PreviewComposer({
         const isSelected = activeSlotIndex === index;
         const isDragOver = dragOverSlotIndex === index;
         const isFailed = Boolean(failedSlots[index]);
+        const isEllipse = photoSlot.shape === "ellipse" || photoSlot.shape === "circle";
+        const isRounded = photoSlot.shape === "rounded";
+        const slotBorderRadius = isEllipse ? "50%" : isRounded ? `${photoSlot.borderRadius || 16}px` : undefined;
 
         return (
           <div 
@@ -436,6 +439,7 @@ export function PreviewComposer({
               position:'absolute',
               transform:photoSlot.rotation?`rotate(${photoSlot.rotation}deg)`:undefined, 
               overflow: 'hidden',
+              borderRadius: slotBorderRadius,
               cursor: 'pointer',
               border: isDragOver 
                 ? '3px solid #ffd700' 
