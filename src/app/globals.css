@@ -977,10 +977,8 @@ button {
   max-height: 290px;
   aspect-ratio: 1200 / 1800;
   border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  background: #fff;
+  overflow: visible;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -991,6 +989,7 @@ button {
   height: 100%;
   object-fit: contain;
   display: block;
+  filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.6));
 }
 
 .result-qr-panel {

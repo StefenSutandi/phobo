@@ -15,7 +15,22 @@ function fresh(): KioskSession {
   } catch {
     // Insecure HTTP LAN fallback
   }
-  return { sessionId: `session-${id}`, paymentStatus: "idle", capturedPhotos: [], selectedPhotoIndices: [], stickers: [], printStatus: "idle", greenScreenTuning: tuning, createdAt: now(), updatedAt: now(), addPrintPaymentStatus: "unpaid" };
+  return {
+    sessionId: `session-${id}`,
+    paymentStatus: "idle",
+    capturedPhotos: [],
+    selectedPhotoIndices: [],
+    stickers: [],
+    additionalStickers: [],
+    printStatus: "idle",
+    printCommitted: false,
+    additionalPrintStatus: "idle",
+    additionalPrintCommitted: false,
+    greenScreenTuning: tuning,
+    createdAt: now(),
+    updatedAt: now(),
+    addPrintPaymentStatus: "unpaid",
+  };
 }
 function update(current: KioskSession | null, patch: Partial<KioskSession>) { return { ...(current ?? fresh()), ...patch, updatedAt: now() }; }
 type Store = {
@@ -27,8 +42,13 @@ type Store = {
   updateSticker: (id: string, sticker: Partial<StickerPlacement>) => void;
   removeSticker: (id: string) => void;
   clearStickers: () => void;
+  addAdditionalSticker: (sticker: Omit<StickerPlacement, "id">) => void;
+  updateAdditionalSticker: (id: string, sticker: Partial<StickerPlacement>) => void;
+  removeAdditionalSticker: (id: string) => void;
+  clearAdditionalStickers: () => void;
   setFinalImageUrl: (url: string) => void; setPrintImageUrl: (url: string) => void; setDriveUrl: (url: string) => void;
-  setPrintStatus: (s: PrintStatus) => void; setGreenScreenTuning: (t: GreenScreenTuning) => void;
+  setPrintStatus: (s: PrintStatus) => void; setPrintCommitted: (committed: boolean) => void;
+  setGreenScreenTuning: (t: GreenScreenTuning) => void;
   setPaymentData: (data: { paymentOrderId?: string; paymentSnapToken?: string; paymentRedirectUrl?: string; paymentAmount?: number; paymentMode?: "midtrans" | "operator" | "mock"; payableAmount?: number; uniqueCode?: number }) => void;
   selectAdditionalFrame: (id: string) => void;
   setAdditionalSelectedPhotoIndices: (indices: number[]) => void;
@@ -36,6 +56,8 @@ type Store = {
   setAddPrintPaymentStatus: (s: "unpaid" | "pending" | "paid" | "failed") => void;
   setAddPrintPaymentData: (data: { addPrintPaymentOrderId?: string; addPrintPaymentRedirectUrl?: string; addPrintPayableAmount?: number; addPrintUniqueCode?: number }) => void;
   setAdditionalPrintImageUrl: (url: string) => void;
+  setAdditionalPrintStatus: (s: "idle" | "composing" | "queued" | "printed" | "failed") => void;
+  setAdditionalPrintCommitted: (committed: boolean) => void;
 };
 const Context = createContext<Store | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -55,7 +77,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const photoSlotAssignments = parsed.photoSlotAssignments ?? (Array.isArray(parsed.selectedPhotoIndices) ? parsed.selectedPhotoIndices : undefined);
       const additionalPhotoSlotAssignments = parsed.additionalPhotoSlotAssignments ?? (Array.isArray(parsed.additionalSelectedPhotoIndices) ? parsed.additionalSelectedPhotoIndices : undefined);
       
-      setSession({ ...parsed, capturedPhotos: normalizedPhotos, selectedPhotoIndices: parsed.selectedPhotoIndices ?? [], photoSlotAssignments, additionalPhotoSlotAssignments });
+      setSession({
+        ...parsed,
+        capturedPhotos: normalizedPhotos,
+        selectedPhotoIndices: parsed.selectedPhotoIndices ?? [],
+        photoSlotAssignments,
+        additionalPhotoSlotAssignments,
+        stickers: Array.isArray(parsed.stickers) ? parsed.stickers : [],
+        additionalStickers: Array.isArray(parsed.additionalStickers) ? parsed.additionalStickers : [],
+      });
     } catch {
       localStorage.removeItem(KEY);
     }
@@ -102,25 +132,82 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const selectPhotos = useCallback((selectedPhotoIndices: number[]) => patch({ selectedPhotoIndices, finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined }), [patch]);
   const setPhotoSlotAssignments = useCallback((photoSlotAssignments: (number | null)[]) => patch({ photoSlotAssignments, selectedPhotoIndices: photoSlotAssignments.filter((x): x is number => x !== null && x !== undefined), finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined }), [patch]);
   const selectSticker = useCallback((selectedStickerId: string) => patch({ selectedStickerId, finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined }), [patch]);
-  const clearFinalResult = useCallback(() => patch({ finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined, printStatus: "idle" }), [patch]);
+  const clearFinalResult = useCallback(() => patch({ finalImageUrl: undefined, printImageUrl: undefined, driveUrl: undefined, printStatus: "idle", printCommitted: false, printAttemptedAt: undefined }), [patch]);
   const addSticker = useCallback((sticker: Omit<StickerPlacement, "id">) => setSession(s => { const active = s ?? fresh(); return update(active, { stickers: [...active.stickers, { ...sticker, id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2)}` }] }); }), []);
   const updateSticker = useCallback((id: string, stickerPatch: Partial<StickerPlacement>) => setSession(s => { const active = s ?? fresh(); return update(active, { stickers: active.stickers.map(st => st.id === id ? { ...st, ...stickerPatch } : st) }); }), []);
   const removeSticker = useCallback((id: string) => setSession(s => { const active = s ?? fresh(); return update(active, { stickers: active.stickers.filter(st => st.id !== id) }); }), []);
   const clearStickers = useCallback(() => patch({ stickers: [] }), [patch]);
+  
+  const addAdditionalSticker = useCallback((sticker: Omit<StickerPlacement, "id">) => setSession(s => { const active = s ?? fresh(); const existing = active.additionalStickers || []; return update(active, { additionalStickers: [...existing, { ...sticker, id: `asticker-${Date.now()}-${Math.random().toString(36).slice(2)}` }] }); }), []);
+  const updateAdditionalSticker = useCallback((id: string, stickerPatch: Partial<StickerPlacement>) => setSession(s => { const active = s ?? fresh(); const existing = active.additionalStickers || []; return update(active, { additionalStickers: existing.map(st => st.id === id ? { ...st, ...stickerPatch } : st) }); }), []);
+  const removeAdditionalSticker = useCallback((id: string) => setSession(s => { const active = s ?? fresh(); const existing = active.additionalStickers || []; return update(active, { additionalStickers: existing.filter(st => st.id !== id) }); }), []);
+  const clearAdditionalStickers = useCallback(() => patch({ additionalStickers: [] }), [patch]);
+
   const setFinalImageUrl = useCallback((finalImageUrl: string) => patch({ finalImageUrl }), [patch]);
   const setPrintImageUrl = useCallback((printImageUrl: string) => patch({ printImageUrl }), [patch]);
   const setDriveUrl = useCallback((driveUrl: string) => patch({ driveUrl }), [patch]);
   const setPrintStatus = useCallback((printStatus: PrintStatus) => patch({ printStatus }), [patch]);
+  const setPrintCommitted = useCallback((printCommitted: boolean) => patch({ printCommitted, printAttemptedAt: printCommitted ? now() : undefined }), [patch]);
   const setGreenScreenTuning = useCallback((greenScreenTuning: GreenScreenTuning) => patch({ greenScreenTuning }), [patch]);
   
-  const selectAdditionalFrame = useCallback((additionalFrameId: string) => patch({ additionalFrameId, additionalPrintImageUrl: undefined, addPrintPaymentOrderId: undefined, addPrintPaymentRedirectUrl: undefined, additionalSelectedPhotoIndices: undefined, additionalPhotoSlotAssignments: undefined }), [patch]);
+  const selectAdditionalFrame = useCallback((additionalFrameId: string) => patch({
+    additionalFrameId,
+    additionalPrintImageUrl: undefined,
+    addPrintPaymentOrderId: undefined,
+    addPrintPaymentRedirectUrl: undefined,
+    additionalSelectedPhotoIndices: undefined,
+    additionalPhotoSlotAssignments: undefined,
+    additionalStickers: [],
+    additionalPrintStatus: "idle",
+    additionalPrintCommitted: false,
+  }), [patch]);
   const setAdditionalSelectedPhotoIndices = useCallback((additionalSelectedPhotoIndices: number[]) => patch({ additionalSelectedPhotoIndices }), [patch]);
   const setAdditionalPhotoSlotAssignments = useCallback((additionalPhotoSlotAssignments: (number | null)[]) => patch({ additionalPhotoSlotAssignments, additionalSelectedPhotoIndices: additionalPhotoSlotAssignments.filter((x): x is number => x !== null && x !== undefined) }), [patch]);
   const setAddPrintPaymentStatus = useCallback((addPrintPaymentStatus: "unpaid" | "pending" | "paid" | "failed") => patch({ addPrintPaymentStatus }), [patch]);
   const setAddPrintPaymentData = useCallback((data: { addPrintPaymentOrderId?: string; addPrintPaymentRedirectUrl?: string }) => patch(data), [patch]);
   const setAdditionalPrintImageUrl = useCallback((additionalPrintImageUrl: string) => patch({ additionalPrintImageUrl }), [patch]);
+  const setAdditionalPrintStatus = useCallback((additionalPrintStatus: "idle" | "composing" | "queued" | "printed" | "failed") => patch({ additionalPrintStatus }), [patch]);
+  const setAdditionalPrintCommitted = useCallback((additionalPrintCommitted: boolean) => patch({ additionalPrintCommitted }), [patch]);
 
-  const value = useMemo(() => ({ session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, setPhotoSlotAssignments, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, setPaymentData, selectAdditionalFrame, setAdditionalSelectedPhotoIndices, setAdditionalPhotoSlotAssignments, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, setPaymentData, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, setPhotoSlotAssignments, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setGreenScreenTuning, selectAdditionalFrame, setAdditionalSelectedPhotoIndices, setAdditionalPhotoSlotAssignments, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl]);
+  const value = useMemo(() => ({
+    session,
+    hasHydrated,
+    createNewSession,
+    resetSession,
+    selectPackage,
+    setPaymentStatus,
+    selectFrame,
+    selectBackground,
+    addCapturedPhoto,
+    clearCapturedPhotos,
+    selectPhotos,
+    setPhotoSlotAssignments,
+    selectSticker,
+    clearFinalResult,
+    addSticker,
+    updateSticker,
+    removeSticker,
+    clearStickers,
+    addAdditionalSticker,
+    updateAdditionalSticker,
+    removeAdditionalSticker,
+    clearAdditionalStickers,
+    setFinalImageUrl,
+    setPrintImageUrl,
+    setDriveUrl,
+    setPrintStatus,
+    setPrintCommitted,
+    setGreenScreenTuning,
+    setPaymentData,
+    selectAdditionalFrame,
+    setAdditionalSelectedPhotoIndices,
+    setAdditionalPhotoSlotAssignments,
+    setAddPrintPaymentStatus,
+    setAddPrintPaymentData,
+    setAdditionalPrintImageUrl,
+    setAdditionalPrintStatus,
+    setAdditionalPrintCommitted,
+  }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, setPaymentData, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, setPhotoSlotAssignments, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, addAdditionalSticker, updateAdditionalSticker, removeAdditionalSticker, clearAdditionalStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setPrintCommitted, setGreenScreenTuning, selectAdditionalFrame, setAdditionalSelectedPhotoIndices, setAdditionalPhotoSlotAssignments, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl, setAdditionalPrintStatus, setAdditionalPrintCommitted]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useSessionStore() { const value = useContext(Context); if (!value) throw new Error("useSessionStore must be used within SessionProvider"); return value; }

@@ -8,7 +8,15 @@ import { getPhotoRawUrl } from "@/lib/session/session-types";
 
 export default function AddPrintPayment() {
   const router = useRouter(); 
-  const { session, hasHydrated, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl } = useSessionStore(); 
+  const {
+    session,
+    hasHydrated,
+    setAddPrintPaymentStatus,
+    setAddPrintPaymentData,
+    setAdditionalPrintImageUrl,
+    setAdditionalPrintStatus,
+    setAdditionalPrintCommitted,
+  } = useSessionStore(); 
   const [paymentActive, setPaymentActive] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [qrisConfigured, setQrisConfigured] = useState(true);
@@ -105,13 +113,23 @@ export default function AddPrintPayment() {
     };
   }, [paymentActive, session?.addPrintPaymentOrderId, session?.addPrintPaymentStatus, setAddPrintPaymentStatus]);
 
-  // Once paid, trigger compose
+  // Once paid, automatically compose and print once, then transition to closing
   useEffect(() => {
-    if (session?.addPrintPaymentStatus === "paid" && !session?.additionalPrintImageUrl && !busy && msg !== "COMPOSING ADDITIONAL PRINT...") {
+    if (
+      session?.addPrintPaymentStatus === "paid" &&
+      !session?.additionalPrintCommitted &&
+      session?.additionalPrintStatus !== "composing" &&
+      session?.additionalPrintStatus !== "queued" &&
+      session?.additionalPrintStatus !== "printed" &&
+      session?.additionalPrintStatus !== "failed" &&
+      !busy
+    ) {
       setBusy(true);
-      setMsg("COMPOSING ADDITIONAL PRINT...");
-      
-      const composePrint = async () => {
+      setAdditionalPrintCommitted(true);
+      setAdditionalPrintStatus("composing");
+      setMsg("PEMBAYARAN DITERIMA — MEMBUAT FILE CETAK...");
+
+      const executeAutoAddPrint = async () => {
         try {
           const slotAssignments = Array.isArray(session.additionalPhotoSlotAssignments)
             ? session.additionalPhotoSlotAssignments.map((photoIdx, slotIdx) => {
@@ -119,14 +137,16 @@ export default function AddPrintPayment() {
                 return {
                   slotIndex: slotIdx,
                   photoRaw: getPhotoRawUrl(photoObj),
-                  backgroundId: (photoObj && typeof photoObj === "object" && photoObj.backgroundId)
-                    ? photoObj.backgroundId
-                    : (session.selectedBackgroundId || "background-01"),
+                  backgroundId:
+                    photoObj && typeof photoObj === "object" && photoObj.backgroundId
+                      ? photoObj.backgroundId
+                      : session.selectedBackgroundId || "background-01",
                 };
               })
             : undefined;
 
-          const r = await fetch("/api/results/compose-additional", {
+          // 1. Compose additional asset
+          const composeRes = await fetch("/api/results/compose-additional", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -135,47 +155,67 @@ export default function AddPrintPayment() {
               additionalFrameId: session.additionalFrameId,
               selectedBackgroundId: session.selectedBackgroundId,
               slotAssignments,
-              stickers: session.stickers,
+              stickers: session.additionalStickers || [],
               options: session.greenScreenTuning,
             }),
           });
-          const d = await r.json();
-          if (!r.ok || !d.ok || !d.printImageUrl) throw new Error(d.error || "Failed to compose additional print");
-          setAdditionalPrintImageUrl(d.printImageUrl);
-          setMsg("ADDITIONAL PRINT READY!");
+          const composeData = await composeRes.json();
+          if (!composeRes.ok || !composeData.ok || !composeData.printImageUrl) {
+            throw new Error(composeData.error || "Gagal membuat gambar cetak tambahan");
+          }
+
+          setAdditionalPrintImageUrl(composeData.printImageUrl);
+          setAdditionalPrintStatus("queued");
+          setMsg("MENGIRIM KE PRINTER...");
+
+          // 2. Queue exactly one physical print job
+          const printRes = await fetch("/api/printer/print", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: session.sessionId,
+              printUrl: composeData.printImageUrl,
+            }),
+          });
+          const printData = await printRes.json();
+          if (!printRes.ok || !printData.ok) {
+            throw new Error(printData.error || printData.message || "Gagal mencetak foto tambahan");
+          }
+
+          setAdditionalPrintStatus("printed");
+          setMsg("PRINT ACCEPTED! SELESAI...");
+
+          // 3. Smooth transition to closing
+          setTimeout(() => {
+            router.replace("/closing");
+          }, 1500);
         } catch (e) {
-          setMsg(e instanceof Error ? e.message : "COMPOSE FAILED");
+          setAdditionalPrintStatus("failed");
+          setMsg(e instanceof Error ? e.message : "PROSES CETAK GAGAL");
         } finally {
           setBusy(false);
         }
       };
 
-      composePrint();
+      executeAutoAddPrint();
     }
-  }, [session?.addPrintPaymentStatus, session?.additionalPrintImageUrl, session?.sessionId, session?.capturedPhotos, session?.additionalSelectedPhotoIndices, session?.additionalFrameId, session?.selectedBackgroundId, session?.stickers, session?.greenScreenTuning, busy, msg, setAdditionalPrintImageUrl]);
-
-  const handlePrint = async () => {
-    if (!session?.additionalPrintImageUrl || busy) return;
-    setBusy(true);
-    setMsg("SENDING TO PRINTER...");
-    try {
-      const r = await fetch("/api/printer/print", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: session.sessionId,
-          printUrl: session.additionalPrintImageUrl,
-        }),
-      });
-      const d = await r.json();
-      if (!r.ok || !d.ok) throw new Error(d.error || d.message || "PRINT FAILED");
-      setMsg("PRINT SUCCESS!");
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "PRINT FAILED. TRY AGAIN.");
-    } finally {
-      setBusy(false);
-    }
-  };
+  }, [
+    session?.addPrintPaymentStatus,
+    session?.additionalPrintCommitted,
+    session?.additionalPrintStatus,
+    session?.sessionId,
+    session?.capturedPhotos,
+    session?.additionalPhotoSlotAssignments,
+    session?.additionalFrameId,
+    session?.selectedBackgroundId,
+    session?.additionalStickers,
+    session?.greenScreenTuning,
+    busy,
+    setAdditionalPrintCommitted,
+    setAdditionalPrintStatus,
+    setAdditionalPrintImageUrl,
+    router,
+  ]);
 
   const basePrice = 20000;
 
@@ -251,23 +291,13 @@ export default function AddPrintPayment() {
               : "Payment gateway is disabled. Enable Midtrans or debug fallback to continue."}
           </div>
         )}
-        {session?.addPrintPaymentStatus === "paid" && !session?.additionalPrintImageUrl && (
-          <div style={{marginTop: 10, fontSize: "1.2rem"}}>{busy ? "COMPOSING..." : "READY TO COMPOSE..."}</div>
+        {session?.addPrintPaymentStatus === "paid" && (
+          <div style={{marginTop: 10, fontSize: "1.2rem", color: "#2ecc71", fontWeight: "bold"}}>
+            {session?.additionalPrintStatus === "printed" ? "SELESAI!" : "MEMPROSES..."}
+          </div>
         )}
-        {msg && <div style={{marginTop: 10, fontSize: "1.2rem", whiteSpace: "pre-wrap"}}>{msg}</div>}
+        {msg && <div style={{marginTop: 10, fontSize: "1.2rem", whiteSpace: "pre-wrap", color: msg.includes("GAGAL") || msg.includes("FAILED") ? "#ff6b6b" : "#2ecc71"}}>{msg}</div>}
       </div>
-
-      {session?.additionalPrintImageUrl && (
-        <div style={{ position: "absolute", bottom: "15%", left: "50%", transform: "translateX(-50%)", display: "flex", gap: "20px", justifyContent: "center", alignItems: "center", zIndex: 10 }}>
-          <button 
-            onClick={handlePrint}
-            disabled={busy || msg === "PRINT SUCCESS!"}
-            style={{ padding: "15px 40px", fontSize: "1.5rem", borderRadius: "30px", background: "#2ecc71", color: "white", border: "none", cursor: busy ? "not-allowed" : "pointer" }}
-          >
-            {busy ? "..." : msg === "PRINT SUCCESS!" ? "PRINTED" : "PRINT ADDITIONAL"}
-          </button>
-        </div>
-      )}
     </KioskStage>
   );
 }

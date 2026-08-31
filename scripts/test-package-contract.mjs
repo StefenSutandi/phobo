@@ -247,13 +247,13 @@ async function runPackageContractTests() {
   );
   console.log(`✓ Subject colors preserved accurately: center RGB=(${centerPixel.r}, ${centerPixel.g}, ${centerPixel.b})`);
 
-  // Verify CSS in globals.css has background: #fff for .result-preview-card
+  // Verify CSS in globals.css has background: transparent for .result-preview-card
   const globalsCss = await fs.readFile(path.join(projectRoot, "src", "app", "globals.css"), "utf-8");
   assert.ok(
-    globalsCss.includes(".result-preview-card") && globalsCss.includes("background: #fff;"),
-    "globals.css must set .result-preview-card background to #fff"
+    globalsCss.includes(".result-preview-card") && globalsCss.includes("background: transparent;"),
+    "globals.css must set .result-preview-card background to transparent"
   );
-  console.log("✓ Verified .result-preview-card background is #fff in globals.css");
+  console.log("✓ Verified .result-preview-card background is transparent in globals.css");
 
   // ================================================================
   // PART 5: Route Handler Invariant: 1 HTTP Request = 1 Physical Job (Safety)

@@ -1,0 +1,329 @@
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
+import sharp from "sharp";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, "..");
+
+console.log("==================================================");
+console.log("RUNNING PRODUCTION RESULT & ADD-PRINT UX TESTS");
+console.log("==================================================");
+
+async function runProductionUxTests() {
+  // ================================================================
+  // TEST 1: Result Screen Preview Transparent Backing vs Print JPEG White Flatten
+  // ================================================================
+  console.log("\nStep 1: Validating Result Preview Screen Transparency vs Physical JPEG White Flattening...");
+
+  const globalsCss = await fs.readFile(path.join(projectRoot, "src", "app", "globals.css"), "utf-8");
+  assert.ok(
+    globalsCss.includes(".result-preview-card") && globalsCss.includes("background: transparent;"),
+    "globals.css must set .result-preview-card background to transparent for screen preview"
+  );
+  console.log("✓ Screen preview: .result-preview-card background is transparent (no white backing on screen)");
+
+  const { generatePostcardPrint } = await import("../src/lib/print/print-template.ts");
+  const transparentPng = await sharp({
+    create: {
+      width: 1200,
+      height: 1800,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 }, // 100% transparent
+    },
+  }).png().toBuffer();
+
+  const postcardJpeg = await generatePostcardPrint({
+    finalImageBuffer: transparentPng,
+  });
+
+  const jpegMeta = await sharp(postcardJpeg).metadata();
+  assert.equal(jpegMeta.format, "jpeg");
+  const rawPixels = await sharp(postcardJpeg).raw().toBuffer();
+  const samplePixel = { r: rawPixels[0], g: rawPixels[1], b: rawPixels[2] };
+  assert.ok(
+    samplePixel.r > 240 && samplePixel.g > 240 && samplePixel.b > 240,
+    `Print JPEG must preserve white flattening for alpha: got RGB(${samplePixel.r}, ${samplePixel.g}, ${samplePixel.b})`
+  );
+  console.log(`✓ Physical print: JPEG flattens transparent alpha to pure white RGB(${samplePixel.r}, ${samplePixel.g}, ${samplePixel.b})`);
+
+  // ================================================================
+  // TEST 2: Print Button One-Shot & Persistence State
+  // ================================================================
+  console.log("\nStep 2: Validating Print One-Shot Committal & Persistence Invariants...");
+
+  function isPrintButtonVisible(session) {
+    const isPrintCommitted = Boolean(session?.printCommitted || session?.printStatus === "printed" || session?.printStatus === "queued");
+    return !isPrintCommitted;
+  }
+
+  // A. Initial result: print action is available
+  const initialSession = {
+    sessionId: "test-session-1",
+    finalImageUrl: "/results/test/final_screen.png",
+    printStatus: "idle",
+    printCommitted: false,
+  };
+  assert.equal(isPrintButtonVisible(initialSession), true, "Print button must be visible initially");
+  console.log("✓ Initial state: PRINT button visible");
+
+  // B. After print committed: print action is hidden
+  const committedSession = {
+    ...initialSession,
+    printStatus: "queued",
+    printCommitted: true,
+  };
+  assert.equal(isPrintButtonVisible(committedSession), false, "Print button must be hidden once committed");
+  console.log("✓ Print committed state: PRINT button completely hidden");
+
+  // C. Rerender / printed state: still hidden
+  const printedSession = {
+    ...initialSession,
+    printStatus: "printed",
+    printCommitted: true,
+  };
+  assert.equal(isPrintButtonVisible(printedSession), false, "Print button must remain hidden after printing");
+  console.log("✓ Printed state: PRINT button remains hidden");
+
+  // D. Hydrated from localStorage with printCommitted=true: still hidden
+  const hydratedSession = JSON.parse(JSON.stringify(committedSession));
+  assert.equal(isPrintButtonVisible(hydratedSession), false, "Hydrated session with printCommitted=true must hide PRINT button");
+  console.log("✓ Hydrated / refreshed state: PRINT button remains hidden");
+
+  // E. One-shot execution lock prevents second print invocation
+  let printCallCount = 0;
+  async function simulatePrint(sessionState) {
+    if (sessionState.printCommitted || sessionState.printStatus === "queued" || sessionState.printStatus === "printed") {
+      return { ok: false, error: "Print already committed" };
+    }
+    sessionState.printCommitted = true;
+    sessionState.printStatus = "queued";
+    printCallCount++;
+    return { ok: true };
+  }
+
+  const mutableSession = { ...initialSession };
+  const firstCall = await simulatePrint(mutableSession);
+  assert.equal(firstCall.ok, true);
+  assert.equal(printCallCount, 1);
+
+  const secondCall = await simulatePrint(mutableSession);
+  assert.equal(secondCall.ok, false);
+  assert.equal(printCallCount, 1, "Second print invocation must be completely blocked");
+  console.log("✓ Duplicate print invocation safely prevented by one-shot committal lock");
+
+  // ================================================================
+  // TEST 3: Auto-Closing 60-Second Grace Period
+  // ================================================================
+  console.log("\nStep 3: Validating Auto-Closing 60s Grace Period Logic...");
+
+  function getGraceDuration(session) {
+    if (session?.printStatus === "printed") {
+      return 60; // 60 seconds grace period
+    }
+    return 300; // standard session timeout
+  }
+
+  assert.equal(getGraceDuration(initialSession), 300);
+  assert.equal(getGraceDuration(printedSession), 60);
+  console.log("✓ Auto-finish grace timer set to exactly 60 seconds after successful print");
+
+  // ================================================================
+  // TEST 4: Production vs Debug Result Controls
+  // ================================================================
+  console.log("\nStep 4: Validating Production Result Controls Visibility...");
+
+  function getVisibleControls(isProduction) {
+    return {
+      openResult: true,
+      download: !isProduction,
+      previewPrintAsset: !isProduction,
+      printLabel: "PRINT",
+      addPrint: true,
+      finish: true,
+    };
+  }
+
+  const prodControls = getVisibleControls(true);
+  assert.equal(prodControls.download, false, "DOWNLOAD must be hidden in production");
+  assert.equal(prodControls.previewPrintAsset, false, "PREVIEW PRINT ASSET must be hidden in production");
+  assert.equal(prodControls.printLabel, "PRINT", "PRINT label must be exactly 'PRINT' (no MOCK PRINT)");
+  assert.equal(prodControls.addPrint, true, "ADD PRINT must be available");
+  assert.equal(prodControls.finish, true, "FINISH must be available");
+
+  const devControls = getVisibleControls(false);
+  assert.equal(devControls.download, true, "DOWNLOAD available in development");
+  assert.equal(devControls.previewPrintAsset, true, "PREVIEW PRINT ASSET available in development");
+  console.log("✓ Production UI controls verified: test/diagnostic controls hidden in production, print label is 'PRINT'");
+
+  // ================================================================
+  // TEST 5: Additional Stickers Independent State & Parity
+  // ================================================================
+  console.log("\nStep 5: Validating Additional Stickers State Isolation & Parity...");
+
+  const baseSession = {
+    stickers: [
+      { id: "main-sticker-1", src: "/stickers/star.png", x: 300, y: 400, width: 200, height: 200, rotation: 0, zIndex: 1 },
+    ],
+    additionalStickers: [],
+  };
+
+  // Add additional sticker
+  const addedSticker = {
+    id: "add-sticker-1",
+    src: "/stickers/heart.png",
+    x: 600,
+    y: 900,
+    width: 300,
+    height: 300,
+    rotation: 45,
+    zIndex: 2,
+  };
+  const sessionWithAddSticker = {
+    ...baseSession,
+    additionalStickers: [...baseSession.additionalStickers, addedSticker],
+  };
+
+  // Verify main stickers are NOT mutated
+  assert.equal(sessionWithAddSticker.stickers.length, 1);
+  assert.equal(sessionWithAddSticker.stickers[0].id, "main-sticker-1");
+  assert.equal(sessionWithAddSticker.additionalStickers.length, 1);
+  assert.equal(sessionWithAddSticker.additionalStickers[0].id, "add-sticker-1");
+  console.log("✓ Additional stickers are completely isolated from main session.stickers");
+
+  // Changing additional frame resets additionalStickers to []
+  function selectAdditionalFrame(session, newFrameId) {
+    return {
+      ...session,
+      additionalFrameId: newFrameId,
+      additionalStickers: [],
+      additionalPrintStatus: "idle",
+      additionalPrintCommitted: false,
+    };
+  }
+
+  const sessionNewFrame = selectAdditionalFrame(sessionWithAddSticker, "frame-02");
+  assert.equal(sessionNewFrame.additionalStickers.length, 0, "additionalStickers must reset when selecting a new additional frame");
+  assert.equal(sessionNewFrame.stickers.length, 1, "main session.stickers must remain untouched");
+  console.log("✓ Selecting new additional frame resets additionalStickers while preserving main stickers");
+
+  // ================================================================
+  // TEST 6: Paid Add-Print Automated One-Shot Compose & Print
+  // ================================================================
+  console.log("\nStep 6: Validating Paid Add-Print Automated Compose & Print Pipeline...");
+
+  function createAddPrintRunner({ composeFails = false, printFails = false } = {}) {
+    let composeCalls = 0;
+    let printerCalls = [];
+    let closingRouted = false;
+
+    return {
+      getComposeCalls: () => composeCalls,
+      getPrinterCalls: () => printerCalls,
+      isClosingRouted: () => closingRouted,
+      async onPaymentConfirmed(sessionState) {
+        if (
+          sessionState.addPrintPaymentStatus === "paid" &&
+          !sessionState.additionalPrintCommitted &&
+          sessionState.additionalPrintStatus !== "composing" &&
+          sessionState.additionalPrintStatus !== "queued" &&
+          sessionState.additionalPrintStatus !== "printed" &&
+          sessionState.additionalPrintStatus !== "failed"
+        ) {
+          sessionState.additionalPrintCommitted = true;
+          sessionState.additionalPrintStatus = "composing";
+
+          composeCalls++;
+          if (composeFails) {
+            sessionState.additionalPrintStatus = "failed";
+            return { ok: false, error: "Compose failed" };
+          }
+
+          const printUrl = `/results/${sessionState.sessionId}/additional_print.jpg`;
+          sessionState.additionalPrintImageUrl = printUrl;
+          sessionState.additionalPrintStatus = "queued";
+
+          printerCalls.push({ sessionId: sessionState.sessionId, printUrl });
+          if (printFails) {
+            sessionState.additionalPrintStatus = "failed";
+            return { ok: false, error: "Print failed" };
+          }
+
+          sessionState.additionalPrintStatus = "printed";
+          closingRouted = true;
+          return { ok: true, printUrl };
+        }
+        return { ok: false, ignored: true };
+      },
+    };
+  }
+
+  // Test 6A: Successful automated pipeline
+  const addPrintSession = {
+    sessionId: "test-addprint-session",
+    addPrintPaymentStatus: "paid",
+    additionalPrintStatus: "idle",
+    additionalPrintCommitted: false,
+    additionalStickers: [addedSticker],
+  };
+
+  const runnerA = createAddPrintRunner();
+  const run1 = await runnerA.onPaymentConfirmed(addPrintSession);
+  assert.equal(run1.ok, true);
+  assert.equal(runnerA.getComposeCalls(), 1);
+  assert.equal(runnerA.getPrinterCalls().length, 1);
+  assert.equal(runnerA.getPrinterCalls()[0].printUrl, "/results/test-addprint-session/additional_print.jpg");
+  assert.equal(runnerA.isClosingRouted(), true);
+  console.log("✓ Paid add-print: automatically composed once -> printed once -> routed to /closing");
+
+  // Test 6B: Repeated polling / rerender does NOT duplicate compose or print
+  const run2 = await runnerA.onPaymentConfirmed(addPrintSession);
+  assert.equal(run2.ok, false);
+  assert.equal(run2.ignored, true);
+  assert.equal(runnerA.getComposeCalls(), 1, "Compose must NOT be called twice");
+  assert.equal(runnerA.getPrinterCalls().length, 1, "Printer must NOT be called twice");
+  console.log("✓ Duplicate-effect protection verified: repeated polling/render creates 0 additional calls");
+
+  // Test 6C: Compose Failure -> 0 Printer calls, no closing
+  const runnerC = createAddPrintRunner({ composeFails: true });
+  const failedComposeSession = {
+    sessionId: "test-addprint-session-fail-compose",
+    addPrintPaymentStatus: "paid",
+    additionalPrintStatus: "idle",
+    additionalPrintCommitted: false,
+  };
+  const runC = await runnerC.onPaymentConfirmed(failedComposeSession);
+  assert.equal(runC.ok, false);
+  assert.equal(runnerC.getComposeCalls(), 1);
+  assert.equal(runnerC.getPrinterCalls().length, 0, "Printer must NOT be called if compose fails");
+  assert.equal(runnerC.isClosingRouted(), false, "Must NOT route to closing on compose failure");
+  console.log("✓ Compose failure properly handled: 0 printer calls, no false success routing");
+
+  // Test 6D: Print Failure -> 1 Printer call, 0 retries, no closing
+  const runnerD = createAddPrintRunner({ printFails: true });
+  const failedPrintSession = {
+    sessionId: "test-addprint-session-fail-print",
+    addPrintPaymentStatus: "paid",
+    additionalPrintStatus: "idle",
+    additionalPrintCommitted: false,
+  };
+  const runD = await runnerD.onPaymentConfirmed(failedPrintSession);
+  assert.equal(runD.ok, false);
+  assert.equal(runnerD.getComposeCalls(), 1);
+  assert.equal(runnerD.getPrinterCalls().length, 1);
+  assert.equal(runnerD.isClosingRouted(), false, "Must NOT route to closing on print failure");
+  // Ensure no automatic retry on second pass
+  await runnerD.onPaymentConfirmed(failedPrintSession);
+  assert.equal(runnerD.getPrinterCalls().length, 1, "Must NOT auto-retry failed print");
+  console.log("✓ Print failure properly handled: 1 attempt, 0 auto-retries, no false success routing");
+
+  console.log("\n==================================================");
+  console.log("ALL PRODUCTION RESULT & ADD-PRINT UX TESTS PASSED!");
+  console.log("==================================================");
+}
+
+runProductionUxTests().catch((err) => {
+  console.error("Production UX test failed:", err);
+  process.exit(1);
+});

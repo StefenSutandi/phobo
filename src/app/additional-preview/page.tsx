@@ -2,12 +2,13 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { KioskButton, KioskStage, PhotoResultStrip, PreviewComposer } from "@/components/kiosk";
+import { KioskButton, KioskStage, PhotoResultStrip, PreviewComposer, StickerPicker } from "@/components/kiosk";
 import { getFrameById, getBackgroundById } from "@/lib/phobo-data";
 import { assignPhotoToSlot } from "@/lib/preview/slot-assignment";
 import { classifyPointerGesture } from "@/lib/preview/gesture-arbitration";
 import { useSessionStore } from "@/lib/session/session-store";
 import { getPhotoDisplayUrl } from "@/lib/session/session-types";
+import { getStickers } from "../preview/actions";
 
 export default function AdditionalPreview() {
   const router = useRouter();
@@ -16,7 +17,12 @@ export default function AdditionalPreview() {
     hasHydrated,
     setAdditionalPhotoSlotAssignments,
     setAddPrintPaymentStatus,
+    addAdditionalSticker,
+    updateAdditionalSticker,
+    removeAdditionalSticker,
   } = useSessionStore();
+
+  const [stickersList, setStickersList] = useState<string[]>([]);
 
   // Selection / Interaction states for Tap Fallback
   const [selectedPhotoIdx, setSelectedPhotoIdx] = useState<number | null>(null);
@@ -26,6 +32,10 @@ export default function AdditionalPreview() {
   const [draggingPhotoIdx, setDraggingPhotoIdx] = useState<number | null>(null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const [dragOverSlotIdx, setDragOverSlotIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    getStickers().then(setStickersList);
+  }, []);
 
   const frameId = session?.additionalFrameId;
   const frame = frameId ? getFrameById(frameId) : null;
@@ -235,6 +245,24 @@ export default function AdditionalPreview() {
         onSlotClick={handleSlotClick}
         activeSlotIndex={selectedSlotIdx}
         dragOverSlotIndex={dragOverSlotIdx}
+        stickers={session?.additionalStickers || []}
+        onUpdateSticker={updateAdditionalSticker}
+        onRemoveSticker={removeAdditionalSticker}
+      />
+
+      <StickerPicker
+        stickers={stickersList}
+        onAddSticker={(src) =>
+          addAdditionalSticker({
+            src,
+            x: 600,
+            y: 900,
+            width: 300,
+            height: 300,
+            rotation: 0,
+            zIndex: (session?.additionalStickers?.length || 0) + 1,
+          })
+        }
       />
 
       <PhotoResultStrip

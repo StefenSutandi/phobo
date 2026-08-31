@@ -9,12 +9,15 @@ import { useSessionStore } from "@/lib/session/session-store";
 
 export default function Result() {
   const router = useRouter();
-  const { session, setPrintStatus, setPrintImageUrl } = useSessionStore();
+  const { session, setPrintStatus, setPrintCommitted, setPrintImageUrl } = useSessionStore();
   const [url, setUrl] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [showPrintAsset, setShowPrintAsset] = useState(false);
+
+  const isProduction = process.env.NODE_ENV === "production";
+  const isPrintCommitted = Boolean(session?.printCommitted || session?.printStatus === "printed" || session?.printStatus === "queued");
 
   useEffect(() => {
     if (session?.driveUrl) {
@@ -28,7 +31,10 @@ export default function Result() {
 
   async function print() {
     if (!session?.sessionId || !session?.finalImageUrl) return;
+    if (isPrintCommitted || busy) return;
 
+    // Immediately commit one-shot print lock in persisted session state
+    setPrintCommitted(true);
     setPrintStatus("queued");
     setBusy(true);
     setMsg("MENYIAPKAN FILE CETAK...");
@@ -89,6 +95,7 @@ export default function Result() {
 
   const finalImageUrl = session?.finalImageUrl;
   const printImageUrl = session?.printImageUrl;
+  const isPrinted = session?.printStatus === "printed";
 
   return (
     <KioskStage>
@@ -142,8 +149,8 @@ export default function Result() {
             </div>
           )}
 
-          {/* Operator Diagnostic: Expandable Print Asset Preview (Task 7) */}
-          {printImageUrl && (
+          {/* Operator Diagnostic: Expandable Print Asset Preview (Debug Only) */}
+          {!isProduction && printImageUrl && (
             <div style={{ marginTop: "8px", width: "100%", maxWidth: "360px" }}>
               <button
                 type="button"
@@ -205,14 +212,25 @@ export default function Result() {
             )}
           </div>
 
-          <p className="result-qr-timer">
-            <CountdownTimer
-              initialSeconds={300}
-              onComplete={() => {
-                router.push("/closing");
-              }}
-            />
-          </p>
+          <div className="result-qr-timer">
+            {isPrinted ? (
+              <CountdownTimer
+                key="grace-timer"
+                initialSeconds={60}
+                onComplete={() => {
+                  router.replace("/closing");
+                }}
+              />
+            ) : (
+              <CountdownTimer
+                key="session-timer"
+                initialSeconds={300}
+                onComplete={() => {
+                  router.replace("/closing");
+                }}
+              />
+            )}
+          </div>
 
           {msg && (
             <p
@@ -234,21 +252,25 @@ export default function Result() {
             <a href={finalImageUrl} target="_blank" rel="noreferrer">
               OPEN RESULT
             </a>
-            <a href={finalImageUrl} download={`phobo-${session?.sessionId || "photo"}.png`}>
-              DOWNLOAD
-            </a>
-            <button
-              onClick={print}
-              disabled={busy || !session?.finalImageUrl}
-            >
-              {busy ? "PRINTING..." : "PRINT / MOCK PRINT"}
-            </button>
+            {!isProduction && (
+              <a href={finalImageUrl} download={`phobo-${session?.sessionId || "photo"}.png`}>
+                DOWNLOAD
+              </a>
+            )}
+            {!isPrintCommitted && (
+              <button
+                onClick={print}
+                disabled={busy || !session?.finalImageUrl}
+              >
+                {busy ? "PRINTING..." : "PRINT"}
+              </button>
+            )}
           </>
         )}
         <button className="add-print" onClick={() => router.push("/additional-frame")}>
           ADD PRINT · +20.000,00
         </button>
-        <button onClick={() => router.push("/closing")}>FINISH</button>
+        <button onClick={() => router.replace("/closing")}>FINISH</button>
       </footer>
     </KioskStage>
   );

@@ -269,7 +269,7 @@ export function BackgroundPicker({
   );
 }
 
-export function StickerPicker({ stickers }: { stickers: string[] }) {
+export function StickerPicker({ stickers, onAddSticker }: { stickers: string[]; onAddSticker?: (src: string) => void }) {
   const { addSticker } = useSessionStore();
   if (process.env.NEXT_PUBLIC_PHOBO_STICKERS_ENABLED === "false") return null;
   if (!stickers || stickers.length === 0) return null;
@@ -281,7 +281,13 @@ export function StickerPicker({ stickers }: { stickers: string[] }) {
         {stickers.map((src, i) => (
           <button
             key={i}
-            onClick={() => addSticker({ src, x: 600, y: 900, width: 300, height: 300, rotation: 0, zIndex: Date.now() })}
+            onClick={() => {
+              if (onAddSticker) {
+                onAddSticker(src);
+              } else {
+                addSticker({ src, x: 600, y: 900, width: 300, height: 300, rotation: 0, zIndex: Date.now() });
+              }
+            }}
             style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
           >
             <img src={src} alt="sticker" style={{ width: '100%', height: 'auto', objectFit: 'contain' }} />
@@ -303,6 +309,9 @@ type PreviewComposerProps = {
   activeSlotIndex?: number | null;
   dragOverSlotIndex?: number | null;
   onSlotPointerUp?: (slotIndex: number) => void;
+  stickers?: StickerPlacement[];
+  onUpdateSticker?: (id: string, sticker: Partial<StickerPlacement>) => void;
+  onRemoveSticker?: (id: string) => void;
 };
 
 export function PreviewComposer({ 
@@ -316,8 +325,15 @@ export function PreviewComposer({
   activeSlotIndex,
   dragOverSlotIndex,
   onSlotPointerUp,
+  stickers,
+  onUpdateSticker,
+  onRemoveSticker,
 }: PreviewComposerProps) {
     const { session, updateSticker, removeSticker } = useSessionStore();
+    const activeStickers = stickers ?? session?.stickers ?? [];
+    const updateStickerFn = onUpdateSticker ?? updateSticker;
+    const removeStickerFn = onRemoveSticker ?? removeSticker;
+
     const containerRef = useRef<HTMLDivElement>(null);
     const [activeStickerId, setActiveStickerId] = useState<string | null>(null);
     const [failedSlots, setFailedSlots] = useState<Record<number, boolean>>({});
@@ -325,7 +341,7 @@ export function PreviewComposer({
     const handlePointerDown = (e: React.PointerEvent, id: string, type: 'drag' | 'resize' | 'rotate') => {
       e.preventDefault();
       setActiveStickerId(id);
-      const sticker = session?.stickers.find(s => s.id === id);
+      const sticker = activeStickers.find(s => s.id === id);
       if (!sticker) return;
       
       const startX = e.clientX;
@@ -345,13 +361,13 @@ export function PreviewComposer({
         const dy = (moveEvent.clientY - startY) * scaleY;
         
         if (type === 'drag') {
-          updateSticker(id, { x: startStickerX + dx, y: startStickerY + dy });
+          updateStickerFn(id, { x: startStickerX + dx, y: startStickerY + dy });
         } else if (type === 'resize') {
           // simple diagonal resize based on dx
-          updateSticker(id, { width: Math.max(50, startWidth + dx) });
+          updateStickerFn(id, { width: Math.max(50, startWidth + dx) });
         } else if (type === 'rotate') {
           // simple rotation based on dx for simplicity
-          updateSticker(id, { rotation: startRotation + dx / 5 });
+          updateStickerFn(id, { rotation: startRotation + dx / 5 });
         }
       };
 
@@ -364,12 +380,19 @@ export function PreviewComposer({
       window.addEventListener('pointerup', handlePointerUp);
     };
 
-    return <RoundedPanel className="preview-composer"><div className="preview-frame" ref={containerRef} aria-label={`${frame.name} preview`} style={{ 
-      aspectRatio: `${frame.width} / ${frame.height}`,
-      width: frame.width >= frame.height ? '100%' : 'auto',
-      height: frame.height >= frame.width ? '100%' : 'auto',
-      position: 'relative'
-    }}>
+    return (
+      <RoundedPanel className="preview-composer">
+        <div
+          className="preview-frame"
+          ref={containerRef}
+          aria-label={`${frame.name} preview`}
+          style={{
+            aspectRatio: `${frame.width} / ${frame.height}`,
+            width: frame.width >= frame.height ? '100%' : 'auto',
+            height: frame.height >= frame.width ? '100%' : 'auto',
+            position: 'relative',
+          }}
+        >
       {frame.photoSlots.map((photoSlot, index) => { 
         let photoItem: CapturedPhoto | string | null = null;
 
@@ -473,7 +496,7 @@ export function PreviewComposer({
         );
       })}
       <img src={frame.templateUrl} alt={frame.name} className="preview-frame__template" style={{ position: "absolute", zIndex: 10, pointerEvents: "none", width: "100%", height: "100%", top: 0, left: 0 }} />
-      {session?.stickers.map(sticker => {
+      {activeStickers.map(sticker => {
         const isActive = activeStickerId === sticker.id;
         return (
           <div key={sticker.id} style={{
@@ -489,23 +512,20 @@ export function PreviewComposer({
           </div>
         )
       })}
+      {activeStickerId && Boolean(activeStickers.find(s => s.id === activeStickerId)) && (
+        <div style={{ position: 'absolute', right: '-70px', top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: '12px', zIndex: 100 }}>
+          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const st = activeStickers.find(s => s.id === activeStickerId); if (st) updateStickerFn(activeStickerId, { width: Math.max(50, st.width - 50) }); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>-</button>
+          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const st = activeStickers.find(s => s.id === activeStickerId); if (st) updateStickerFn(activeStickerId, { width: st.width + 50 }); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>+</button>
+          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const st = activeStickers.find(s => s.id === activeStickerId); if (st) updateStickerFn(activeStickerId, { rotation: st.rotation - 15 }); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>↺</button>
+          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const st = activeStickers.find(s => s.id === activeStickerId); if (st) updateStickerFn(activeStickerId, { rotation: st.rotation + 15 }); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>↻</button>
+          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); removeStickerFn(activeStickerId); setActiveStickerId(null); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#e74c3c', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>🗑</button>
+          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setActiveStickerId(null); }} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#95a5a6', color: 'white', border: 'none', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>OK</button>
+        </div>
+      )}
     </div>
-    {activeStickerId && session?.stickers.find(s => s.id === activeStickerId) && (() => {
-        const activeSticker = session.stickers.find(s => s.id === activeStickerId)!;
-        const btnStyle = { width: '48px', height: '48px', borderRadius: '50%', background: '#8e44ad', color: 'white', border: 'none', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' };
-        return (
-          <div style={{ position: 'absolute', right: '-70px', top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: '12px', zIndex: 100 }}>
-            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateSticker(activeStickerId, { width: Math.max(50, activeSticker.width - 50) }); }} style={btnStyle}>-</button>
-            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateSticker(activeStickerId, { width: activeSticker.width + 50 }); }} style={btnStyle}>+</button>
-            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateSticker(activeStickerId, { rotation: activeSticker.rotation - 15 }); }} style={btnStyle}>↺</button>
-            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateSticker(activeStickerId, { rotation: activeSticker.rotation + 15 }); }} style={btnStyle}>↻</button>
-            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); removeSticker(activeStickerId); setActiveStickerId(null); }} style={{...btnStyle, background: '#e74c3c'}}>🗑</button>
-            <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setActiveStickerId(null); }} style={{...btnStyle, background: '#95a5a6', fontSize: '16px'}}>OK</button>
-          </div>
-        );
-      })()}
-  </RoundedPanel>;
-  }
+    </RoundedPanel>
+  );
+}
 
 type PhotoResultStripProps = {
   photos?: (CapturedPhoto | string)[];

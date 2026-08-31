@@ -56,10 +56,13 @@ export type KioskSession = {
   additionalPhotoSlotAssignments?: (number | null)[];
   selectedStickerId?: string;
   stickers: StickerPlacement[];
+  additionalStickers?: StickerPlacement[];
   finalImageUrl?: string;
   printImageUrl?: string;
   driveUrl?: string;
   printStatus: PrintStatus;
+  printCommitted?: boolean;
+  printAttemptedAt?: string;
   greenScreenTuning: GreenScreenTuning;
   createdAt: string;
   updatedAt: string;
@@ -68,6 +71,8 @@ export type KioskSession = {
   addPrintPaymentRedirectUrl?: string;
   addPrintPaymentStatus?: "unpaid" | "pending" | "paid" | "failed";
   additionalPrintImageUrl?: string;
+  additionalPrintStatus?: "idle" | "composing" | "queued" | "printed" | "failed";
+  additionalPrintCommitted?: boolean;
   paymentMode?: "midtrans" | "operator" | "mock";
   payableAmount?: number;
   uniqueCode?: number;
