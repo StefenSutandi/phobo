@@ -218,95 +218,91 @@ export default function AddPrintPayment() {
   ]);
 
   const basePrice = 20000;
+  const isPaid = session?.addPrintPaymentStatus === "paid";
 
   return (
     <KioskStage>
-      <QrScreen 
-        title={session?.addPrintPaymentStatus === "paid" ? "PEMBAYARAN DITERIMA" : (paymentActive ? "SCAN UNTUK BAYAR" : "PAYMENT DISABLED")} 
-        initialSeconds={120} 
-        completionText={session?.addPrintPaymentStatus === "paid" ? "MEMPROSES..." : "PAYMENT TIMEOUT"} 
-        onComplete={() => {
-          const isPaidOrCommitted = Boolean(
-            session?.addPrintPaymentStatus === "paid" ||
-            session?.additionalPrintCommitted ||
-            session?.additionalPrintStatus === "composing" ||
-            session?.additionalPrintStatus === "queued" ||
-            session?.additionalPrintStatus === "printed"
-          );
-          if (!isPaidOrCommitted) {
-            setAddPrintPaymentStatus("failed");
-            router.push("/result");
-          }
-        }} 
-        qrContent={
-          !isInitializing 
-            ? paymentActive 
-              ? isOperatorMode 
-                ? !qrisConfigured ? (
-                    <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#222', color: '#ffaa00', borderRadius: '8px', textAlign: 'center', padding: '15px'}}>
-                      <span style={{fontSize: '36px'}}>⚠️</span>
-                      <span style={{marginTop: '10px', fontSize: '14px', fontWeight: 'bold'}}>QRIS merchant belum dikonfigurasi.</span>
-                    </div>
-                  ) : (
-                    <img 
-                      src={session?.addPrintPaymentRedirectUrl || "/assets/payment/qris.png"} 
-                      alt="Merchant QRIS" 
-                      style={{width: '100%', height: '100%', objectFit: 'contain', background: '#fff', padding: '10px', borderRadius: '8px'}}
-                      onError={() => setQrisConfigured(false)}
-                    />
-                  )
-                : <ResultQrCode value={paymentUrl} /> 
-              : <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#222', color: '#aaa', borderRadius: '8px', textAlign: 'center'}}>
-                  <span style={{fontSize: '48px'}}>⚙️</span>
-                  <span style={{marginTop: '10px', fontSize: '18px'}}>OFFLINE</span>
-                </div>
-            : <div className="qr-image" style={{display: "grid", placeItems: "center", background: "#fff", width:"100%", height:"100%", borderRadius: "8px"}}>...</div>
-        } 
-      />
-      
-      <div className="payment-summary">
-        {isOperatorMode ? (
-          <div>
-            <div style={{fontSize: '16px', color: '#bbb', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold'}}>Additional Print</div>
-            <div style={{fontSize: '28px', fontWeight: 'bold', color: '#2ecc71', marginTop: '6px'}}>
-              TOTAL: Rp {basePrice.toLocaleString("id-ID")}
+      {isPaid ? (
+        <>
+          <h1 className="qr-title">PEMBAYARAN DITERIMA</h1>
+          <div className="add-payment-paid-container">
+            <span style={{ fontSize: "54px" }}>🖨️</span>
+            <div className="add-payment-paid-title">PEMBAYARAN DITERIMA</div>
+            <div className="add-payment-paid-subtitle">
+              {session?.additionalPrintStatus === "printed" ? "SELESAI!" : "MEMPROSES CETAK..."}
             </div>
-            <div style={{fontSize: '14px', color: '#aaa', marginTop: '6px'}}>
-              Silakan masukkan nominal Rp {basePrice.toLocaleString("id-ID")} pada aplikasi pembayaran.
-            </div>
-          </div>
-        ) : (
-          <div>Additional Print - Rp 20.000</div>
-        )}
-
-        {session?.addPrintPaymentOrderId && (
-          <div style={{ marginTop: '12px', padding: '8px 14px', backgroundColor: '#222', borderRadius: '8px', border: '1px solid #444', textAlign: 'center' }}>
-            <p style={{ fontSize: '12px', color: '#aaa', margin: '0 0 3px 0' }}>Jika terjadi kendala, silakan foto layar ini</p>
-            <p style={{ fontSize: '18px', fontFamily: 'monospace', margin: '0', color: '#fff', letterSpacing: '2px', fontWeight: 'bold' }}>
-              Order ID: {session.addPrintPaymentOrderId}
-            </p>
-            {isOperatorMode && session?.addPrintPaymentStatus !== "paid" && (
-              <span style={{fontSize: '12px', color: '#2ecc71', fontWeight: 'bold', display: 'block', marginTop: '4px'}}>
-                Status: MENUNGGU KONFIRMASI OPERATOR
-              </span>
+            {msg && (
+              <div style={{ fontSize: "14px", color: msg.includes("GAGAL") || msg.includes("FAILED") ? "#ff6b6b" : "#2ecc71" }}>
+                {msg}
+              </div>
             )}
           </div>
-        )}
+        </>
+      ) : (
+        <>
+          <QrScreen 
+            title={paymentActive ? "SCAN UNTUK BAYAR" : "PAYMENT DISABLED"} 
+            initialSeconds={120} 
+            completionText="PAYMENT TIMEOUT" 
+            onComplete={() => {
+              const isPaidOrCommitted = Boolean(
+                session?.addPrintPaymentStatus === "paid" ||
+                session?.additionalPrintCommitted ||
+                session?.additionalPrintStatus === "composing" ||
+                session?.additionalPrintStatus === "queued" ||
+                session?.additionalPrintStatus === "printed"
+              );
+              if (!isPaidOrCommitted) {
+                setAddPrintPaymentStatus("failed");
+                router.push("/result");
+              }
+            }} 
+            qrContent={
+              !isInitializing 
+                ? paymentActive 
+                  ? isOperatorMode 
+                    ? !qrisConfigured ? (
+                        <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#222', color: '#ffaa00', borderRadius: '8px', textAlign: 'center', padding: '15px'}}>
+                          <span style={{fontSize: '36px'}}>⚠️</span>
+                          <span style={{marginTop: '10px', fontSize: '14px', fontWeight: 'bold'}}>QRIS merchant belum dikonfigurasi.</span>
+                        </div>
+                      ) : (
+                        <img 
+                          src={session?.addPrintPaymentRedirectUrl || "/assets/payment/qris.png"} 
+                          alt="Merchant QRIS" 
+                          style={{width: '100%', height: '100%', objectFit: 'contain', background: '#fff', padding: '10px', borderRadius: '8px'}}
+                          onError={() => setQrisConfigured(false)}
+                        />
+                      )
+                    : <ResultQrCode value={paymentUrl} /> 
+                  : <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#222', color: '#aaa', borderRadius: '8px', textAlign: 'center'}}>
+                      <span style={{fontSize: '48px'}}>⚙️</span>
+                      <span style={{marginTop: '10px', fontSize: '18px'}}>OFFLINE</span>
+                    </div>
+                : <div className="qr-image" style={{display: "grid", placeItems: "center", background: "#fff", width:"100%", height:"100%", borderRadius: "8px"}}>...</div>
+            } 
+          />
 
-        {!paymentActive && !isInitializing && (
-          <div style={{fontSize: 16, opacity: 0.7, marginTop: 10}}>
-            {process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" 
-              ? "(Manual payment mode)" 
-              : "Payment gateway is disabled. Enable Midtrans or debug fallback to continue."}
+          <div className="add-payment-meta">
+            <div className="add-payment-meta-title">ADDITIONAL PRINT</div>
+            <div className="add-payment-meta-price">
+              TOTAL Rp {basePrice.toLocaleString("id-ID")}
+            </div>
           </div>
-        )}
-        {session?.addPrintPaymentStatus === "paid" && (
-          <div style={{marginTop: 10, fontSize: "1.2rem", color: "#2ecc71", fontWeight: "bold"}}>
-            {session?.additionalPrintStatus === "printed" ? "SELESAI!" : "MEMPROSES..."}
-          </div>
-        )}
-        {msg && <div style={{marginTop: 10, fontSize: "1.2rem", whiteSpace: "pre-wrap", color: msg.includes("GAGAL") || msg.includes("FAILED") ? "#ff6b6b" : "#2ecc71"}}>{msg}</div>}
-      </div>
+
+          {isOperatorMode && (
+            <div className="add-payment-status">
+              MENUNGGU KONFIRMASI OPERATOR
+            </div>
+          )}
+
+          {session?.addPrintPaymentOrderId && (
+            <div className="add-payment-order-id">
+              Order ID: <span>{session.addPrintPaymentOrderId}</span> • Simpan ID ini jika terjadi kendala
+            </div>
+          )}
+        </>
+      )}
     </KioskStage>
   );
 }

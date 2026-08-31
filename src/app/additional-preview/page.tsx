@@ -20,6 +20,7 @@ export default function AdditionalPreview() {
     addAdditionalSticker,
     updateAdditionalSticker,
     removeAdditionalSticker,
+    initAdditionalPreviewTimer,
   } = useSessionStore();
 
   const [stickersList, setStickersList] = useState<string[]>([]);
@@ -32,6 +33,40 @@ export default function AdditionalPreview() {
   const [draggingPhotoIdx, setDraggingPhotoIdx] = useState<number | null>(null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const [dragOverSlotIdx, setDragOverSlotIdx] = useState<number | null>(null);
+
+  // Persistent 2-minute Additional Preview Timer
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
+    if (session?.additionalPreviewDeadlineAt) {
+      return Math.max(0, Math.floor((new Date(session.additionalPreviewDeadlineAt).getTime() - Date.now()) / 1000));
+    }
+    return 120;
+  });
+
+  const hasAutoContinuedRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasHydrated || !session) return;
+    if (!session.additionalPreviewDeadlineAt) {
+      initAdditionalPreviewTimer(120);
+    }
+  }, [hasHydrated, session, initAdditionalPreviewTimer]);
+
+  useEffect(() => {
+    if (!session?.additionalPreviewDeadlineAt) return;
+    const updateTimer = () => {
+      const diff = Math.max(0, Math.floor((new Date(session.additionalPreviewDeadlineAt!).getTime() - Date.now()) / 1000));
+      setRemainingSeconds(diff);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 500);
+    return () => clearInterval(interval);
+  }, [session?.additionalPreviewDeadlineAt]);
+
+  const mins = Math.floor(remainingSeconds / 60);
+  const secs = remainingSeconds % 60;
+  const formattedTimer = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  const isUrgent = remainingSeconds <= 30 && remainingSeconds > 0;
+  const isExpired = remainingSeconds === 0;
 
   useEffect(() => {
     getStickers().then(setStickersList);
@@ -223,6 +258,14 @@ export default function AdditionalPreview() {
     router.push("/add-print-payment");
   }
 
+  // Safe auto-continue at 00:00 expiry when ready
+  useEffect(() => {
+    if (isExpired && isReady && !hasAutoContinuedRef.current) {
+      hasAutoContinuedRef.current = true;
+      next();
+    }
+  }, [isExpired, isReady]);
+
   if (!frame) return null;
 
   const draggedPhotoObj = draggingPhotoIdx !== null ? captured[draggingPhotoIdx] : null;
@@ -236,6 +279,31 @@ export default function AdditionalPreview() {
   return (
     <KioskStage>
       <h1 className="preview-heading">PREVIEW ADDITIONAL FRAME</h1>
+
+      <div
+        className="preview-timer-badge"
+        style={{
+          position: "absolute",
+          right: "36px",
+          top: "22px",
+          zIndex: 25,
+          background: isExpired ? "#c0392b" : isUrgent ? "#d35400" : "var(--purple)",
+          borderRadius: "20px",
+          padding: "7px 18px",
+          fontSize: "20px",
+          fontWeight: "bold",
+          color: "#ffffff",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          boxShadow: isUrgent || isExpired ? "0 0 15px rgba(231, 76, 60, 0.6)" : "none",
+          transition: "background-color 0.3s ease",
+        }}
+      >
+        <span>⏱</span>
+        <span>{formattedTimer}</span>
+        {isExpired && <span style={{ fontSize: "12px", marginLeft: "4px" }}>WAKTU HABIS</span>}
+      </div>
 
       <PreviewComposer
         frame={frame}

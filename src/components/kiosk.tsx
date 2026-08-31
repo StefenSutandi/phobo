@@ -422,6 +422,7 @@ export function PreviewComposer({
         const isEllipse = photoSlot.shape === "ellipse" || photoSlot.shape === "circle";
         const isRounded = photoSlot.shape === "rounded";
         const slotBorderRadius = isEllipse ? "50%" : isRounded ? `${photoSlot.borderRadius || 16}px` : undefined;
+        const maskUrl = photoSlot.maskUrl || `/assets/frames/masks/${frame.id}-slot-${index}.png`;
 
         return (
           <div 
@@ -440,6 +441,12 @@ export function PreviewComposer({
               transform:photoSlot.rotation?`rotate(${photoSlot.rotation}deg)`:undefined, 
               overflow: 'hidden',
               borderRadius: slotBorderRadius,
+              WebkitMaskImage: `url('${maskUrl}')`,
+              maskImage: `url('${maskUrl}')`,
+              WebkitMaskSize: '100% 100%',
+              maskSize: '100% 100%',
+              WebkitMaskRepeat: 'no-repeat',
+              maskRepeat: 'no-repeat',
               cursor: 'pointer',
               border: isDragOver 
                 ? '3px solid #ffd700' 

@@ -35,6 +35,56 @@ export type ComposeFinalRequest = {
 
 export type ComposedFinalImages = { finalScreenPng: Buffer; processedPhotoDataUrls: string[]; warnings: string[] };
 
+async function getSlotApertureMaskBuffer(
+  templatePngBuffer: Buffer,
+  frameWidth: number,
+  frameHeight: number,
+  photoSlot: { x: number; y: number; width: number; height: number; maskUrl?: string; shape?: string; borderRadius?: number }
+): Promise<Buffer | null> {
+  // 1. Try loading precomputed mask file if available
+  if (photoSlot.maskUrl) {
+    try {
+      const maskPath = path.join(process.cwd(), "public", photoSlot.maskUrl);
+      await fs.access(maskPath);
+      return await fs.readFile(maskPath);
+    } catch {
+      // Fallback to dynamic derivation
+    }
+  }
+
+  // 2. Derive dynamically from template PNG alpha crop
+  try {
+    const rawTemplate = await sharp(templatePngBuffer)
+      .resize({ width: frameWidth, height: frameHeight, fit: "fill" })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const maskRaw = Buffer.alloc(photoSlot.width * photoSlot.height * 4);
+    for (let py = 0; py < photoSlot.height; py++) {
+      for (let px = 0; px < photoSlot.width; px++) {
+        const globalX = Math.max(0, Math.min(frameWidth - 1, photoSlot.x + px));
+        const globalY = Math.max(0, Math.min(frameHeight - 1, photoSlot.y + py));
+        const srcIdx = (globalY * frameWidth + globalX) * 4;
+        const templateAlpha = rawTemplate.data[srcIdx + 3];
+        const maskAlpha = 255 - templateAlpha;
+
+        const destIdx = (py * photoSlot.width + px) * 4;
+        maskRaw[destIdx + 0] = 255;
+        maskRaw[destIdx + 1] = 255;
+        maskRaw[destIdx + 2] = 255;
+        maskRaw[destIdx + 3] = maskAlpha;
+      }
+    }
+
+    return await sharp(maskRaw, {
+      raw: { width: photoSlot.width, height: photoSlot.height, channels: 4 }
+    }).png().toBuffer();
+  } catch {
+    return null;
+  }
+}
+
 export async function composeFinalImages({
   sessionId,
   capturedPhotos,
@@ -130,8 +180,10 @@ export async function composeFinalImages({
         .png()
         .toBuffer();
 
-      // 4. Apply shape alpha mask for non-rectangular openings (ellipse, circle, rounded)
-      if (photoSlot.shape && photoSlot.shape !== "rect") {
+      // 4. Apply template alpha aperture mask (with shape fallback)
+      let maskBuffer = await getSlotApertureMaskBuffer(template, frame.width, frame.height, photoSlot);
+
+      if (!maskBuffer && photoSlot.shape && photoSlot.shape !== "rect") {
         let svgShape = "";
         if (photoSlot.shape === "ellipse") {
           const rx = photoSlot.width / 2;
@@ -148,21 +200,24 @@ export async function composeFinalImages({
         }
 
         if (svgShape) {
-          const svgMask = Buffer.from(
+          maskBuffer = Buffer.from(
             `<svg width="${photoSlot.width}" height="${photoSlot.height}" xmlns="http://www.w3.org/2000/svg">${svgShape}</svg>`
           );
-          slotComposedBuffer = await sharp(slotComposedBuffer)
-            .ensureAlpha()
-            .composite([{ input: svgMask, blend: "dest-in" }])
-            .png()
-            .toBuffer();
         }
+      }
+
+      if (maskBuffer) {
+        slotComposedBuffer = await sharp(slotComposedBuffer)
+          .ensureAlpha()
+          .composite([{ input: maskBuffer, blend: "dest-in" }])
+          .png()
+          .toBuffer();
       }
 
       composites.push({ input: slotComposedBuffer, left: photoSlot.x, top: photoSlot.y });
 
       if (env.debugLogs || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
-        console.log(`[Compose Slot] Slot ${index} | shape=${photoSlot.shape || 'rect'} | bg=${slotBgId} | photoRaw=${slotRaw.slice(0, 30)} | sDims=${sWidth}x${sHeight} | slotDims=${photoSlot.width}x${photoSlot.height} | fitMode=${fit.finalMode} | extract=(${fit.sx},${fit.sy},${fit.sw},${fit.sh}) -> dest=(${photoSlot.x + fit.dx},${photoSlot.y + fit.dy},${fit.dw},${fit.dh})`);
+        console.log(`[Compose Slot] Slot ${index} | shape=${photoSlot.shape || 'rect'} | maskUrl=${photoSlot.maskUrl || 'dynamic'} | bg=${slotBgId} | photoRaw=${slotRaw.slice(0, 30)} | sDims=${sWidth}x${sHeight} | slotDims=${photoSlot.width}x${photoSlot.height} | fitMode=${fit.finalMode} | extract=(${fit.sx},${fit.sy},${fit.sw},${fit.sh}) -> dest=(${photoSlot.x + fit.dx},${photoSlot.y + fit.dy},${fit.dw},${fit.dh})`);
       }
     } catch (error) {
       warnings.push(`Failed to compose slot ${index}: ${error instanceof Error ? error.message : String(error)}`);

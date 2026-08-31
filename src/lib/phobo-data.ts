@@ -23,6 +23,7 @@ export type PhotoSlot = {
   rotation?: number;
   shape?: "rect" | "ellipse" | "circle" | "rounded";
   borderRadius?: number;
+  maskUrl?: string;
 };
 
 export type FrameData = {

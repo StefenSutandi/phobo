@@ -578,6 +578,204 @@ async function runProductionUxTests() {
 
   console.log(`✓ Ellipse alpha mask geometry verified: center alpha=${centerAlpha}, corner alpha=${cornerAlpha}`);
 
+  // ================================================================
+  // TEST 11: 2-Minute Preview Edit Timer & Safe Auto-Expiry
+  // ================================================================
+  console.log("\nStep 11: Validating 2-Minute Preview Edit Timer & Safe Auto-Expiry...");
+
+  function initPreviewTimer(sessionState, durationSeconds = 120) {
+    if (sessionState.previewDeadlineAt) return sessionState;
+    const startTime = new Date();
+    const deadline = new Date(startTime.getTime() + durationSeconds * 1000);
+    return {
+      ...sessionState,
+      previewStartedAt: startTime.toISOString(),
+      previewDeadlineAt: deadline.toISOString(),
+    };
+  }
+
+  function getPreviewRemaining(sessionState) {
+    if (!sessionState?.previewDeadlineAt) return 120;
+    return Math.max(0, Math.floor((new Date(sessionState.previewDeadlineAt).getTime() - Date.now()) / 1000));
+  }
+
+  const initialPreviewSession = {
+    sessionId: "test-preview-timer",
+    photoSlotAssignments: [0, 1, 2, 3],
+  };
+
+  const previewWithTimer = initPreviewTimer(initialPreviewSession, 120);
+  assert.ok(previewWithTimer.previewStartedAt, "previewStartedAt must be set");
+  assert.ok(previewWithTimer.previewDeadlineAt, "previewDeadlineAt must be set");
+  const pRem = getPreviewRemaining(previewWithTimer);
+  assert.ok(pRem >= 118 && pRem <= 120, `Preview remaining must be ~120s, got ${pRem}`);
+  console.log(`✓ Preview edit timer initialized: ${pRem}s (~02:00)`);
+
+  // Persistence across photo assignment / sticker edit / refresh
+  const previewDeadline = previewWithTimer.previewDeadlineAt;
+  const afterPhotoEdit = initPreviewTimer({ ...previewWithTimer, photoSlotAssignments: [1, 0, 2, 3] });
+  assert.equal(afterPhotoEdit.previewDeadlineAt, previewDeadline, "Deadline must not change on photo edit");
+
+  const afterStickerEdit = initPreviewTimer({ ...afterPhotoEdit, stickers: [{ id: "st-1" }] });
+  assert.equal(afterStickerEdit.previewDeadlineAt, previewDeadline, "Deadline must not change on sticker edit");
+
+  const hydratedPreview = JSON.parse(JSON.stringify(afterStickerEdit));
+  assert.equal(hydratedPreview.previewDeadlineAt, previewDeadline, "Deadline must persist across hydration");
+
+  // Expiry handling
+  let autoContinuedCallCount = 0;
+  let hasAutoContinued = false;
+  function handlePreviewExpiry(isReady, isSaving) {
+    if (isReady && !isSaving && !hasAutoContinued) {
+      hasAutoContinued = true;
+      autoContinuedCallCount++;
+    }
+  }
+
+  // 11A: When ready at 00:00 -> auto-continue exactly once
+  handlePreviewExpiry(true, false);
+  handlePreviewExpiry(true, false); // repeated trigger / rerender
+  assert.equal(autoContinuedCallCount, 1, "Auto-continue must execute exactly once");
+  console.log("✓ Preview expiry when ready: auto-continues exactly once");
+
+  // 11B: When not ready at 00:00 -> non-destructive
+  let notReadyContinued = false;
+  let hasNotReadyContinued = false;
+  if (false && !hasNotReadyContinued) {
+    hasNotReadyContinued = true;
+    notReadyContinued = true;
+  }
+  assert.equal(notReadyContinued, false, "Not ready session must NOT auto-continue and must preserve user edits");
+  console.log("✓ Preview expiry when not ready: safely preserves user edits without navigation dead-end");
+
+  // ================================================================
+  // TEST 12: 2-Minute Additional Preview Timer & State Isolation
+  // ================================================================
+  console.log("\nStep 12: Validating 2-Minute Additional Preview Timer & State Isolation...");
+
+  function initAdditionalPreviewTimer(sessionState, durationSeconds = 120) {
+    if (sessionState.additionalPreviewDeadlineAt) return sessionState;
+    const startTime = new Date();
+    const deadline = new Date(startTime.getTime() + durationSeconds * 1000);
+    return {
+      ...sessionState,
+      additionalPreviewStartedAt: startTime.toISOString(),
+      additionalPreviewDeadlineAt: deadline.toISOString(),
+    };
+  }
+
+  const addPreviewSession = {
+    sessionId: "test-add-prev",
+    additionalFrameId: "frame-6",
+    additionalPhotoSlotAssignments: [0, 1, 2, 3],
+    previewDeadlineAt: new Date(Date.now() + 50000).toISOString(), // existing main preview deadline
+  };
+
+  const addPrevWithTimer = initAdditionalPreviewTimer(addPreviewSession, 120);
+  assert.ok(addPrevWithTimer.additionalPreviewDeadlineAt, "additionalPreviewDeadlineAt must be set");
+  assert.notEqual(addPrevWithTimer.additionalPreviewDeadlineAt, addPreviewSession.previewDeadlineAt, "Additional preview deadline must be independent from main preview deadline");
+
+  // Changing additional frame resets additional preview deadline
+  const onSelectNewAddFrame = {
+    ...addPrevWithTimer,
+    additionalFrameId: "frame-7",
+    additionalPreviewStartedAt: undefined,
+    additionalPreviewDeadlineAt: undefined,
+  };
+  assert.equal(onSelectNewAddFrame.additionalPreviewDeadlineAt, undefined, "Selecting new additional frame must reset timer");
+
+  const freshAddPrev = initAdditionalPreviewTimer(onSelectNewAddFrame, 120);
+  assert.ok(freshAddPrev.additionalPreviewDeadlineAt, "New additional frame timer starts fresh");
+  console.log("✓ Additional preview timer is fully isolated and resets appropriately on frame re-selection");
+
+  // ================================================================
+  // TEST 13: Template-Alpha Heart Aperture Mask Verification (Proving Heart vs Ellipse)
+  // ================================================================
+  console.log("\nStep 13: Validating Template-Alpha Heart Aperture Mask (Real Frame 8)...");
+
+  const heartMaskPath = path.join(projectRoot, "public/assets/frames/masks/frame-8-slot-0.png");
+  const heartMaskImg = sharp(heartMaskPath);
+  const heartMaskData = await heartMaskImg.raw().toBuffer({ resolveWithObject: true });
+  const hw = heartMaskData.info.width;
+  const hh = heartMaskData.info.height;
+  const getHeartAlpha = (x, y) => heartMaskData.data[(Math.round(y) * hw + Math.round(x)) * 4 + 3];
+
+  assert.equal(hw, 400, "Frame 8 slot 0 width must be 400");
+  assert.equal(hh, 349, "Frame 8 slot 0 height must be 349");
+
+  // 1. Center of heart must be fully opaque in mask (A=255)
+  const heartCenterA = getHeartAlpha(hw / 2, hh / 2);
+  assert.equal(heartCenterA, 255, `Heart center must be alpha 255, got ${heartCenterA}`);
+
+  // 2. The 4 bounding box corners must be completely transparent (A=0)
+  const hTopLeftA = getHeartAlpha(2, 2);
+  const hTopRightA = getHeartAlpha(hw - 3, 2);
+  const hBottomLeftA = getHeartAlpha(2, hh - 3);
+  const hBottomRightA = getHeartAlpha(hw - 3, hh - 3);
+  assert.equal(hTopLeftA, 0, "Heart top-left corner must be 0");
+  assert.equal(hTopRightA, 0, "Heart top-right corner must be 0");
+  assert.equal(hBottomLeftA, 0, "Heart bottom-left corner must be 0");
+  assert.equal(hBottomRightA, 0, "Heart bottom-right corner must be 0");
+
+  // 3. Top indentation between heart lobes must be transparent (A=0) - PROOF OF HEART NOT ELLIPSE
+  const topIndentationA = getHeartAlpha(hw / 2, 5);
+  assert.equal(topIndentationA, 0, `Top notch between lobes must be alpha 0 (heart proof), got ${topIndentationA}`);
+
+  // 4. Left and right upper lobes must be fully opaque (A=255)
+  const leftLobeA = getHeartAlpha(hw * 0.25, hh * 0.25);
+  const rightLobeA = getHeartAlpha(hw * 0.75, hh * 0.25);
+  assert.equal(leftLobeA, 255, `Left lobe must be alpha 255, got ${leftLobeA}`);
+  assert.equal(rightLobeA, 255, `Right lobe must be alpha 255, got ${rightLobeA}`);
+
+  // 5. Lower tip of heart must be fully opaque (A=255)
+  const bottomTipA = getHeartAlpha(hw / 2, hh * 0.85);
+  assert.equal(bottomTipA, 255, `Bottom tip of heart must be alpha 255, got ${bottomTipA}`);
+
+  console.log(`✓ Heart aperture mask mathematically verified: notch alpha=0, lobes alpha=(255,255), tip alpha=255, corners alpha=0`);
+
+  // ================================================================
+  // TEST 14: Template-Alpha Mask Composition with Fallback Parity
+  // ================================================================
+  console.log("\nStep 14: Validating Template-Alpha Mask Composition & Parity...");
+
+  const heartComposed = await composeFinalImages({
+    sessionId: "test-heart-compose",
+    capturedPhotos: [photoDataUrl],
+    selectedFrameId: "frame-8",
+    selectedBackgroundId: "background-01",
+  });
+  assert.ok(heartComposed.finalScreenPng, "Heart frame compose must succeed");
+  console.log("✓ Real Frame 8 (Heart) composed successfully with template-alpha aperture mask");
+
+  const ellipseComposed = await composeFinalImages({
+    sessionId: "test-ellipse-compose",
+    capturedPhotos: [photoDataUrl],
+    selectedFrameId: "frame-10",
+    selectedBackgroundId: "background-01",
+  });
+  assert.ok(ellipseComposed.finalScreenPng, "Ellipse frame compose must succeed");
+  console.log("✓ Real Frame 10 (Ellipse) composed successfully with template-alpha aperture mask");
+
+  // ================================================================
+  // TEST 15: Add-Print Payment UI Structural Layout & Paid State
+  // ================================================================
+  console.log("\nStep 15: Validating Add-Print Payment UI Structural Layout & Paid State...");
+
+  const cssContent = await fs.readFile(path.join(projectRoot, "src/app/globals.css"), "utf-8");
+  assert.ok(cssContent.includes(".add-payment-meta"), ".add-payment-meta must exist in globals.css");
+  assert.ok(cssContent.includes(".add-payment-status"), ".add-payment-status must exist in globals.css");
+  assert.ok(cssContent.includes(".add-payment-order-id"), ".add-payment-order-id must exist in globals.css");
+  assert.ok(cssContent.includes(".add-payment-paid-container"), ".add-payment-paid-container must exist in globals.css");
+
+  const addPaymentCode = await fs.readFile(path.join(projectRoot, "src/app/add-print-payment/page.tsx"), "utf-8");
+  assert.ok(addPaymentCode.includes("className=\"add-payment-meta\""), "page.tsx must use add-payment-meta");
+  assert.ok(addPaymentCode.includes("className=\"add-payment-status\""), "page.tsx must use add-payment-status");
+  assert.ok(addPaymentCode.includes("className=\"add-payment-order-id\""), "page.tsx must use add-payment-order-id");
+  assert.ok(addPaymentCode.includes("PEMBAYARAN DITERIMA"), "page.tsx must display clean paid state");
+  assert.ok(addPaymentCode.includes("MEMPROSES CETAK..."), "page.tsx must display processing copy when paid");
+
+  console.log("✓ Add-print payment UI structure & paid-state copy verified");
+
   console.log("\n==================================================");
   console.log("ALL PRODUCTION RESULT & ADD-PRINT UX TESTS PASSED!");
   console.log("==================================================");

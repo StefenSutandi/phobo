@@ -65,6 +65,10 @@ export type KioskSession = {
   printAttemptedAt?: string;
   cameraStartedAt?: string;
   cameraDeadlineAt?: string;
+  previewStartedAt?: string;
+  previewDeadlineAt?: string;
+  additionalPreviewStartedAt?: string;
+  additionalPreviewDeadlineAt?: string;
   greenScreenTuning: GreenScreenTuning;
   createdAt: string;
   updatedAt: string;
