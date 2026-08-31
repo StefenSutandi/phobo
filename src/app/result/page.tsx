@@ -62,7 +62,6 @@ export default function Result() {
           body: JSON.stringify({
             sessionId: session.sessionId,
             printUrl: regenData.printUrl,
-            count: 1,
           }),
         });
         const d = await r.json();

@@ -255,6 +255,48 @@ async function runPackageContractTests() {
   );
   console.log("✓ Verified .result-preview-card background is #fff in globals.css");
 
+  // ================================================================
+  // PART 5: Route Handler Invariant: 1 HTTP Request = 1 Physical Job (Safety)
+  // ================================================================
+  console.log("\nStep 6: Validating /api/printer/print Route Single Job Invariant...");
+  const printRoute = await import("../src/app/api/printer/print/route.ts");
+  const { printer } = await import("../src/lib/hardware/printer-adapter.ts");
+
+  process.env.PHOBO_PRINTER_MODE = "mock";
+  let adapterCallCount = 0;
+  const originalPrintImage = printer.printImage.bind(printer);
+  printer.printImage = async (req) => {
+    adapterCallCount++;
+    return originalPrintImage(req);
+  };
+
+  try {
+    // Attempt sending arbitrary count: 10 in HTTP request payload
+    const mockReq = new Request("http://localhost:3000/api/printer/print", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "test-safety-session",
+        printUrl: "/results/test-safety-session/final_print.jpg",
+        count: 10,
+      }),
+    });
+
+    const routeRes = await printRoute.POST(mockReq);
+    assert.equal(routeRes.status, 200, "Route response must be 200");
+    const routeData = await routeRes.json();
+    assert.equal(routeData.ok, true);
+    assert.equal(
+      adapterCallCount,
+      1,
+      "ONE POST /api/printer/print must invoke printer.printImage EXACTLY once even if count > 1 was sent"
+    );
+    assert.equal(typeof routeData.totalJobs, "undefined", "Must not return multi-job sequential payload");
+    console.log("✓ Verified 1 POST /api/printer/print = 1 physical job invariant (arbitrary count ignored)");
+  } finally {
+    printer.printImage = originalPrintImage;
+  }
+
   console.log("\n==================================================");
   console.log("ALL PACKAGE CONTRACT & MULTI-PRINT TESTS PASSED!");
   console.log("==================================================");

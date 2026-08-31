@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { executeSequentialPrintJobs, printer } from "@/lib/hardware/printer-adapter";
+import { printer } from "@/lib/hardware/printer-adapter";
 
 export const runtime = "nodejs";
 
@@ -7,7 +7,6 @@ type PrintRequest = {
   sessionId?: unknown;
   printUrl?: unknown;
   resultUrl?: unknown;
-  count?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -42,26 +41,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const count = typeof body.count === "number" && Number.isFinite(body.count) && body.count > 0
-    ? Math.floor(body.count)
-    : 1;
-
   try {
-    if (count <= 1) {
-      const result = await printer.printImage({
-        sessionId: body.sessionId,
-        printUrl,
-      });
-      return NextResponse.json(result, { status: result.ok ? 200 : 500 });
-    }
-
-    const seqResult = await executeSequentialPrintJobs({
+    const result = await printer.printImage({
       sessionId: body.sessionId,
       printUrl,
-      count,
     });
 
-    return NextResponse.json(seqResult, { status: seqResult.ok ? 200 : 500 });
+    return NextResponse.json(result, { status: result.ok ? 200 : 500 });
   } catch (error) {
     return NextResponse.json(
       {
