@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import { execSync } from "node:child_process";
 import sharp from "sharp";
 import { fileURLToPath } from "node:url";
 
@@ -9,13 +10,17 @@ const projectRoot = path.resolve(__dirname, "..");
 
 const UPDATED_FRAME_IDS = [1, 2, 3, 4, 5, 7, 8, 9];
 const EXTRACT_DIR = path.join(projectRoot, ".tmp/october-frames");
+const OLD_COMMIT = "7b51011";
+const HEADER_MAX_Y = 180; // Wording is contained in y < 160; slots start at y >= 190
 
 async function main() {
   console.log("==================================================");
-  console.log("OCTOBER FRAME ARTWORK UPDATE — PRESERVING GEOMETRY");
+  console.log("OCTOBER FRAME ARTWORK UPDATE — STRICT HEADER ROI");
+  console.log(`Authoritative OLD commit: ${OLD_COMMIT}`);
+  console.log(`Header ROI: y = 0..${HEADER_MAX_Y}`);
   console.log("==================================================");
 
-  // 1. Audit extracted files
+  // 1. Audit extracted October files
   console.log(`\nChecking extracted October frames in: ${EXTRACT_DIR}`);
   for (const id of UPDATED_FRAME_IDS) {
     const filePath = path.join(EXTRACT_DIR, `${id}.png`);
@@ -31,18 +36,19 @@ async function main() {
     }
   }
 
-  // 2. Audit existing production frames
-  console.log("\nAuditing existing production frames...");
+  // 2. Extract and audit authoritative baseline production frames from OLD_COMMIT
+  console.log(`\nExtracting baseline production frames from git commit ${OLD_COMMIT}...`);
   const oldAlphaHashes = new Map();
   const oldAlphaBuffers = new Map();
   const oldRawBuffers = new Map();
 
   for (const id of UPDATED_FRAME_IDS) {
-    const prodPath = path.join(projectRoot, `public/assets/frames/${id}.png`);
-    const img = sharp(prodPath);
+    const gitCmd = `git show ${OLD_COMMIT}:public/assets/frames/${id}.png`;
+    const oldPngBuffer = execSync(gitCmd, { cwd: projectRoot, maxBuffer: 20 * 1024 * 1024 });
+    const img = sharp(oldPngBuffer);
     const meta = await img.metadata();
     if (meta.width !== 1200 || meta.height !== 1800 || meta.channels !== 4) {
-      throw new Error(`Production ${id}.png unexpected meta: ${meta.width}x${meta.height}, channels=${meta.channels}`);
+      throw new Error(`Baseline commit ${OLD_COMMIT} ${id}.png unexpected meta: ${meta.width}x${meta.height}, channels=${meta.channels}`);
     }
 
     const raw = await img.raw().toBuffer();
@@ -57,11 +63,11 @@ async function main() {
 
     const hash = crypto.createHash("sha256").update(alpha).digest("hex");
     oldAlphaHashes.set(id, hash);
-    console.log(`  Prod Frame ${id}: alpha SHA256 = ${hash}`);
+    console.log(`  Baseline Frame ${id}: alpha SHA256 = ${hash}`);
   }
 
-  // 3. Process each frame: Merge New RGB + Old Alpha
-  console.log("\nMerging October RGB with exact Production Alpha...");
+  // 3. Process each frame: Merge New RGB in Header ROI + Old Pixel Data Everywhere Else
+  console.log("\nMerging October RGB within Header ROI (preserving exact Baseline below ROI & exact Alpha)...");
   const diagnostics = [];
 
   for (const id of UPDATED_FRAME_IDS) {
@@ -76,42 +82,65 @@ async function main() {
 
     let changedOpaquePixels = 0;
     let minX = 1200, minY = 1800, maxX = 0, maxY = 0;
+    let changedPixelsBelowROI = 0;
 
     for (let y = 0; y < 1800; y++) {
       for (let x = 0; x < 1200; x++) {
         const i = y * 1200 + x;
         const oldAlpha = oldRaw[i * 4 + 3];
+        const oldR = oldRaw[i * 4 + 0];
+        const oldG = oldRaw[i * 4 + 1];
+        const oldB = oldRaw[i * 4 + 2];
 
-        let r, g, b;
-        if (oldAlpha >= 250) {
-          r = newRaw[i * newChannels + 0];
-          g = newRaw[i * newChannels + 1];
-          b = newRaw[i * newChannels + 2];
+        let r, g, b, a;
 
-          // Check if pixel visually changed compared to old
-          const oldR = oldRaw[i * 4 + 0];
-          const oldG = oldRaw[i * 4 + 1];
-          const oldB = oldRaw[i * 4 + 2];
+        if (y < HEADER_MAX_Y) {
+          // Inside Header ROI:
+          a = oldAlpha;
+          if (oldAlpha >= 250) {
+            r = newRaw[i * newChannels + 0];
+            g = newRaw[i * newChannels + 1];
+            b = newRaw[i * newChannels + 2];
 
-          if (r !== oldR || g !== oldG || b !== oldB) {
-            changedOpaquePixels++;
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
+            if (r !== oldR || g !== oldG || b !== oldB) {
+              changedOpaquePixels++;
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          } else {
+            // Anti-aliased edge or transparent aperture in header: preserve old RGB
+            r = oldR;
+            g = oldG;
+            b = oldB;
           }
         } else {
-          // Semi-transparent fringe or transparent hole: preserve old RGB to avoid checkerboard fringe
-          r = oldRaw[i * 4 + 0];
-          g = oldRaw[i * 4 + 1];
-          b = oldRaw[i * 4 + 2];
+          // Outside Header ROI (Body of frame): 100% byte-for-byte exact OLD production pixel
+          r = oldR;
+          g = oldG;
+          b = oldB;
+          a = oldAlpha;
+
+          // Double check invariant
+          if (r !== oldR || g !== oldG || b !== oldB || a !== oldAlpha) {
+            changedPixelsBelowROI++;
+          }
         }
 
         mergedRaw[i * 4 + 0] = r;
         mergedRaw[i * 4 + 1] = g;
         mergedRaw[i * 4 + 2] = b;
-        mergedRaw[i * 4 + 3] = oldAlpha; // Exact old alpha byte
+        mergedRaw[i * 4 + 3] = a;
       }
+    }
+
+    if (changedPixelsBelowROI > 0) {
+      throw new Error(`CRITICAL: Frame ${id} has ${changedPixelsBelowROI} modified pixels below header ROI!`);
+    }
+
+    if (maxY >= HEADER_MAX_Y) {
+      throw new Error(`CRITICAL: Frame ${id} changed bounding box maxY (${maxY}) exceeds HEADER_MAX_Y (${HEADER_MAX_Y})!`);
     }
 
     const diag = {
@@ -135,10 +164,27 @@ async function main() {
       .png({ compressionLevel: 9 })
       .toFile(prodPath);
 
-    // 4. Verification: Re-read written PNG and assert alpha channel byte-for-byte SHA256 parity
+    // 4. Verification: Re-read written PNG and assert alpha channel byte-for-byte SHA256 parity & byte equality below ROI
     const writtenImg = sharp(prodPath);
     const writtenMeta = await writtenImg.metadata();
     const writtenRaw = await writtenImg.raw().toBuffer();
+
+    // Check pixel-by-pixel below ROI against oldRaw
+    for (let y = HEADER_MAX_Y; y < 1800; y++) {
+      for (let x = 0; x < 1200; x++) {
+        const i = (y * 1200 + x) * 4;
+        if (
+          writtenRaw[i + 0] !== oldRaw[i + 0] ||
+          writtenRaw[i + 1] !== oldRaw[i + 1] ||
+          writtenRaw[i + 2] !== oldRaw[i + 2] ||
+          writtenRaw[i + 3] !== oldRaw[i + 3]
+        ) {
+          throw new Error(`Pixel mismatch in Frame ${id} at (${x}, ${y}) below ROI!`);
+        }
+      }
+    }
+    console.log(`  ✓ Verified: 100% byte-for-byte identical below y >= ${HEADER_MAX_Y}`);
+
     const writtenAlpha = Buffer.alloc(1200 * 1800);
     for (let i = 0; i < 1200 * 1800; i++) {
       writtenAlpha[i] = writtenRaw[i * 4 + 3];
@@ -279,7 +325,7 @@ async function main() {
       width: contactWidth,
       height: contactHeight,
       channels: 4,
-      background: { r: 30, g: 41, b: 59, alpha: 1 }, // Slate dark blue to make transparencies stand out
+      background: { r: 30, g: 41, b: 59, alpha: 1 }, // Slate dark blue
     },
   })
     .composite(compositeList)
@@ -291,7 +337,7 @@ async function main() {
   console.log(`✓ QA Contact sheet saved to: ${contactSheetPath}`);
 
   console.log("\n==================================================");
-  console.log("ALL 8 OCTOBER FRAMES SUCCESSFULLY UPDATED & VERIFIED!");
+  console.log("ALL 8 OCTOBER FRAMES STRICTLY RESTRICTED TO HEADER ROI & VERIFIED!");
   console.log("==================================================");
 }
 
