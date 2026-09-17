@@ -34,6 +34,10 @@ export function getPhoboEnv() {
     paymentProvider: (process.env.PHOBO_PAYMENT_PROVIDER === "midtrans" || process.env.PHOBO_PAYMENT_PROVIDER === "operator" || process.env.PHOBO_PAYMENT_PROVIDER === "mock")
       ? process.env.PHOBO_PAYMENT_PROVIDER
       : (process.env.MIDTRANS_ENABLED === "true" ? "midtrans" : (process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" ? "mock" : "operator")),
+    midtransEnabled: process.env.MIDTRANS_ENABLED === "true",
+    midtransIsProduction: process.env.MIDTRANS_IS_PRODUCTION === "true",
+    midtransServerKey: process.env.MIDTRANS_SERVER_KEY || "",
+    midtransMerchantId: process.env.MIDTRANS_MERCHANT_ID || "",
     operatorQrisImage: process.env.PHOBO_OPERATOR_QRIS_IMAGE || "/assets/payment/qris.png",
     operatorPaymentEnabled: process.env.PHOBO_OPERATOR_PAYMENT_ENABLED !== "false",
     operatorCookieSecure: process.env.PHOBO_OPERATOR_COOKIE_SECURE === "true",

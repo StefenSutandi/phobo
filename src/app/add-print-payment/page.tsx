@@ -20,12 +20,14 @@ export default function AddPrintPayment() {
   const [paymentActive, setPaymentActive] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [qrisConfigured, setQrisConfigured] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const paymentUrl = session?.addPrintPaymentRedirectUrl || process.env.NEXT_PUBLIC_PHOTOBO_PAYMENT_URL || "https://payment.invalid/phobo-demo";
   const isOperatorMode = session?.paymentMode === "operator";
+  const isMidtransMode = session?.paymentMode === "midtrans";
 
   useEffect(() => { 
     if (hasHydrated && !session?.additionalFrameId) router.replace("/additional-frame"); 
@@ -56,6 +58,7 @@ export default function AddPrintPayment() {
         const data = await res.json();
         if (data.ok) {
           setPaymentActive(true);
+          setErrorMsg("");
           if (data.mode === "operator") {
             setQrisConfigured(data.qrisConfigured !== false);
             setAddPrintPaymentData({
@@ -64,18 +67,28 @@ export default function AddPrintPayment() {
               addPrintPayableAmount: data.payableAmount,
               addPrintUniqueCode: data.uniqueCode || 0,
             });
+          } else if (data.mode === "midtrans") {
+            setQrisConfigured(true);
+            setAddPrintPaymentData({
+              addPrintPaymentOrderId: data.orderId,
+              addPrintPaymentRedirectUrl: data.qrisImageUrl || `/api/payment/qris?orderId=${encodeURIComponent(data.orderId)}`,
+              addPrintPayableAmount: data.payableAmount,
+            });
           } else {
             setAddPrintPaymentData({
               addPrintPaymentOrderId: data.orderId,
-              addPrintPaymentRedirectUrl: data.redirectUrl
+              addPrintPaymentRedirectUrl: data.qrisImageUrl || "/assets/payment/qris.png",
+              addPrintPayableAmount: data.payableAmount,
             });
           }
         } else {
           setPaymentActive(false);
+          setErrorMsg(data.error || "PEMBAYARAN SEDANG BERMASALAH. SILAKAN HUBUNGI OPERATOR.");
         }
       } catch (e) {
         console.error("Failed to init payment", e);
         setPaymentActive(false);
+        setErrorMsg("PEMBAYARAN SEDANG BERMASALAH. SILAKAN HUBUNGI OPERATOR.");
       } finally {
         setIsInitializing(false);
       }
@@ -91,13 +104,13 @@ export default function AddPrintPayment() {
 
     const checkStatus = async () => {
       try {
-        const res = await fetch(`/api/payment/status?orderId=${session.addPrintPaymentOrderId}`);
+        const res = await fetch(`/api/payment/status?orderId=${encodeURIComponent(session.addPrintPaymentOrderId!)}`);
         const data = await res.json();
         if (data.ok && data.status) {
           if (data.status === "confirmed") {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             setAddPrintPaymentStatus("paid");
-          } else if (data.status === "failed" || data.status === "cancelled" || data.status === "expired") {
+          } else if (data.status === "failed" || data.status === "cancelled" || data.status === "timeout" || data.status === "expired") {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             setAddPrintPaymentStatus("failed");
           }
@@ -112,6 +125,37 @@ export default function AddPrintPayment() {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
   }, [paymentActive, session?.addPrintPaymentOrderId, session?.addPrintPaymentStatus, setAddPrintPaymentStatus]);
+
+  const handleTimeout = async () => {
+    const isPaidOrCommitted = Boolean(
+      session?.addPrintPaymentStatus === "paid" ||
+      session?.additionalPrintCommitted ||
+      session?.additionalPrintStatus === "composing" ||
+      session?.additionalPrintStatus === "queued" ||
+      session?.additionalPrintStatus === "printed"
+    );
+    if (isPaidOrCommitted) return;
+
+    if (session?.addPrintPaymentOrderId) {
+      try {
+        const res = await fetch("/api/payment/expire", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: session.addPrintPaymentOrderId }),
+        });
+        const data = await res.json();
+        if (data.ok && data.status === "confirmed") {
+          setAddPrintPaymentStatus("paid");
+          return;
+        }
+      } catch (e) {
+        console.error("Failed to expire add-print payment", e);
+      }
+    }
+
+    setAddPrintPaymentStatus("failed");
+    router.push("/result");
+  };
 
   // Once paid, automatically compose and print once, then transition to closing
   useEffect(() => {
@@ -241,22 +285,10 @@ export default function AddPrintPayment() {
       ) : (
         <>
           <QrScreen 
-            title={paymentActive ? "SCAN UNTUK BAYAR" : "PAYMENT DISABLED"} 
+            title={paymentActive ? "SCAN UNTUK BAYAR" : "PAYMENT ERROR"} 
             initialSeconds={120} 
             completionText="PAYMENT TIMEOUT" 
-            onComplete={() => {
-              const isPaidOrCommitted = Boolean(
-                session?.addPrintPaymentStatus === "paid" ||
-                session?.additionalPrintCommitted ||
-                session?.additionalPrintStatus === "composing" ||
-                session?.additionalPrintStatus === "queued" ||
-                session?.additionalPrintStatus === "printed"
-              );
-              if (!isPaidOrCommitted) {
-                setAddPrintPaymentStatus("failed");
-                router.push("/result");
-              }
-            }} 
+            onComplete={handleTimeout} 
             qrContent={
               !isInitializing 
                 ? paymentActive 
@@ -274,10 +306,26 @@ export default function AddPrintPayment() {
                           onError={() => setQrisConfigured(false)}
                         />
                       )
+                    : isMidtransMode
+                      ? !qrisConfigured ? (
+                        <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#222', color: '#ffaa00', borderRadius: '8px', textAlign: 'center', padding: '15px'}}>
+                          <span style={{fontSize: '36px'}}>⚠️</span>
+                          <span style={{marginTop: '10px', fontSize: '14px', fontWeight: 'bold'}}>Gagal memuat QRIS Midtrans.</span>
+                        </div>
+                      ) : (
+                        <img 
+                          src={session?.addPrintPaymentRedirectUrl || `/api/payment/qris?orderId=${encodeURIComponent(session?.addPrintPaymentOrderId || "")}`} 
+                          alt="Midtrans QRIS" 
+                          style={{width: '100%', height: '100%', objectFit: 'contain', background: '#fff', padding: '10px', borderRadius: '8px'}}
+                          onError={() => setQrisConfigured(false)}
+                        />
+                      )
                     : <ResultQrCode value={paymentUrl} /> 
-                  : <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#222', color: '#aaa', borderRadius: '8px', textAlign: 'center'}}>
-                      <span style={{fontSize: '48px'}}>⚙️</span>
-                      <span style={{marginTop: '10px', fontSize: '18px'}}>OFFLINE</span>
+                  : <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#222', color: '#aaa', borderRadius: '8px', textAlign: 'center', padding: '15px'}}>
+                      <span style={{fontSize: '48px'}}>⚠️</span>
+                      <span style={{marginTop: '10px', fontSize: '14px', color: '#ffaa00', fontWeight: 'bold'}}>
+                        {errorMsg || "PEMBAYARAN SEDANG BERMASALAH. SILAKAN HUBUNGI OPERATOR."}
+                      </span>
                     </div>
                 : <div className="qr-image" style={{display: "grid", placeItems: "center", background: "#fff", width:"100%", height:"100%", borderRadius: "8px"}}>...</div>
             } 
@@ -293,6 +341,12 @@ export default function AddPrintPayment() {
           {isOperatorMode && (
             <div className="add-payment-status">
               MENUNGGU KONFIRMASI OPERATOR
+            </div>
+          )}
+
+          {isMidtransMode && (
+            <div className="add-payment-status" style={{ fontSize: "13px" }}>
+              SCAN QRIS DENGAN GOPAY, OVO, DANA, BCA, ATAU MOBILE BANKING
             </div>
           )}
 

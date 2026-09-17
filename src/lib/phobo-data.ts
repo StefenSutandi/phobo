@@ -44,6 +44,8 @@ export type BackgroundData = {
   color: string;
 };
 
+export const ADD_PRINT_PRICE = 20000;
+
 export const packages: PackageData[] = [
   {
     id: "basic",
