@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     // 3. Midtrans Core API QRIS Mode
     // Check for existing pending transaction to prevent duplicate charges on re-renders
     const existingOrder = findPendingMidtransOrder(sessionId, purpose);
-    if (existingOrder && existingOrder.status === "pending") {
+    if (existingOrder && existingOrder.status === "pending" && (existingOrder.qrString || existingOrder.qrActionUrl)) {
       return NextResponse.json({
         ok: true,
         mode: "midtrans",
@@ -107,6 +107,17 @@ export async function POST(request: Request) {
       sessionId,
       paymentPurpose: purpose,
     });
+
+    if (!qrisRes.qrString && !qrisRes.qrActionUrl) {
+      console.error(`[Payment Create] Order ${orderId} has neither qrString nor qrActionUrl`);
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "QRIS MIDTRANS TIDAK TERSEDIA. SILAKAN HUBUNGI OPERATOR.",
+        },
+        { status: 502 }
+      );
+    }
 
     saveMidtransOrder({
       orderId,
@@ -131,12 +142,15 @@ export async function POST(request: Request) {
     });
   } catch (error: any) {
     console.error("[Payment Create] Error:", error?.message || error);
+    const safeError = error?.message?.includes("QRIS MIDTRANS TIDAK TERSEDIA")
+      ? error.message
+      : "QRIS MIDTRANS TIDAK TERSEDIA. SILAKAN HUBUNGI OPERATOR.";
     return NextResponse.json(
       {
         ok: false,
-        error: "PEMBAYARAN SEDANG BERMASALAH. SILAKAN HUBUNGI OPERATOR.",
+        error: safeError,
       },
-      { status: 500 }
+      { status: 502 }
     );
   }
 }

@@ -83,12 +83,12 @@ export default function AddPrintPayment() {
           }
         } else {
           setPaymentActive(false);
-          setErrorMsg(data.error || "PEMBAYARAN SEDANG BERMASALAH. SILAKAN HUBUNGI OPERATOR.");
+          setErrorMsg(data.error || "QRIS SEDANG TIDAK TERSEDIA. SILAKAN HUBUNGI OPERATOR.");
         }
       } catch (e) {
         console.error("Failed to init payment", e);
         setPaymentActive(false);
-        setErrorMsg("PEMBAYARAN SEDANG BERMASALAH. SILAKAN HUBUNGI OPERATOR.");
+        setErrorMsg("QRIS SEDANG TIDAK TERSEDIA. SILAKAN HUBUNGI OPERATOR.");
       } finally {
         setIsInitializing(false);
       }
@@ -310,7 +310,7 @@ export default function AddPrintPayment() {
                       ? !qrisConfigured ? (
                         <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#222', color: '#ffaa00', borderRadius: '8px', textAlign: 'center', padding: '15px'}}>
                           <span style={{fontSize: '36px'}}>⚠️</span>
-                          <span style={{marginTop: '10px', fontSize: '14px', fontWeight: 'bold'}}>Gagal memuat QRIS Midtrans.</span>
+                          <span style={{marginTop: '10px', fontSize: '14px', fontWeight: 'bold'}}>QRIS SEDANG TIDAK TERSEDIA.<br />SILAKAN HUBUNGI OPERATOR.</span>
                         </div>
                       ) : (
                         <img 
@@ -324,7 +324,7 @@ export default function AddPrintPayment() {
                   : <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#222', color: '#aaa', borderRadius: '8px', textAlign: 'center', padding: '15px'}}>
                       <span style={{fontSize: '48px'}}>⚠️</span>
                       <span style={{marginTop: '10px', fontSize: '14px', color: '#ffaa00', fontWeight: 'bold'}}>
-                        {errorMsg || "PEMBAYARAN SEDANG BERMASALAH. SILAKAN HUBUNGI OPERATOR."}
+                        {errorMsg || "QRIS SEDANG TIDAK TERSEDIA. SILAKAN HUBUNGI OPERATOR."}
                       </span>
                     </div>
                 : <div className="qr-image" style={{display: "grid", placeItems: "center", background: "#fff", width:"100%", height:"100%", borderRadius: "8px"}}>...</div>

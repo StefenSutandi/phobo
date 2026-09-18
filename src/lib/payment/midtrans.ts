@@ -83,6 +83,52 @@ export function logMidtransSafe(
   console.log(pieces.join(" | "));
 }
 
+export function logMidtransNetworkError(action: string, error: any, targetUrl?: string) {
+  let hostname = "";
+  if (targetUrl) {
+    try {
+      hostname = new URL(targetUrl).host;
+    } catch {
+      // ignore invalid URL parsing
+    }
+  }
+  const cause = error?.cause;
+  if (!hostname && cause?.hostname) {
+    hostname = cause.hostname;
+  }
+  if (!hostname) {
+    hostname = process.env.MIDTRANS_IS_PRODUCTION === "true" ? "api.midtrans.com" : "api.sandbox.midtrans.com";
+  }
+
+  const pieces = [`[Midtrans Network Error] Action=${action}`, `Host=${hostname}`];
+  if (error?.name && error.name !== "Error") {
+    pieces.push(`Name=${error.name}`);
+  }
+  if (cause?.code) {
+    pieces.push(`Code=${cause.code}`);
+  }
+  if (cause?.errno !== undefined) {
+    pieces.push(`Errno=${cause.errno}`);
+  }
+  if (cause?.syscall) {
+    pieces.push(`Syscall=${cause.syscall}`);
+  }
+  pieces.push(`Message=${error?.message || String(error)}`);
+
+  console.error(pieces.join(" | "));
+}
+
+export function isValidQrisString(qrString: unknown): qrString is string {
+  if (typeof qrString !== "string") return false;
+  const trimmed = qrString.trim();
+  // Realistic EMVCo QRIS payload:
+  // Starts with EMV header "000201" (Payload Format Indicator "00", length "02", value "01")
+  // and has substantial realistic QRIS length (Indonesian QRIS is typically 100+ chars; minimum valid EMV > 30)
+  if (!trimmed.startsWith("000201")) return false;
+  if (trimmed.length < 30) return false;
+  return true;
+}
+
 export async function createQrisTransaction(params: QrisTransactionParams): Promise<QrisTransactionResult> {
   const config = validateMidtransConfig();
   const fetcher = getFetch();
@@ -107,15 +153,21 @@ export async function createQrisTransaction(params: QrisTransactionParams): Prom
     environment: config.isProduction ? "production" : "sandbox",
   });
 
-  const response = await fetcher(`${config.baseUrl}/v2/charge`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      Authorization: getAuthHeader(config.serverKey),
-    },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetcher(`${config.baseUrl}/v2/charge`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: getAuthHeader(config.serverKey),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (netErr: any) {
+    logMidtransNetworkError("ChargeQRIS", netErr, config.baseUrl);
+    throw new Error(`Midtrans QRIS network error: ${netErr?.message || netErr}`);
+  }
 
   const resJson = await response.json().catch(() => ({}));
 
@@ -144,6 +196,15 @@ export async function createQrisTransaction(params: QrisTransactionParams): Prom
     expiryTime: resJson.expiry_time,
   };
 
+  // Hardening: require at least ONE valid QR source (qrString OR qrActionUrl)
+  if (!result.qrString && !result.qrActionUrl) {
+    logMidtransSafe("ChargeQRISMissingPayload", {
+      orderId: result.orderId,
+      message: "Neither qr_string nor generate-qr-code action URL returned by Midtrans",
+    });
+    throw new Error("QRIS MIDTRANS TIDAK TERSEDIA. SILAKAN HUBUNGI OPERATOR.");
+  }
+
   logMidtransSafe("ChargeQRISSuccess", {
     orderId: result.orderId,
     status: result.transactionStatus,
@@ -156,13 +217,19 @@ export async function getMidtransTransactionStatus(orderId: string): Promise<Mid
   const config = validateMidtransConfig();
   const fetcher = getFetch();
 
-  const response = await fetcher(`${config.baseUrl}/v2/${encodeURIComponent(orderId)}/status`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      Authorization: getAuthHeader(config.serverKey),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetcher(`${config.baseUrl}/v2/${encodeURIComponent(orderId)}/status`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: getAuthHeader(config.serverKey),
+      },
+    });
+  } catch (netErr: any) {
+    logMidtransNetworkError("Status", netErr, config.baseUrl);
+    throw netErr;
+  }
 
   if (response.status === 404) {
     return {
@@ -200,13 +267,19 @@ export async function expireMidtransTransaction(orderId: string): Promise<Midtra
 
   logMidtransSafe("ExpireTransaction", { orderId });
 
-  const response = await fetcher(`${config.baseUrl}/v2/${encodeURIComponent(orderId)}/expire`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      Authorization: getAuthHeader(config.serverKey),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetcher(`${config.baseUrl}/v2/${encodeURIComponent(orderId)}/expire`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: getAuthHeader(config.serverKey),
+      },
+    });
+  } catch (netErr: any) {
+    logMidtransNetworkError("Expire", netErr, config.baseUrl);
+    throw netErr;
+  }
 
   const resJson = await response.json().catch(() => ({}));
 
@@ -219,9 +292,16 @@ export async function expireMidtransTransaction(orderId: string): Promise<Midtra
 
 export async function fetchMidtransQrisImage(qrActionUrl: string): Promise<{ buffer: Buffer; contentType: string }> {
   const fetcher = getFetch();
-  const response = await fetcher(qrActionUrl, {
-    method: "GET",
-  });
+
+  let response: Response;
+  try {
+    response = await fetcher(qrActionUrl, {
+      method: "GET",
+    });
+  } catch (netErr: any) {
+    logMidtransNetworkError("FetchQRISImage", netErr, qrActionUrl);
+    throw netErr;
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to fetch QRIS image from Midtrans: HTTP ${response.status}`);

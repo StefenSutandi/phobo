@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import crypto from "crypto";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,6 +18,8 @@ async function runMidtransTests() {
     expireMidtransTransaction,
     fetchMidtransQrisImage,
     normalizeMidtransStatus,
+    isValidQrisString,
+    logMidtransNetworkError,
     setMidtransTestFetch,
   } = await import("../src/lib/payment/midtrans.ts");
 
@@ -465,6 +468,254 @@ async function runMidtransTests() {
   const invalidWebhookRes = await notificationRoute(invalidWebhookReq);
   assert.equal(invalidWebhookRes.status, 403, "Tampered signature must return 403 Forbidden");
   console.log("✓ Tampered webhook signature properly rejected with 403 Forbidden");
+
+  // ================================================================
+  // TEST 11: qrString exists -> generates QR directly from qrString
+  // ================================================================
+  console.log("\nTest 11: Testing qrString exists -> generates QR directly from qrString...");
+  const validEmvPayload = "00020101021226580014ID.LINKAJA.WWW011893600911002237894502150000000000000005204581253033605802ID5911PHOBO KIOSK6007BANDUNG61054013262070703A016304C90A";
+  const orderWithQrString = "PHOBO-TEST-QRSTRING-01";
+  saveMidtransOrder({
+    orderId: orderWithQrString,
+    sessionId: "session-test-qrstr",
+    paymentPurpose: "main-package",
+    amount: 45000,
+    status: "pending",
+    qrString: validEmvPayload,
+    createdAt: new Date().toISOString(),
+  });
+
+  const res11 = await getQrisRoute(new Request(`http://localhost:3000/api/payment/qris?orderId=${orderWithQrString}`));
+  assert.equal(res11.status, 200);
+  assert.equal(res11.headers.get("Content-Type"), "image/png");
+  assert.equal(res11.headers.get("X-Phobo-Qris-Source"), "qr_string");
+  const buf11 = await res11.arrayBuffer();
+  assert.ok(buf11.byteLength > 100, "Must be valid non-empty PNG buffer");
+  console.log(`✓ Generated QR directly from qrString (${buf11.byteLength} bytes, X-Phobo-Qris-Source: qr_string)`);
+
+  // ================================================================
+  // TEST 12: qrString has priority over qrActionUrl
+  // ================================================================
+  console.log("\nTest 12: Testing qrString has priority over qrActionUrl...");
+  const orderBoth = "PHOBO-TEST-BOTH-01";
+  let actionUrlCalled = false;
+  setMidtransTestFetch(async (url) => {
+    if (url.includes("action-qr-target")) {
+      actionUrlCalled = true;
+      return new Response(dummyPng, { status: 200, headers: { "Content-Type": "image/png" } });
+    }
+    return new Response("Not found", { status: 404 });
+  });
+
+  saveMidtransOrder({
+    orderId: orderBoth,
+    sessionId: "session-test-both",
+    paymentPurpose: "main-package",
+    amount: 45000,
+    status: "pending",
+    qrString: validEmvPayload,
+    qrActionUrl: "https://api.sandbox.midtrans.com/v2/qris/action-qr-target",
+    createdAt: new Date().toISOString(),
+  });
+
+  const res12 = await getQrisRoute(new Request(`http://localhost:3000/api/payment/qris?orderId=${orderBoth}`));
+  assert.equal(res12.status, 200);
+  assert.equal(res12.headers.get("X-Phobo-Qris-Source"), "qr_string");
+  assert.equal(actionUrlCalled, false, "qrActionUrl must NOT be fetched when valid qrString is present");
+  console.log("✓ qrString took priority over qrActionUrl without making unnecessary HTTP call");
+
+  // ================================================================
+  // TEST 13: qrString absent + action URL works -> route proxies actual PNG
+  // ================================================================
+  console.log("\nTest 13: Testing qrString absent + action URL works -> route proxies actual PNG...");
+  const orderActionOnly = "PHOBO-TEST-ACTION-01";
+  const mockActionUrl = "https://api.sandbox.midtrans.com/v2/qris/action-only-qr";
+  let proxyCallMade = false;
+
+  setMidtransTestFetch(async (url) => {
+    if (url === mockActionUrl) {
+      proxyCallMade = true;
+      return new Response(dummyPng, { status: 200, headers: { "Content-Type": "image/png" } });
+    }
+    return new Response("Not found", { status: 404 });
+  });
+
+  saveMidtransOrder({
+    orderId: orderActionOnly,
+    sessionId: "session-test-action",
+    paymentPurpose: "main-package",
+    amount: 45000,
+    status: "pending",
+    qrActionUrl: mockActionUrl,
+    createdAt: new Date().toISOString(),
+  });
+
+  const res13 = await getQrisRoute(new Request(`http://localhost:3000/api/payment/qris?orderId=${orderActionOnly}`));
+  assert.equal(res13.status, 200);
+  assert.equal(res13.headers.get("Content-Type"), "image/png");
+  assert.equal(res13.headers.get("X-Phobo-Qris-Source"), "midtrans_action_url");
+  assert.equal(proxyCallMade, true);
+  console.log("✓ Successfully proxied actual Midtrans PNG when qrString is absent");
+
+  // ================================================================
+  // TEST 14: action URL fails + qrString absent -> HTTP 503
+  // ================================================================
+  console.log("\nTest 14: Testing action URL fails + qrString absent -> HTTP 503...");
+  const orderFailingAction = "PHOBO-TEST-FAILING-ACTION-01";
+  setMidtransTestFetch(async () => {
+    throw new Error("Midtrans upstream CDN 500 error");
+  });
+
+  saveMidtransOrder({
+    orderId: orderFailingAction,
+    sessionId: "session-test-failing",
+    paymentPurpose: "main-package",
+    amount: 45000,
+    status: "pending",
+    qrActionUrl: "https://api.sandbox.midtrans.com/v2/qris/failing-target",
+    createdAt: new Date().toISOString(),
+  });
+
+  const res14 = await getQrisRoute(new Request(`http://localhost:3000/api/payment/qris?orderId=${orderFailingAction}`));
+  assert.equal(res14.status, 503, "Failing action URL must return 503, NEVER a synthetic fallback");
+  const data14 = await res14.json();
+  assert.equal(data14.ok, false);
+  assert.equal(data14.error, "QRIS SEDANG TIDAK TERSEDIA. SILAKAN HUBUNGI OPERATOR.");
+  console.log("✓ Failing action URL cleanly returned HTTP 503 with safe operator message");
+
+  // ================================================================
+  // TEST 15: BOTH missing -> HTTP 503
+  // ================================================================
+  console.log("\nTest 15: Testing BOTH qrString and qrActionUrl missing -> HTTP 503...");
+  const orderBothMissing = "PHOBO-TEST-NONE-01";
+  saveMidtransOrder({
+    orderId: orderBothMissing,
+    sessionId: "session-test-none",
+    paymentPurpose: "main-package",
+    amount: 45000,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  });
+
+  const res15 = await getQrisRoute(new Request(`http://localhost:3000/api/payment/qris?orderId=${orderBothMissing}`));
+  assert.equal(res15.status, 503, "Missing both must return HTTP 503");
+  const data15 = await res15.json();
+  assert.equal(data15.ok, false);
+  assert.equal(data15.error, "QRIS SEDANG TIDAK TERSEDIA. SILAKAN HUBUNGI OPERATOR.");
+  console.log("✓ Both missing properly returned HTTP 503");
+
+  // ================================================================
+  // TEST 16: Assert source code of src/app/api/payment/qris/route.ts does NOT contain: MIDTRANS-ORDER-
+  // ================================================================
+  console.log("\nTest 16: Asserting source code does NOT contain MIDTRANS-ORDER-...");
+  const qrisRouteSource = await fs.readFile(
+    path.join(__dirname, "..", "src", "app", "api", "payment", "qris", "route.ts"),
+    "utf-8"
+  );
+  assert.equal(
+    qrisRouteSource.includes("MIDTRANS-ORDER-"),
+    false,
+    "CRITICAL: src/app/api/payment/qris/route.ts must NEVER contain MIDTRANS-ORDER-"
+  );
+  console.log("✓ Verified zero occurrences of 'MIDTRANS-ORDER-' in qris route source code");
+
+  // ================================================================
+  // TEST 17: Invalid qrString rejected
+  // ================================================================
+  console.log("\nTest 17: Testing invalid qrString rejection by validator...");
+  assert.equal(isValidQrisString(null), false);
+  assert.equal(isValidQrisString(undefined), false);
+  assert.equal(isValidQrisString(""), false);
+  assert.equal(isValidQrisString("https://example.com/some/link"), false, "URLs must be rejected as QRIS EMV");
+  assert.equal(isValidQrisString("MIDTRANS-ORDER-12345"), false, "Synthetic order text must be rejected");
+  assert.equal(isValidQrisString("000201SHORT"), false, "Short string starting with 000201 must be rejected");
+  assert.equal(isValidQrisString(validEmvPayload), true, "Valid EMV QRIS starting with 000201 must pass");
+
+  // Test that an order with invalid qrString and no action URL returns 503
+  const orderInvalidQr = "PHOBO-TEST-INVALID-QR";
+  saveMidtransOrder({
+    orderId: orderInvalidQr,
+    sessionId: "session-test-invalid",
+    paymentPurpose: "main-package",
+    amount: 45000,
+    status: "pending",
+    qrString: "INVALID-STRING-NOT-EMV",
+    createdAt: new Date().toISOString(),
+  });
+
+  const res17 = await getQrisRoute(new Request(`http://localhost:3000/api/payment/qris?orderId=${orderInvalidQr}`));
+  assert.equal(res17.status, 503);
+  console.log("✓ Invalid qrString correctly rejected and returned HTTP 503");
+
+  // ================================================================
+  // TEST 18: No orderId-derived QR can be generated
+  // ================================================================
+  console.log("\nTest 18: Testing no orderId-derived QR can ever be generated...");
+  const arbitraryOrderId = "SOME-ARBITRARY-ORDER-ID-99999";
+  const res18 = await getQrisRoute(new Request(`http://localhost:3000/api/payment/qris?orderId=${arbitraryOrderId}`));
+  assert.equal(res18.status, 503, "Unregistered order ID must return 503, NEVER a generated fallback QR");
+  const data18 = await res18.json();
+  assert.equal(data18.ok, false);
+  console.log("✓ Verified no orderId-derived QR can be generated for arbitrary order IDs");
+
+  // ================================================================
+  // TEST 19: Network error remains pending, never confirmed
+  // ================================================================
+  console.log("\nTest 19: Testing network error during status check remains pending, never confirmed...");
+  const networkErrorOrderId = "PHOBO-TEST-NET-ERROR-01";
+  saveMidtransOrder({
+    orderId: networkErrorOrderId,
+    sessionId: "session-test-net",
+    paymentPurpose: "main-package",
+    amount: 45000,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  });
+
+  setMidtransTestFetch(async () => {
+    const netErr = new TypeError("fetch failed");
+    netErr.cause = { code: "ENOTFOUND", errno: -3008, syscall: "getaddrinfo", hostname: "api.sandbox.midtrans.com" };
+    throw netErr;
+  });
+
+  const res19 = await getStatusRoute(new Request(`http://localhost:3000/api/payment/status?orderId=${networkErrorOrderId}`));
+  const data19 = await res19.json();
+  assert.equal(data19.ok, true);
+  assert.equal(data19.status, "pending", "Status must remain pending on network failure, NEVER confirmed");
+  assert.notEqual(data19.status, "confirmed");
+  console.log("✓ Network failure correctly kept status as pending without false confirmation");
+
+  // ================================================================
+  // TEST 20: No secrets appear in network diagnostics
+  // ================================================================
+  console.log("\nTest 20: Testing no secrets appear in network diagnostics...");
+  let loggedOutput = "";
+  const originalConsoleError = console.error;
+  console.error = (...args) => {
+    loggedOutput += args.join(" ") + "\n";
+  };
+
+  try {
+    const sampleNetErr = new TypeError("fetch failed");
+    sampleNetErr.cause = {
+      code: "ECONNRESET",
+      errno: -4077,
+      syscall: "read",
+      hostname: "api.midtrans.com",
+    };
+    logMidtransNetworkError("Status", sampleNetErr, "https://api.midtrans.com/v2/charge");
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.ok(loggedOutput.includes("[Midtrans Network Error]"));
+  assert.ok(loggedOutput.includes("Action=Status"));
+  assert.ok(loggedOutput.includes("Host=api.midtrans.com"));
+  assert.ok(loggedOutput.includes("Code=ECONNRESET"));
+  assert.equal(loggedOutput.includes(TEST_SERVER_KEY), false, "Server Key must NEVER appear in logs");
+  assert.equal(loggedOutput.includes("Basic "), false, "Auth header must NEVER appear in logs");
+  assert.equal(loggedOutput.includes("Authorization"), false);
+  console.log("✓ Safe error formatter verified: rich cause codes logged with zero secret leakage");
 
   // Reset test fetch override
   setMidtransTestFetch(null);
