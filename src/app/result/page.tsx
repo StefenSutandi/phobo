@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { KioskStage } from "@/components/kiosk";
+import { KioskStage, SessionTimerHud } from "@/components/kiosk";
 import { CountdownTimer } from "@/components/kiosk/CountdownTimer";
 import { ResultQrCode } from "@/components/kiosk/ResultQrCode";
 import { useSessionStore } from "@/lib/session/session-store";
@@ -99,6 +99,9 @@ export default function Result() {
 
   return (
     <KioskStage>
+      <div style={{ position: "absolute", top: "18px", right: "36px", zIndex: 95 }}>
+        <SessionTimerHud compact isCriticalOperation={busy} />
+      </div>
       <div className="result-layout">
         {/* Left: Visual Kiosk Preview of the Final Composed Image */}
         <div className="result-preview-panel">

@@ -278,32 +278,55 @@ export default function AdditionalPreview() {
 
   return (
     <KioskStage>
-      <h1 className="preview-heading">PREVIEW ADDITIONAL FRAME</h1>
-
-      <div
-        className="preview-timer-badge"
+      <header
+        className="preview-header-bar"
         style={{
           position: "absolute",
-          right: "36px",
-          top: "22px",
-          zIndex: 25,
-          background: isExpired ? "#c0392b" : isUrgent ? "#d35400" : "var(--purple)",
-          borderRadius: "20px",
-          padding: "7px 18px",
-          fontSize: "20px",
-          fontWeight: "bold",
-          color: "#ffffff",
+          left: "45px",
+          top: "16px",
           display: "flex",
           alignItems: "center",
-          gap: "8px",
-          boxShadow: isUrgent || isExpired ? "0 0 15px rgba(231, 76, 60, 0.6)" : "none",
-          transition: "background-color 0.3s ease",
+          gap: "20px",
+          zIndex: 95,
+          maxWidth: "46%",
         }}
       >
-        <span>⏱</span>
-        <span>{formattedTimer}</span>
-        {isExpired && <span style={{ fontSize: "12px", marginLeft: "4px" }}>WAKTU HABIS</span>}
-      </div>
+        <h1
+          className="preview-heading"
+          style={{
+            position: "static",
+            margin: 0,
+            fontSize: "clamp(20px, 3vw, 36px)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          PREVIEW ADDITIONAL FRAME
+        </h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+          <div
+            className="preview-timer-badge"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              background: isExpired ? "#c0392b" : isUrgent ? "#d35400" : "var(--purple, #5E3BEE)",
+              color: "#ffffff",
+              padding: "6px 14px",
+              borderRadius: "20px",
+              fontWeight: "bold",
+              fontSize: "16px",
+              lineHeight: 1,
+              boxShadow: isUrgent || isExpired ? "0 0 15px rgba(231, 76, 60, 0.6)" : "0 4px 12px rgba(0,0,0,0.2)",
+              transition: "background-color 0.3s ease",
+              userSelect: "none",
+            }}
+          >
+            <span style={{ fontSize: "16px" }}>⏱</span>
+            <span>EDIT {formattedTimer}</span>
+            {isExpired && <span style={{ fontSize: "11px", opacity: 0.9, marginLeft: "4px" }}>HABIS</span>}
+          </div>
+        </div>
+      </header>
 
       <PreviewComposer
         frame={frame}

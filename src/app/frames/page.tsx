@@ -7,13 +7,14 @@ import {
   KioskButton,
   KioskStage,
   RoundedPanel,
+  SessionTimerHud,
 } from "@/components/kiosk";
 import { frames } from "@/lib/phobo-data";
 import { useSessionStore } from "@/lib/session/session-store";
 
 export default function Frames() {
   const router = useRouter();
-  const { session, hasHydrated, selectFrame } = useSessionStore();
+  const { session, hasHydrated, selectFrame, initSessionTimer } = useSessionStore();
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -23,8 +24,13 @@ export default function Frames() {
 
     if (session?.paymentStatus !== "confirmed") {
       router.replace("/payment");
+      return;
     }
-  }, [hasHydrated, router, session?.paymentStatus]);
+
+    if (!session?.sessionDeadlineAt) {
+      initSessionTimer(480);
+    }
+  }, [hasHydrated, router, session?.paymentStatus, session?.sessionDeadlineAt, initSessionTimer]);
 
   function goNext() {
     if (!session?.selectedFrameId) {
@@ -37,6 +43,16 @@ export default function Frames() {
 
   return (
     <KioskStage>
+      <div
+        style={{
+          position: "absolute",
+          right: "4.4%",
+          top: "3.5%",
+          zIndex: 95,
+        }}
+      >
+        <SessionTimerHud />
+      </div>
       <h1 className="frames-title">FRAME</h1>
       <RoundedPanel className="frame-panel">
         {session?.selectedFrameId && (

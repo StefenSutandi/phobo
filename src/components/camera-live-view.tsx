@@ -36,8 +36,10 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
   const [segmentationMode, setSegmentationMode] = useState<boolean>(false);
   
   const streamRef = useRef<MediaStream | null>(null);
+  const readySamplesRef = useRef<number>(0);
 
   const stopLiveView = () => {
+    readySamplesRef.current = 0;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -51,13 +53,24 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, { compact?: boole
 
   const isReady = () => {
     const video = videoRef.current;
-    return Boolean(
+    const track = streamRef.current?.getVideoTracks()[0];
+    const isTrackLive = Boolean(track && track.readyState === "live" && track.enabled);
+    const videoHasFrames = Boolean(
       status === "active" &&
+      isTrackLive &&
       video &&
       video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
       video.videoWidth > 0 &&
       video.videoHeight > 0
     );
+
+    if (videoHasFrames) {
+      readySamplesRef.current += 1;
+    } else {
+      readySamplesRef.current = 0;
+    }
+
+    return videoHasFrames && readySamplesRef.current >= 2;
   };
 
   const freezeFrame = (): string | null => {

@@ -3,9 +3,17 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CameraLiveView, type CameraLiveViewHandle } from "@/components/camera-live-view";
-import { BackgroundPicker, KioskButton, KioskStage } from "@/components/kiosk";
+import { BackgroundPicker, KioskButton, KioskStage, SessionTimerHud } from "@/components/kiosk";
 import { backgrounds } from "@/lib/phobo-data";
 import { useSessionStore } from "@/lib/session/session-store";
+
+export type CameraCaptureState =
+  | "idle"
+  | "countdown"
+  | "capturing"
+  | "recovering"
+  | "recovered"
+  | "recovery-warning";
 
 type CaptureResponse = {
   ok: boolean;
@@ -97,22 +105,28 @@ export default function Camera() {
 
   const [message, setMessage] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
+  const [captureState, setCaptureState] = useState<CameraCaptureState>("idle");
   const [mode, setMode] = useState("mock");
   const [captureMode, setCaptureMode] = useState("fallback");
   const [previewEnabled, setPreviewEnabled] = useState(true);
   const [countdown, setCountdown] = useState<number | string | null>(null);
   const [freezeFrameUrl, setFreezeFrameUrl] = useState<string | null>(null);
 
-  // Persistent Camera Session Countdown Timer
-  const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
-    if (session?.cameraDeadlineAt) {
-      const diff = Math.max(0, Math.floor((new Date(session.cameraDeadlineAt).getTime() - Date.now()) / 1000));
-      return diff;
-    }
-    const dur = session?.durationMinutes ?? 5;
-    return dur * 60;
-  });
+  const isMountedRef = useRef(true);
+  const bgRecoveryIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (bgRecoveryIntervalRef.current) {
+        clearInterval(bgRecoveryIntervalRef.current);
+        bgRecoveryIntervalRef.current = null;
+      }
+    };
+  }, []);
+
+  // Persistent Camera Session Countdown Timer metadata preservation
   useEffect(() => {
     if (!hasHydrated || !session) return;
     if (!session.cameraDeadlineAt) {
@@ -120,22 +134,63 @@ export default function Camera() {
     }
   }, [hasHydrated, session, initCameraTimer]);
 
-  useEffect(() => {
-    if (!session?.cameraDeadlineAt) return;
-    const updateTimer = () => {
-      const diff = Math.max(0, Math.floor((new Date(session.cameraDeadlineAt!).getTime() - Date.now()) / 1000));
-      setRemainingSeconds(diff);
-    };
-    updateTimer();
-    const interval = setInterval(updateTimer, 500);
-    return () => clearInterval(interval);
-  }, [session?.cameraDeadlineAt]);
+  const startBackgroundRecovery = useCallback(() => {
+    if (bgRecoveryIntervalRef.current) {
+      clearInterval(bgRecoveryIntervalRef.current);
+    }
 
-  const mins = Math.floor(remainingSeconds / 60);
-  const secs = remainingSeconds % 60;
-  const formattedTimer = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  const isUrgent = remainingSeconds <= 60 && remainingSeconds > 0;
-  const isExpired = remainingSeconds === 0;
+    const bgStartTime = Date.now();
+    const BG_TIMEOUT_MS = 20000;
+    let restartTimer = 0;
+
+    bgRecoveryIntervalRef.current = setInterval(async () => {
+      if (!isMountedRef.current) {
+        if (bgRecoveryIntervalRef.current) clearInterval(bgRecoveryIntervalRef.current);
+        return;
+      }
+
+      const elapsed = Date.now() - bgStartTime;
+      if (elapsed >= BG_TIMEOUT_MS) {
+        if (bgRecoveryIntervalRef.current) clearInterval(bgRecoveryIntervalRef.current);
+        bgRecoveryIntervalRef.current = null;
+        if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+          console.log("[Camera Preview] Bounded background recovery reached 20s timeout; photo safely preserved");
+        }
+        return;
+      }
+
+      // Periodically attempt controlled stream restart every 5 seconds
+      restartTimer += 500;
+      if (restartTimer >= 5000) {
+        restartTimer = 0;
+        try {
+          if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+            console.log("[Camera Preview] Background recovery: periodic restartLiveView attempt");
+          }
+          await live.current?.restartLiveView();
+        } catch (e) {
+          console.warn("[Camera Preview] Background restartLiveView error:", e);
+        }
+      }
+
+      if (live.current?.isReady()) {
+        if (bgRecoveryIntervalRef.current) clearInterval(bgRecoveryIntervalRef.current);
+        bgRecoveryIntervalRef.current = null;
+
+        // Settle window to prevent HDMI rainbow/color bars
+        await new Promise((r) => setTimeout(r, HDMI_RECOVERY_SETTLE_WINDOW_MS));
+
+        if (isMountedRef.current && live.current?.isReady()) {
+          setFreezeFrameUrl(null);
+          setCaptureState("recovered");
+          setMessage(`FOTO ${shotCount.current} TERSIMPAN`);
+          if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+            console.log("[Camera Preview] Background recovery successfully stabilized live view");
+          }
+        }
+      }
+    }, 500);
+  }, []);
 
   useEffect(() => {
     fetch("/api/diagnostics")
@@ -178,6 +233,7 @@ export default function Camera() {
 
     captureLock.current = true;
     setIsCapturing(true);
+    setCaptureState("countdown");
 
     for (let i = 3; i > 0; i--) {
       setCountdown(i);
@@ -190,7 +246,7 @@ export default function Camera() {
     // Exact shutter-time resolution: resolved immediately at shutter trigger after countdown
     const backgroundIdAtShutter = selectedBackgroundIdRef.current || session.selectedBackgroundId || backgrounds[0].id;
 
-    // 1. Freeze last good browser-video frame if preview is active
+    // 1. Freeze last good browser-video frame if preview is active BEFORE shutter
     if (previewEnabled) {
       const snapshot = live.current?.freezeFrame() || null;
       if (snapshot) {
@@ -201,6 +257,7 @@ export default function Camera() {
       }
     }
 
+    setCaptureState("capturing");
     setMessage("MENGAMBIL FOTO...");
 
     try {
@@ -258,7 +315,7 @@ export default function Camera() {
       if (shotCount.current >= max) return;
       shotCount.current += 1;
 
-      // 2. Save authoritative captured photo immediately
+      // 2. Save authoritative captured photo immediately (committed BEFORE recovery logic)
       addCapturedPhoto({
         raw: rawUrl,
         display: displayUrl as string,
@@ -269,21 +326,27 @@ export default function Camera() {
 
       // 3. Robust HDMI recovery if DSLR capture mode with preview is active
       if (captureMode === "digicamcontrol" && previewEnabled) {
+        setCaptureState("recovering");
         setMessage("KAMERA SEDANG MEMULIHKAN PREVIEW...");
         const recovered = await recoverDccPreview(live);
         if (recovered) {
           setFreezeFrameUrl(null);
+          setCaptureState("recovered");
           setMessage(`FOTO ${shotCount.current} TERSIMPAN`);
         } else {
+          setCaptureState("recovery-warning");
           setMessage("PREVIEW KAMERA BELUM PULIH — FOTO TETAP TERSIMPAN");
+          startBackgroundRecovery();
         }
       } else {
         setFreezeFrameUrl(null);
+        setCaptureState("recovered");
         setMessage(`FOTO ${shotCount.current} TERSIMPAN`);
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Foto gagal diambil. Silakan coba lagi.");
       setFreezeFrameUrl(null);
+      setCaptureState("idle");
     } finally {
       captureLock.current = false;
       setIsCapturing(false);
@@ -300,32 +363,13 @@ export default function Camera() {
           position: "absolute",
           left: "36px",
           top: "22px",
-          zIndex: 25,
+          zIndex: 95,
           display: "flex",
           alignItems: "center",
           gap: "14px",
         }}
       >
-        <div
-          className="camera-timer-badge"
-          style={{
-            background: isExpired ? "#c0392b" : isUrgent ? "#d35400" : "var(--purple)",
-            borderRadius: "20px",
-            padding: "7px 18px",
-            fontSize: "24px",
-            fontWeight: "bold",
-            color: "#ffffff",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            boxShadow: isUrgent || isExpired ? "0 0 15px rgba(231, 76, 60, 0.6)" : "none",
-            transition: "background-color 0.3s ease",
-          }}
-        >
-          <span style={{ fontSize: "20px" }}>⏱</span>
-          <span>{formattedTimer}</span>
-          {isExpired && <span style={{ fontSize: "12px", marginLeft: "4px" }}>WAKTU FOTO HABIS</span>}
-        </div>
+        <SessionTimerHud isCriticalOperation={isCapturing || captureState === "capturing" || captureState === "recovering"} />
 
         <div className="shot-counter" style={{ position: "static" }}>
           Shoot {maxReached ? max : count + 1} / {max}
@@ -396,7 +440,7 @@ export default function Camera() {
             left: "3.47%",
             width: "72%",
             height: "70%",
-            zIndex: 90,
+            zIndex: 85,
             borderRadius: "16px",
             overflow: "hidden",
             boxShadow: "0 10px 30px rgba(0,0,0,0.6)",
@@ -412,17 +456,31 @@ export default function Camera() {
             style={{
               position: "absolute",
               inset: 0,
-              backgroundColor: "rgba(0,0,0,0.3)",
+              backgroundColor: "rgba(0,0,0,0.35)",
               display: "flex",
+              flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
               color: "#ffffff",
               fontSize: "2.2rem",
               fontWeight: "bold",
+              textAlign: "center",
+              lineHeight: 1.3,
               textShadow: "0 4px 12px rgba(0,0,0,0.8)",
             }}
           >
-            MENGAMBIL FOTO...
+            {captureState === "recovery-warning" ? (
+              <>
+                <div>FOTO TERSIMPAN</div>
+                <div style={{ fontSize: "1.5rem", marginTop: "8px", fontWeight: "normal", opacity: 0.9 }}>
+                  MENUNGGU PREVIEW KAMERA...
+                </div>
+              </>
+            ) : captureState === "recovering" ? (
+              <div>MEMULIHKAN KAMERA...</div>
+            ) : (
+              <div>MENGAMBIL FOTO...</div>
+            )}
           </div>
         </div>
       )}

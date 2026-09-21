@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { KioskButton, KioskStage, PhotoResultStrip, PreviewComposer, StickerPicker } from "@/components/kiosk";
+import { KioskButton, KioskStage, PhotoResultStrip, PreviewComposer, StickerPicker, SessionTimerHud } from "@/components/kiosk";
 import { getFrameById, getBackgroundById } from "@/lib/phobo-data";
 import { assignPhotoToSlot } from "@/lib/preview/slot-assignment";
 import { classifyPointerGesture } from "@/lib/preview/gesture-arbitration";
@@ -44,6 +44,7 @@ export default function Preview() {
   });
 
   const hasAutoContinuedRef = useRef(false);
+  const composeLockRef = useRef(false);
 
   useEffect(() => {
     if (!hasHydrated || !session) return;
@@ -255,9 +256,15 @@ export default function Preview() {
     assignments.every(idx => idx !== null && idx !== undefined && idx >= 0 && idx < captured.length);
 
   async function next() {
-    if (!isReady || !session || saving) return;
+    if (composeLockRef.current || !isReady || !session || saving) return;
+    composeLockRef.current = true;
     setSaving(true);
     setError("");
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 35000);
 
     try {
       const stickersEnabled = process.env.NEXT_PUBLIC_PHOBO_STICKERS_ENABLED !== "false";
@@ -277,6 +284,7 @@ export default function Preview() {
       const r = await fetch("/api/results/compose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           sessionId: session.sessionId,
           capturedPhotos: captured,
@@ -289,24 +297,31 @@ export default function Preview() {
         }),
       });
 
+      clearTimeout(timeoutId);
+
       const text = await r.text();
       let d;
       try {
         d = JSON.parse(text);
-      } catch (err) {
-        throw new Error(`API returned non-JSON response: ${text.substring(0, 200)}`);
+      } catch {
+        throw new Error("GAGAL MEMPROSES HASIL — COBA LAGI");
       }
 
       if (!r.ok || !d.ok || !d.finalImageUrl || !d.printImageUrl) {
-        throw new Error(d.error || "Failed to compose result");
+        throw new Error(d.error || "GAGAL MEMPROSES HASIL — COBA LAGI");
       }
 
       setFinalImageUrl(d.finalImageUrl);
       setPrintImageUrl(d.printImageUrl);
       if (d.driveUrl) setDriveUrl(d.driveUrl);
-      router.push("/result");
+      router.replace("/result");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to compose result");
+      clearTimeout(timeoutId);
+      composeLockRef.current = false;
+      const msg = e instanceof Error && e.name === "AbortError"
+        ? "GAGAL MEMPROSES HASIL — COBA LAGI"
+        : (e instanceof Error && e.message.includes("GAGAL") ? e.message : "GAGAL MEMPROSES HASIL — COBA LAGI");
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -314,7 +329,7 @@ export default function Preview() {
 
   // Safe auto-continue at 00:00 expiry when ready
   useEffect(() => {
-    if (isExpired && isReady && !saving && !hasAutoContinuedRef.current) {
+    if (isExpired && isReady && !saving && !composeLockRef.current && !hasAutoContinuedRef.current) {
       hasAutoContinuedRef.current = true;
       next();
     }
@@ -330,32 +345,56 @@ export default function Preview() {
 
   return (
     <KioskStage>
-      <h1 className="preview-heading">PREVIEW FRAME</h1>
-
-      <div
-        className="preview-timer-badge"
+      <header
+        className="preview-header-bar"
         style={{
           position: "absolute",
-          right: "36px",
-          top: "22px",
-          zIndex: 25,
-          background: isExpired ? "#c0392b" : isUrgent ? "#d35400" : "var(--purple)",
-          borderRadius: "20px",
-          padding: "7px 18px",
-          fontSize: "20px",
-          fontWeight: "bold",
-          color: "#ffffff",
+          left: "45px",
+          top: "16px",
           display: "flex",
           alignItems: "center",
-          gap: "8px",
-          boxShadow: isUrgent || isExpired ? "0 0 15px rgba(231, 76, 60, 0.6)" : "none",
-          transition: "background-color 0.3s ease",
+          gap: "20px",
+          zIndex: 95,
+          maxWidth: "46%",
         }}
       >
-        <span>⏱</span>
-        <span>{formattedTimer}</span>
-        {isExpired && <span style={{ fontSize: "12px", marginLeft: "4px" }}>WAKTU HABIS</span>}
-      </div>
+        <h1
+          className="preview-heading"
+          style={{
+            position: "static",
+            margin: 0,
+            fontSize: "clamp(24px, 3.5vw, 42px)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          PREVIEW FRAME
+        </h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+          <SessionTimerHud compact isCriticalOperation={saving} />
+          <div
+            className="preview-timer-badge"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              background: isExpired ? "#c0392b" : isUrgent ? "#d35400" : "var(--purple, #5E3BEE)",
+              color: "#ffffff",
+              padding: "6px 14px",
+              borderRadius: "20px",
+              fontWeight: "bold",
+              fontSize: "16px",
+              lineHeight: 1,
+              boxShadow: isUrgent || isExpired ? "0 0 15px rgba(231, 76, 60, 0.6)" : "0 4px 12px rgba(0,0,0,0.2)",
+              transition: "background-color 0.3s ease",
+              userSelect: "none",
+            }}
+          >
+            <span style={{ fontSize: "16px" }}>⏱</span>
+            <span>EDIT {formattedTimer}</span>
+            {isExpired && <span style={{ fontSize: "11px", opacity: 0.9, marginLeft: "4px" }}>HABIS</span>}
+          </div>
+        </div>
+      </header>
 
       <PreviewComposer
         frame={frame}
@@ -393,7 +432,42 @@ export default function Preview() {
         </p>
       )}
 
-      {error && <p className="kiosk-message">{error}</p>}
+      {error && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "20px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "8px",
+            zIndex: 100,
+          }}
+        >
+          <p className="kiosk-message" style={{ position: "static", color: "#ff4757", margin: 0, fontWeight: "bold" }}>
+            {error}
+          </p>
+          <button
+            type="button"
+            onClick={() => next()}
+            style={{
+              background: "#e74c3c",
+              color: "#fff",
+              border: "none",
+              borderRadius: "16px",
+              padding: "8px 24px",
+              fontSize: "16px",
+              fontWeight: "bold",
+              cursor: "pointer",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+            }}
+          >
+            COBA LAGI
+          </button>
+        </div>
+      )}
 
       {/* Floating Landscape Drag Avatar */}
       {draggingPhotoIdx !== null && dragPos && (

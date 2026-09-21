@@ -5,6 +5,8 @@ import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState, useRef } from "react";
 import { CountdownTimer } from "./kiosk/CountdownTimer";
+import { SessionTimerHud } from "./kiosk/SessionTimerHud";
+export { SessionTimerHud } from "./kiosk/SessionTimerHud";
 import type { FrameData } from "@/lib/phobo-data";
 import { getBackgroundById } from "@/lib/phobo-data";
 import type { StickerPlacement, CapturedPhoto } from "@/lib/session/session-types";

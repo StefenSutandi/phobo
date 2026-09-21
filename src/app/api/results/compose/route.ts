@@ -174,15 +174,19 @@ export async function POST(request: Request) {
       const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
       if (folderId) {
         try {
-          const uploadResult = await uploadFileToGoogleDrive({
+          const driveUploadPromise = uploadFileToGoogleDrive({
             filePath: finalScreenPath,
             fileName: `phobo_${safeSessionId}.png`,
             mimeType: "image/png",
             folderId: folderId
           });
+          const driveTimeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Drive upload timeout after 7s")), 7000)
+          );
+          const uploadResult = await Promise.race([driveUploadPromise, driveTimeoutPromise]);
           driveUrl = uploadResult.webViewLink;
         } catch (uploadError) {
-          console.error(`[Compose API] Drive upload failed for ${safeSessionId}:`, uploadError instanceof Error ? uploadError.message : String(uploadError));
+          console.error(`[Compose API] Drive upload non-fatal error for ${safeSessionId}:`, uploadError instanceof Error ? uploadError.message : String(uploadError));
         }
       }
     }

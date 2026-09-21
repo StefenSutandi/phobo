@@ -63,6 +63,8 @@ export type KioskSession = {
   printStatus: PrintStatus;
   printCommitted?: boolean;
   printAttemptedAt?: string;
+  sessionStartedAt?: string;
+  sessionDeadlineAt?: string;
   cameraStartedAt?: string;
   cameraDeadlineAt?: string;
   previewStartedAt?: string;
