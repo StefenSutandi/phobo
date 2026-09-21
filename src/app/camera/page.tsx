@@ -355,6 +355,13 @@ export default function Camera() {
 
   const selectedBgObj = backgrounds.find(bg => bg.id === (selectedBackgroundIdRef.current || session?.selectedBackgroundId));
 
+  const cameraCriticalOperation =
+    isCapturing ||
+    captureState === "countdown" ||
+    captureState === "capturing" ||
+    captureState === "recovering" ||
+    captureState === "recovery-warning";
+
   return (
     <KioskStage>
       <div
@@ -369,7 +376,7 @@ export default function Camera() {
           gap: "14px",
         }}
       >
-        <SessionTimerHud isCriticalOperation={isCapturing || captureState === "capturing" || captureState === "recovering"} />
+        <SessionTimerHud isCriticalOperation={cameraCriticalOperation} />
 
         <div className="shot-counter" style={{ position: "static" }}>
           Shoot {maxReached ? max : count + 1} / {max}

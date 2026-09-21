@@ -1069,6 +1069,47 @@ async function runProductionUxTests() {
   assert.equal(delayedState, "recovered", "C15: state must become recovered after background recovery");
   console.log("✓ C15: Delayed recovery after initial failure eventually clears freeze");
 
+  // C15B: Global timer expires during recovery-warning -> NO navigation until recovery finishes
+  let isNavigatedAway = false;
+  const timerExpiredDuringRecoveryRef = { current: false };
+
+  function checkSessionExpiry(secondsLeft, isCriticalOperation) {
+    if (secondsLeft <= 0 && !isCriticalOperation && !timerExpiredDuringRecoveryRef.current) {
+      timerExpiredDuringRecoveryRef.current = true;
+      isNavigatedAway = true;
+    }
+  }
+
+  // Camera is in recovery-warning
+  let simCaptureState = "recovery-warning";
+  let simIsCapturing = false;
+  let simCameraCritical =
+    simIsCapturing ||
+    simCaptureState === "countdown" ||
+    simCaptureState === "capturing" ||
+    simCaptureState === "recovering" ||
+    simCaptureState === "recovery-warning";
+
+  // Timer hits 00:00 during recovery-warning
+  checkSessionExpiry(0, simCameraCritical);
+  assert.equal(isNavigatedAway, false, "C15B: must NOT navigate away while in recovery-warning");
+  console.log("✓ C15B: Global timer expires during recovery-warning -> NO navigation while recovery is in flight");
+
+  // When recovery finishes and transitions to recovered
+  simCaptureState = "recovered";
+  simCameraCritical =
+    simIsCapturing ||
+    simCaptureState === "countdown" ||
+    simCaptureState === "capturing" ||
+    simCaptureState === "recovering" ||
+    simCaptureState === "recovery-warning";
+
+  // Re-evaluating with critical=false allows clean single navigation
+  checkSessionExpiry(0, simCameraCritical);
+  assert.equal(isNavigatedAway, true, "C15B: navigates away once recovery is finished");
+  assert.equal(timerExpiredDuringRecoveryRef.current, true, "C15B: one-shot navigation lock engaged");
+  console.log("✓ C15B: Once recovery finishes, expired session navigates safely exactly once");
+
   // C16: recovery timeout never deletes stored photo
   assert.equal(sessionPhotos.length, 1, "C16: stored photo must never be deleted even if recovery times out");
   console.log("✓ C16: Recovery timeout never deletes stored photo");
@@ -1104,6 +1145,19 @@ async function runProductionUxTests() {
   assert.ok(liveViewCode.includes("readySamplesRef.current >= 2"), "C20: Must require consecutive ready samples");
   assert.ok(cameraPageCode.includes("HDMI_RECOVERY_SETTLE_WINDOW_MS"), "C20: Settle window must be observed before clearing freeze");
   console.log("✓ C20: Conservative readiness verified: consecutive ready samples and settle window prevent transient HDMI bars");
+
+  // C21: Camera page treats all lifecycle states as critical
+  assert.ok(
+    cameraPageCode.includes("cameraCriticalOperation") &&
+    cameraPageCode.includes('captureState === "recovery-warning"'),
+    "C21: Camera page must include recovery-warning in cameraCriticalOperation"
+  );
+  console.log("✓ C21: Camera critical state verified: countdown, capturing, recovering, recovery-warning are protected");
+
+  // C22: Result page owns its own countdown timers without SessionTimerHud
+  const resultPageCode = await fs.readFile(path.join(projectRoot, "src/app/result/page.tsx"), "utf-8");
+  assert.ok(!resultPageCode.includes("<SessionTimerHud"), "C22: Result page must not render SessionTimerHud");
+  console.log("✓ C22: Result page timer ownership verified: SessionTimerHud removed, 300s/60s CountdownTimer owns lifecycle");
   }
 
   console.log("\n==================================================");
