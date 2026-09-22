@@ -335,9 +335,34 @@ export async function dccRawBinaryRequest(pathAndQuery: string, timeoutMs = 3000
   });
 }
 
+export type DccLiveFrameMeta = {
+  buffer: Buffer;
+  sequence: number;
+  timestamp: number;
+  isNew: boolean;
+};
+
+let liveFrameSeq = 0;
+let lastFrameSample = "";
+
+export async function ensureDccLiveViewStarted(): Promise<boolean> {
+  try {
+    await dccRawRequest("/?CMD=LiveViewWnd_Show", 2000);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
 export async function getDccLiveViewFrame(): Promise<Buffer | null> {
   try {
-    const buffer = await dccRawBinaryRequest("/liveview.jpg", 1500);
+    let buffer = await dccRawBinaryRequest("/liveview.jpg", 1500);
+    if (buffer && buffer.length > 100) {
+      return buffer;
+    }
+    // If live view window wasn't open in DCC, attempt to trigger LiveViewWnd_Show
+    await ensureDccLiveViewStarted();
+    buffer = await dccRawBinaryRequest("/liveview.jpg", 1500);
     if (buffer && buffer.length > 100) {
       return buffer;
     }
@@ -345,6 +370,26 @@ export async function getDccLiveViewFrame(): Promise<Buffer | null> {
   } catch (err) {
     return null;
   }
+}
+
+export async function getDccLiveViewFrameWithMeta(): Promise<DccLiveFrameMeta | null> {
+  const buffer = await getDccLiveViewFrame();
+  if (!buffer) return null;
+
+  const timestamp = Date.now();
+  const sample = `${buffer.length}:${buffer.subarray(0, 16).toString("hex")}:${buffer.subarray(Math.floor(buffer.length / 2), Math.floor(buffer.length / 2) + 16).toString("hex")}`;
+  const isNew = sample !== lastFrameSample;
+  if (isNew) {
+    liveFrameSeq++;
+    lastFrameSample = sample;
+  }
+
+  return {
+    buffer,
+    sequence: liveFrameSeq,
+    timestamp,
+    isNew,
+  };
 }
 
 export async function checkDccHealth(): Promise<{

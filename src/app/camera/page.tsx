@@ -37,20 +37,25 @@ const HDMI_RECOVERY_SETTLE_WINDOW_MS = 900;
 async function recoverDccPreview(liveRef: React.RefObject<CameraLiveViewHandle | null>): Promise<boolean> {
   if (!liveRef.current) return true;
 
+  const activeProvider = liveRef.current.getActiveProvider ? liveRef.current.getActiveProvider() : "digicamcontrol";
+  if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+    console.log(`[Camera Preview] ActiveProvider=${activeProvider} State=recovering`);
+  }
+
   // 1. Initial wait for physical shutter cycle to complete
   await new Promise((r) => setTimeout(r, HDMI_RECOVERY_POST_DCC_WAIT_MS));
 
-  // 2. First restart attempt of browser capture stream while freeze overlay remains visible on top
+  // 2. First restart attempt of active preview provider while freeze overlay remains visible on top
   try {
     if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
-      console.log("[Camera Preview] Restarting browser live view stream while freeze overlay is active");
+      console.log(`[Camera Preview] ActiveProvider=${activeProvider} State=recovering Attempt=1`);
     }
     await liveRef.current.restartLiveView();
   } catch (err) {
     console.warn("[Camera Preview] restartLiveView error (attempt 1):", err);
   }
 
-  // 3. Poll until stream reports ready
+  // 3. Poll until active provider reports ready (requires advancing stable frames)
   const pollStart = Date.now();
   let streamActive = false;
   while (Date.now() - pollStart < HDMI_RECOVERY_POLL_TIMEOUT_MS) {
@@ -64,7 +69,7 @@ async function recoverDccPreview(liveRef: React.RefObject<CameraLiveViewHandle |
   // 4. If first attempt failed, perform one additional controlled restart attempt
   if (!streamActive) {
     if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
-      console.log("[Camera Preview] Attempt 1 did not become ready; retrying controlled restart");
+      console.log(`[Camera Preview] ActiveProvider=${activeProvider} State=recovering Attempt=2`);
     }
     try {
       await liveRef.current.restartLiveView();
@@ -84,7 +89,7 @@ async function recoverDccPreview(liveRef: React.RefObject<CameraLiveViewHandle |
   if (streamActive) {
     // 5. Additional settle window to allow video frames to stabilize and clear any residual buffer
     if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
-      console.log(`[Camera Preview] Stream active; waiting ${HDMI_RECOVERY_SETTLE_WINDOW_MS}ms settle window before clearing freeze`);
+      console.log(`[Camera Preview] ActiveProvider=${activeProvider} Stream active; waiting ${HDMI_RECOVERY_SETTLE_WINDOW_MS}ms settle window before clearing freeze`);
     }
     await new Promise((r) => setTimeout(r, HDMI_RECOVERY_SETTLE_WINDOW_MS));
     return true;
@@ -388,6 +393,8 @@ export default function Camera() {
           ref={live} 
           compact 
           autoStart
+          preferredProvider={captureMode === "digicamcontrol" ? "digicamcontrol" : "browser-video"}
+          captureMode={captureMode}
           selectedBackgroundUrl={selectedBgObj?.imageUrl}
           tuning={session?.greenScreenTuning}
         />
