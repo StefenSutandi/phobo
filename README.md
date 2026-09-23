@@ -1,18 +1,743 @@
 # Phobo Photobox Kiosk System
 
-Phobo is a Next.js and TypeScript photobox kiosk MVP for a Mini PC controller, Android TV + infrared touch screen panel, Canon 600D camera, and Canon SELPHY CP1500 printer.
+Phobo is a production-oriented photobox kiosk application built with Next.js + TypeScript for a Windows Mini PC, Canon EOS 600D, Canon SELPHY CP1500, and a large touchscreen display.
 
-Current status: the app has mock-safe defaults plus env-gated foundations for camera capture and Windows printing. The kiosk UI, session flow, local result storage, QR sharing, photo compositing, MVP green screen processing, 4R print file generation, and mock print flow are implemented. Real Canon capture, real SELPHY printing, Google Drive upload, and payment gateway integration are not enabled by default.
+This README is intentionally written as the primary developer/AI handover document. If a new developer, ChatGPT session, or coding agent joins the project, read this file first before changing code.
 
-## Documentation
+> **Current production baseline (2026-09-23):** `7e01822` — `fix: unify DSLR live preview with capture session`
 
-- [Windows Kiosk Deployment](docs/WINDOWS_KIOSK_DEPLOYMENT.md)
-- [Operator Guide](docs/OPERATOR_GUIDE.md)
-- [Maintenance Guide](docs/MAINTENANCE_GUIDE.md)
-- [Handover Video Script](docs/HANDOVER_VIDEO_SCRIPT.md)
-- [CRCS Hardware Bring-Up](docs/CRCS_HARDWARE_BRINGUP.md)
+---
 
-## Development Run
+## 1. Current Project Status
+
+The main customer flow is implemented end-to-end:
+
+- package selection
+- payment
+- frame selection
+- DSLR live preview
+- background replacement / chroma key
+- Canon shutter capture
+- photo selection/replacement
+- sticker placement
+- final composition
+- QR result sharing
+- Google Drive upload
+- Canon SELPHY printing
+- paid add-print flow
+- session/edit/result timers
+- operator/admin fallback tools
+
+Recent physical testing confirmed:
+
+- DSLR shutter capture works
+- photo replacement works
+- stickers work
+- result QR can be scanned
+- Canon SELPHY print works
+- print count orchestration works
+- camera recovery logic has been hardened
+- DCC live view and DSLR capture now use the same Canon/digiCamControl camera session
+
+The two most important remaining production checks are:
+
+1. physical validation of the new digiCamControl-primary live preview on the actual Mini PC
+2. final Midtrans production QRIS/network validation from the actual Mini PC
+
+Do not redesign stable subsystems unless a physical test demonstrates a real failure.
+
+---
+
+## 2. Hardware
+
+Target deployment:
+
+- **Controller:** Windows Mini PC
+- **Camera:** Canon EOS 600D
+- **Camera control:** digiCamControl
+- **Customer display:** large display / Android TV with IR touch overlay
+- **Printer:** Canon SELPHY CP1500
+- **Internet:** required for Midtrans production payment and Google Drive upload
+
+Typical production repository path on the Mini PC:
+
+```text
+C:\Users\DELL\Downloads\Phobo_live
+```
+
+Developer machine has also used:
+
+```text
+C:\KYLO\INSTITUT TEKNOLOGI BANDUNG\ITB 22\Project\Phobo
+```
+
+and a junction at:
+
+```text
+C:\Users\stefe\Downloads\Phobo
+```
+
+Do not assume those developer paths exist on the production Mini PC.
+
+---
+
+## 3. Software Stack
+
+- Next.js 16
+- React 19
+- TypeScript
+- Sharp
+- qrcode
+- googleapis
+- midtrans-client
+- Windows direct printing via the printer adapter
+- digiCamControl local webserver/raw TCP integration
+
+Useful package scripts:
+
+```bash
+npm run dev
+npm run build
+npm run start
+npm run start:prod
+npm run lint
+```
+
+---
+
+## 4. High-Level Architecture
+
+```text
+Customer
+   |
+   v
+Phobo Next.js Kiosk
+   |
+   +----------------------- Payment ----------------------+
+   |                                                      |
+   |                        Midtrans QRIS                  |
+   |                        operator fallback             |
+   |                                                      |
+   +----------------------- Camera -----------------------+
+   |                                                      |
+   |      Canon EOS 600D                                  |
+   |          |                                           |
+   |          v                                           |
+   |      digiCamControl                                  |
+   |          |                                           |
+   |          +--> /liveview.jpg --> Phobo live preview  |
+   |          |                     + chroma key          |
+   |          |                     + background          |
+   |          |                                           |
+   |          +--> shutter/capture --> full-res JPEG      |
+   |                                                      |
+   +----------------------- Result -----------------------+
+   |                                                      |
+   |      compose final_screen.png                        |
+   |      compose final_print.jpg                         |
+   |      Google Drive upload                             |
+   |      QR result                                       |
+   |                                                      |
+   +----------------------- Print ------------------------+
+                                                          |
+                                  Canon SELPHY CP1500 <---+
+```
+
+Important design rule:
+
+> **Live preview frames are never the authoritative final photo.**
+
+The final captured photo always comes from the real Canon DSLR shutter flow through digiCamControl.
+
+---
+
+## 5. Customer Flow
+
+Main flow:
+
+```text
+/
+-> package
+-> payment
+-> frames
+-> camera
+-> preview
+-> result
+-> closing
+```
+
+Additional print flow:
+
+```text
+/result
+-> additional-frame
+-> additional-preview
+-> add-print-payment
+-> additional result/print flow
+```
+
+Admin/operator tooling is separate from the normal customer path.
+
+---
+
+## 6. Package Contract
+
+Current code source of truth: `src/lib/phobo-data.ts`.
+
+| Package | Price | Required shots | Included prints | Legacy package duration metadata |
+|---|---:|---:|---:|---:|
+| BASIC | Rp45.000 | 8 | 1 | 5 min |
+| DUO | Rp60.000 | 8 | 2 | 7 min |
+| PREMIUM | Rp65.000 | 16 | 2 | 10 min |
+
+Additional print:
+
+```text
+Rp20.000
+```
+
+Important:
+
+- `includedPrintCount` controls physical print quantity.
+- Basic prints 1 copy.
+- Duo prints 2 sequential copies.
+- Premium prints 2 sequential copies.
+- Each printer API call represents one physical print job.
+- Do not convert this into `Copies=2` inside a single Windows print request unless the print pipeline is deliberately redesigned and physically revalidated.
+
+---
+
+## 7. Session Timers
+
+There are multiple timers with different responsibilities.
+
+### Global paid session timer
+
+A persistent **8-minute global session timer** starts once after payment is confirmed and the customer enters `/frames`.
+
+Stored in session as:
+
+```text
+sessionStartedAt
+sessionDeadlineAt
+```
+
+The global timer:
+
+- does not reset on navigation
+- does not reset on rerender
+- does not reset on reload
+- remains active through frames, camera, and preview
+- does not interrupt an already committed camera/recovery operation
+- is not displayed on `/result`
+
+### Preview edit timer
+
+`/preview` has an independent **2-minute edit timer**.
+
+At expiry:
+
+- compose runs exactly once
+- UI shows `PROCESSING...`
+- successful compose routes to `/result`
+- failure exits processing state and allows retry
+
+### Result timer
+
+`/result` owns its own countdown:
+
+- 300 seconds before print
+- 60-second grace period after successful print
+- then route to `/closing`
+
+Do not show the global session timer on `/result` because it would compete with the result-specific timer.
+
+---
+
+## 8. Camera Architecture
+
+### Current preferred provider
+
+When:
+
+```env
+PHOBO_CAMERA_CAPTURE_MODE=digicamcontrol
+```
+
+the preferred live preview provider is digiCamControl.
+
+Browser `getUserMedia()` remains a fallback.
+
+### Verified digiCamControl endpoints
+
+digiCamControl local webserver default:
+
+```text
+http://127.0.0.1:5513
+```
+
+Verified live-view frame endpoint:
+
+```text
+GET /liveview.jpg
+```
+
+Verified live-view activation command:
+
+```text
+GET /?CMD=LiveViewWnd_Show
+```
+
+These were verified from the local digiCamControl WebServer HTML, not guessed.
+
+### Why Phobo uses a custom raw TCP DCC client
+
+The digiCamControl webserver can produce malformed/nonstandard HTTP behavior, including duplicate or unreliable `Content-Length` handling and sockets that do not close normally.
+
+The adapter therefore uses a specialized raw TCP client in:
+
+```text
+src/lib/camera/digicamcontrol-adapter.ts
+```
+
+Do not replace this with a plain `fetch()`/Node HTTP call without physically validating it against the installed DCC version.
+
+### Live preview pipeline
+
+```text
+/liveview.jpg
+-> Phobo server proxy
+-> CameraLiveView
+-> decode frame
+-> offscreen canvas
+-> chroma key
+-> selected background
+-> customer preview
+```
+
+The DCC preview requires advancing frames before it is considered recovered. A stale repeated image must not count as successful recovery.
+
+### Browser-video fallback
+
+If DCC live view cannot initialize, Phobo may fall back to:
+
+```text
+navigator.mediaDevices.getUserMedia(...)
+```
+
+This is a fallback only for production DCC mode.
+
+### DSLR shutter capture
+
+Actual final photo capture remains separate from live preview:
+
+```text
+Phobo SHOOT
+-> /api/camera/capture
+-> digiCamControl command
+-> physical Canon shutter
+-> full-resolution JPEG
+-> public/results/{sessionId}/captures/
+-> session capturedPhotos
+```
+
+The Canon JPEG is committed before preview recovery logic runs.
+
+### Capture safety rules
+
+Do not break these invariants:
+
+- one customer SHOOT = one Canon shutter
+- duplicate taps must not create duplicate captures
+- selected background at shutter time is authoritative
+- captured JPEG must survive preview recovery failure
+- shot count increments exactly once
+- preview frame is never used as the final DSLR photo
+
+---
+
+## 9. Camera Freeze / Recovery Lifecycle
+
+Camera UI states:
+
+```text
+idle
+countdown
+capturing
+recovering
+recovered
+recovery-warning
+```
+
+Normal physical sequence:
+
+```text
+3
+2
+1
+SMILE
+-> freeze last good preview frame
+-> trigger Canon shutter
+-> store Canon JPEG
+-> recover active preview provider
+-> require stable/advancing frames
+-> settle
+-> remove freeze
+```
+
+Overlay copy:
+
+- capturing: `MENGAMBIL FOTO...`
+- recovering: `MEMULIHKAN KAMERA...`
+- long recovery: `FOTO TERSIMPAN / MENUNGGU PREVIEW KAMERA...`
+
+The camera HUD must stay visible above the freeze overlay.
+
+Current intended z-index hierarchy:
+
+```text
+countdown overlay      100
+session HUD             95
+freeze overlay          85
+live camera             lower
+```
+
+Do not clear the freeze just because a video element has dimensions. Recovery needs actual stable frames.
+
+---
+
+## 10. Green Screen / Background Processing
+
+The live customer preview applies chroma-key processing on a canvas.
+
+Relevant tuning fields:
+
+```text
+applyChromaKey
+greenMin
+greenTolerance
+spillReduction
+edgeSoftness
+```
+
+Background is selectable during camera flow.
+
+For each captured photo, the background active at shutter time is stored with the photo so later preview/composition can preserve per-shot background choice.
+
+Frame slot geometry comes from:
+
+```text
+public/assets/frames/frame-slots.json
+```
+
+Do not casually change frame masks, slot geometry, composition scaling, or sticker coordinate behavior because those have already gone through physical parity fixes.
+
+---
+
+## 11. Preview / Sticker Behavior
+
+In `/preview` the user can:
+
+- assign captured photos to frame slots
+- replace an existing photo in a slot
+- drag/drop using IR touch/pointer events
+- use tap fallback
+- add/move/remove stickers
+- wait for automatic compose when the 2-minute edit timer expires
+
+The preview compose request is protected against:
+
+- double NEXT click
+- timeout + NEXT race
+- React rerender duplicate compose
+
+Compose has a bounded client timeout.
+
+If compose fails, expected customer message:
+
+```text
+GAGAL MEMPROSES HASIL — COBA LAGI
+```
+
+---
+
+## 12. Result Composition
+
+Result files are stored under:
+
+```text
+public/results/{sessionId}/
+```
+
+Important generated assets:
+
+```text
+final_screen.png
+final_print.jpg
+compose-manifest.json
+captures/
+```
+
+`final_screen.png` is used for the customer result/QR/share flow.
+
+`final_print.jpg` is the printer asset.
+
+Compose is designed to be idempotent when inputs are unchanged.
+
+Google Drive upload is non-fatal. A Drive problem must not destroy a successfully composed local result.
+
+Drive upload currently has a bounded timeout so the kiosk does not remain stuck forever on processing.
+
+---
+
+## 13. Google Drive
+
+Drive is optional and controlled by environment configuration.
+
+Typical production variables:
+
+```env
+PHOBO_DRIVE_ENABLED=true
+GOOGLE_DRIVE_AUTH_MODE=oauth
+GOOGLE_DRIVE_FOLDER_ID=...
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+GOOGLE_OAUTH_REFRESH_TOKEN=...
+```
+
+Never commit real OAuth secrets or refresh tokens.
+
+If Drive upload fails but local composition succeeds, the result should still exist locally.
+
+---
+
+## 14. Printing
+
+Target printer:
+
+```text
+Canon SELPHY CP1500
+```
+
+Current production print intent:
+
+```text
+4R / Japanese Postcard
+1181 x 1748 px
+portrait
+single image
+fill
+```
+
+Typical production configuration:
+
+```env
+PHOBO_PRINTER_MODE=windows
+PHOBO_PRINTER_NAME=Canon SELPHY CP1500
+PHOBO_PRINT_COMMAND_MODE=direct-dotnet
+PHOBO_PRINT_DRY_RUN=false
+PHOBO_PRINT_FIT=fill
+PHOBO_PRINT_WIDTH_PX=1181
+PHOBO_PRINT_HEIGHT_PX=1748
+```
+
+Important print behavior:
+
+- one API request = one physical print job
+- Basic -> 1 sequential request
+- Duo/Premium -> 2 sequential requests
+- result print is protected by a persisted one-shot lock
+- do not re-enable repeated print button behavior after print commit
+
+Physical printer output has already been tested successfully.
+
+---
+
+## 15. Payment Architecture
+
+Supported providers:
+
+```text
+midtrans
+operator
+mock
+```
+
+Production target:
+
+```env
+PHOBO_PAYMENT_PROVIDER=midtrans
+MIDTRANS_ENABLED=true
+MIDTRANS_IS_PRODUCTION=true
+```
+
+### Midtrans
+
+Phobo uses Midtrans Core API QRIS.
+
+Server-side pricing is authoritative. Do not trust customer-supplied amounts.
+
+The QR displayed to customers must come only from:
+
+- valid Midtrans `qr_string`
+- valid Midtrans QR action URL
+
+Never synthesize a QR from an order ID.
+
+A previous bug generated a fake QR from text such as:
+
+```text
+MIDTRANS-ORDER-...
+```
+
+That behavior was removed and must never be reintroduced.
+
+If no authentic QRIS source exists, return an error/503 instead of displaying a fake QR.
+
+### Midtrans network requirement
+
+The production Mini PC must be able to reach:
+
+```text
+api.midtrans.com:443
+```
+
+Useful checks:
+
+```powershell
+Test-NetConnection api.midtrans.com -Port 443
+```
+
+```bash
+node -e "fetch('https://api.midtrans.com').then(r=>console.log('HTTP',r.status)).catch(e=>console.error(e,e.cause))"
+```
+
+Any HTTP response proves basic HTTPS reachability. A Node `fetch failed` requires network/DNS/TLS diagnosis.
+
+### Operator fallback
+
+Operator/static QRIS mode remains available as fallback.
+
+Do not remove it until Midtrans has passed full physical production validation.
+
+---
+
+## 16. Environment Configuration
+
+Do not commit `.env.local`.
+
+A production-like configuration looks conceptually like this:
+
+```env
+# Camera
+PHOBO_CAMERA_MODE=browser-video
+PHOBO_CAMERA_CAPTURE_MODE=digicamcontrol
+PHOBO_DIGICAM_BASE_URL=http://127.0.0.1:5513
+PHOBO_CAMERA_PREVIEW_ENABLED=true
+NEXT_PUBLIC_CAMERA_DEBUG=false
+
+# Printer
+PHOBO_PRINTER_MODE=windows
+PHOBO_PRINTER_NAME=Canon SELPHY CP1500
+PHOBO_PRINT_COMMAND_MODE=direct-dotnet
+PHOBO_PRINT_DRY_RUN=false
+PHOBO_PRINT_FIT=fill
+PHOBO_PRINT_WIDTH_PX=1181
+PHOBO_PRINT_HEIGHT_PX=1748
+
+# Storage
+PHOBO_STORAGE_MODE=local
+PHOBO_RESULTS_DIR=public/results
+PHOBO_STICKERS_ENABLED=true
+
+# Google Drive
+PHOBO_DRIVE_ENABLED=true
+GOOGLE_DRIVE_AUTH_MODE=oauth
+GOOGLE_DRIVE_FOLDER_ID=...
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+GOOGLE_OAUTH_REFRESH_TOKEN=...
+
+# Payment
+PHOBO_PAYMENT_PROVIDER=midtrans
+MIDTRANS_ENABLED=true
+MIDTRANS_IS_PRODUCTION=true
+MIDTRANS_SERVER_KEY=...
+MIDTRANS_CLIENT_KEY=...
+MIDTRANS_MERCHANT_ID=...
+
+# Operator fallback
+PHOBO_OPERATOR_PAYMENT_ENABLED=true
+PHOBO_OPERATOR_QRIS_IMAGE=/assets/payment/qris.png
+PHOBO_OPERATOR_PIN=...
+PHOBO_OPERATOR_COOKIE_SECURE=false
+
+# Debug
+NEXT_PUBLIC_PAYMENT_DEBUG=false
+PHOBO_DEBUG_LOGS=false
+```
+
+The exact values live only on the production machine.
+
+### Secret handling
+
+Treat these as secrets:
+
+- `MIDTRANS_SERVER_KEY`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REFRESH_TOKEN`
+- operator PIN
+
+Do not paste real values into GitHub, README, source code, issue comments, or chat logs.
+
+If a real value is accidentally exposed, rotate it.
+
+---
+
+## 17. Important Routes
+
+Customer:
+
+```text
+/
+/payment
+/frames
+/camera
+/preview
+/result
+/closing
+/additional-frame
+/additional-preview
+/add-print-payment
+```
+
+Operator/admin:
+
+```text
+/admin
+/admin/payments
+/hardware-check
+/api/diagnostics
+```
+
+Key APIs:
+
+```text
+/api/camera/capture
+/api/camera/live-frame
+/api/camera/dcc-live-frame
+/api/results/compose
+/api/results/print-template
+/api/printer/print
+/api/payment/create
+/api/payment/status
+/api/payment/qris
+/api/payment/expire
+```
+
+---
+
+## 18. Local Development
 
 ```bash
 npm install
@@ -25,18 +750,35 @@ Open:
 http://localhost:3000
 ```
 
-Useful development routes:
+Useful:
 
-- `http://localhost:3000/hardware-check`
-- `http://localhost:3000/admin`
-- `http://localhost:3000/api/diagnostics`
+```text
+http://localhost:3000/hardware-check
+http://localhost:3000/admin
+http://localhost:3000/api/diagnostics
+```
 
-## Production-Like Local Run
+Development mode should not be used as the normal event-launch procedure.
 
-```bash
-npm install
-npm run build
-npm run start
+---
+
+## 19. Production Build / Update Procedure
+
+When code changes are intentionally deployed to the Mini PC:
+
+```bat
+cd C:\Users\DELL\Downloads\Phobo_live
+
+git pull origin main
+npm.cmd install
+rmdir /S /Q .next
+npm.cmd run build
+```
+
+Then run:
+
+```bat
+npm.cmd run start -- -H 0.0.0.0
 ```
 
 Open:
@@ -45,123 +787,311 @@ Open:
 http://localhost:3000
 ```
 
-If the kiosk must be reachable from phones for QR testing, use the Mini PC LAN IP or a configured base URL instead of `localhost`.
+Do not run `git pull`, `npm install`, or `npm build` casually during a live customer session.
 
-## Kiosk Browser Mode
+---
 
-For on-site testing, open the app in a fullscreen browser on the Mini PC connected to the Android TV.
+## 20. Operator Runbook
 
-Options:
+The operator is expected to operate hardware, not maintain the codebase.
 
-- Use browser fullscreen with `F11`.
-- Use a browser kiosk launch command if available on the target OS.
-- Confirm Android TV overscan/scaling does not crop the kiosk stage.
-- Confirm IR touch taps line up with the UI before testing the full flow.
-
-## Hardware Bring-Up
-
-Use the CRCS hardware checklist before implementing real hardware adapters:
+Before opening the booth:
 
 ```text
-docs/CRCS_HARDWARE_BRINGUP.md
+1. Turn on Canon camera.
+2. Turn on Canon SELPHY CP1500.
+3. Open digiCamControl.
+4. Confirm Canon is detected.
+5. Confirm DCC live view works.
+6. Start Phobo production server.
+7. Open customer kiosk in fullscreen/kiosk mode.
+8. Perform one camera test.
+9. Perform one print test.
+10. Confirm payment mode is correct.
 ```
 
-The checklist covers:
-
-- Mini PC readiness
-- Android TV + IR touch panel setup
-- Canon 600D OS/tooling tests
-- Canon SELPHY CP1500 OS print tests
-- Network and QR result access
-- Next integration decision tree
-
-## Hardware Check Page
-
-Open:
+Quick DCC live-view check:
 
 ```text
-http://localhost:3000/hardware-check
+http://127.0.0.1:5513/liveview.jpg
 ```
 
-This page shows safe diagnostics for:
+If this does not show a Canon frame, fix digiCamControl/camera before opening the booth.
 
-- App mode
-- Camera mode
-- Printer mode
-- Storage mode
-- Result directory
-- Drive enabled/disabled
-- Browser and current origin
-- Mock camera status
-- Mock printer status
-- Mock storage status
+### Intended operator simplification
 
-All device status values are mock unless a future real adapter mode is explicitly implemented and enabled.
+A dedicated one-click `START PHOBO` / `STOP PHOBO` production launcher is desirable so the operator never needs Git/npm/terminal commands.
 
-## Current MVP Flow
+If those launcher scripts do not yet exist in the repository, treat that as an operations improvement task, not a customer-flow redesign.
 
-1. Open `/`.
-2. Tap `CLICK HERE TO CONTINUE`.
-3. Select `PACKAGE 1`, `PACKAGE 2`, or `PACKAGE 3`.
-4. On `/payment`, use `DEV CONFIRM PAYMENT`.
-5. Select a frame on `/frames`.
-6. Select a background on `/camera`.
-7. Tap `SHOOT`.
-8. Review mock captured photo on `/preview`.
-9. Tap `NEXT`.
-10. Scan the QR on `/result` or use the small download link.
-11. Use `GENERATE PRINT FILE` / `PRINT / MOCK PRINT` from `/result` or Admin controls.
+---
 
-Generated result files are saved under:
+## 21. Production Physical Acceptance Checklist
+
+Before declaring a release event-ready:
+
+### Camera
+
+- DCC live view displays inside Phobo
+- background changes update preview
+- green screen remains active
+- 3-2-1-SMILE works
+- one SHOOT triggers one shutter
+- freeze frame appears during shutter
+- no black/rainbow frame leaks to customer
+- preview recovers automatically
+- captured JPEG appears exactly once
+- multiple consecutive shots work
+
+### Preview
+
+- all required photos appear
+- slot replacement works
+- IR-touch drag/tap works
+- stickers work
+- `EDIT 02:00` is visible
+- edit timer does not overlap sticker UI
+- timeout composes exactly once
+- successful compose goes to result
+
+### Result
+
+- final image loads
+- QR scans
+- no competing global session timer is shown
+- print button is one-shot
+- post-print 60-second closing timer works
+
+### Printer
+
+- Basic prints once
+- Duo prints twice sequentially
+- Premium prints twice sequentially
+- physical orientation/crop is correct
+
+### Payment
+
+- real QRIS opens in banking/e-wallet app
+- paid transaction is confirmed automatically
+- kiosk advances only after confirmation
+- failed network does not falsely confirm payment
+- operator fallback remains available
+
+---
+
+## 22. Test Commands
+
+Run after camera/session/result changes:
+
+```bat
+npx.cmd tsx scripts/test-dslr-pipeline.mjs
+npx.cmd tsx scripts/test-production-ux.mjs
+npx.cmd tsx scripts/test-interaction-parity.mjs
+npx.cmd tsx scripts/test-package-contract.mjs
+npm.cmd run build
+```
+
+For payment changes also run the payment-specific tests available in `scripts/`.
+
+For printer changes also run the printer-specific tests available in `scripts/`.
+
+Automated tests do not replace physical Canon, SELPHY, touch, QRIS, and network validation.
+
+---
+
+## 23. Troubleshooting
+
+### DCC works but Phobo camera preview does not
+
+Check:
 
 ```text
-public/results/{sessionId}/
+http://127.0.0.1:5513/liveview.jpg
 ```
 
-Generated result files are ignored by Git.
+Then inspect:
 
-## Environment
+- active preview provider
+- `/api/camera/live-frame`
+- DCC recovery state
+- browser-video fallback
+- debug logs
 
-Copy `.env.example` to `.env.local` only when local overrides are needed.
-
-Default safe modes:
+With:
 
 ```env
-PHOBO_CAMERA_MODE=mock
-PHOBO_PRINTER_MODE=mock
-PHOBO_STORAGE_MODE=local
-PHOBO_DRIVE_ENABLED=false
-PHOBO_RESULTS_DIR=public/results
+NEXT_PUBLIC_CAMERA_DEBUG=true
 ```
 
-Do not add secrets to `.env.example`.
+the UI may expose preview provider/state diagnostics.
 
-## Integration Warning
+Return it to `false` for production customer operation.
 
-Do not assume Canon 600D capture or Canon SELPHY CP1500 printing works from the app yet. First verify each device through the operating system or vendor/test tooling, then add real adapter modes behind explicit environment flags in a future checkpoint.
+### DSLR capture works but preview remains frozen
 
-## Green Screen Testing
-See [docs/GREEN_SCREEN_TESTING.md](docs/GREEN_SCREEN_TESTING.md) for physical setup and software tuning guidelines.
+Do not delete the captured photo.
 
-## Real Hardware Pipeline
-1. User selects package/frame/background through touch UI.
-2. Countdown runs on Phobo UI.
-3. Phobo captures photo through /api/camera/capture.
-4. In command mode, Phobo calls an external command with a deterministic output filename.
-5. In eos-watch mode, EOS Utility 2 saves a file and Phobo detects the new file from the configured watch folder.
-6. Captured photo is copied to public/results/{sessionId}/captures/.
-7. /api/results/compose generates final_screen.png for QR/download and final_print.jpg for SELPHY 4R print.
-8. /api/printer/print sends final_print.jpg to printer adapter.
-9. UI shows result/printing status while backend handles the print request.
+The JPEG is committed before recovery.
 
-## EOS Utility 2 Folder-Watch Setup
-- Connect Canon 600D to mini PC via USB.
-- Open EOS Utility 2 -> Remote Shooting.
-- Set save folder to: C:\PhoboCameraIncoming
-- Set .env.local variables (see .env.example).
-- Start Phobo: npm run dev
-- Open: http://localhost:3000/admin
-- Click Test Camera Capture.
-- Trigger capture in EOS Utility 2.
-Expected: Phobo detects the new file and copies it.
-Limitation: EOS Utility 2 folder-watch mode does not directly trigger the Canon 600D shutter. For fully automatic shutter triggering from Phobo�s SHOOT button, use command mode with a command-line capture tool such as digiCamControl.
+Investigate provider recovery and advancing-frame detection, not the shutter pipeline.
+
+### Midtrans QR says invalid
+
+Never create a fallback QR from the order ID.
+
+The QR must originate from authentic Midtrans QRIS data.
+
+### Midtrans status shows `fetch failed`
+
+Run:
+
+```powershell
+Test-NetConnection api.midtrans.com -Port 443
+```
+
+and Node fetch diagnostics.
+
+Typical causes:
+
+- DNS
+- firewall
+- TLS/certificate interception
+- unstable internet/proxy
+
+Do not disable TLS verification as a production fix.
+
+### Result compose appears stuck
+
+Check:
+
+- compose API logs
+- image processing errors
+- Drive timeout
+- local result directory
+
+A Google Drive failure should be non-fatal if local composition succeeded.
+
+### Printer does not print
+
+Check:
+
+- SELPHY power
+- USB/Windows printer availability
+- exact Windows printer name
+- paper/media
+- `PHOBO_PRINTER_MODE=windows`
+- `PHOBO_PRINT_DRY_RUN=false`
+
+Do not change image geometry before first confirming the printer itself is reachable.
+
+---
+
+## 24. Stable Areas — Avoid Unnecessary Changes
+
+These areas have already received repeated physical/debug hardening:
+
+- Canon shutter semantics
+- DCC raw TCP capture
+- DCC live-view provider
+- per-shot background lock
+- preview drag/touch behavior
+- stickers
+- frame masks/slot geometry
+- final composition
+- 1181x1748 print asset
+- sequential copy orchestration
+- result one-shot print lock
+- session timer lifecycle
+- preview timeout compose lock
+- Midtrans fake-QR prevention
+
+If a future task is unrelated, do not refactor these areas opportunistically.
+
+---
+
+## 25. Current Known Follow-Ups
+
+As of the baseline noted at the top of this README:
+
+1. **Physical retest the DCC-primary preview on the Mini PC**
+   - confirm acceptable preview smoothness
+   - confirm recovery after repeated shutters
+   - confirm no stale/rainbow frames
+
+2. **Complete Midtrans production acceptance**
+   - Mini PC network to `api.midtrans.com:443`
+   - real QRIS scan
+   - real payment confirmation
+   - expiry flow
+
+3. **Operator launch simplification**
+   - one-click `START PHOBO`
+   - one-click `STOP PHOBO`
+   - simple Indonesian operator instructions
+
+Do not treat these as reasons to rewrite already-working photo/print logic.
+
+---
+
+## 26. Git / Release Discipline
+
+Before starting work:
+
+```bash
+git status
+git log -1 --oneline
+```
+
+Before committing:
+
+```bash
+git diff
+npm run build
+```
+
+After committing:
+
+```bash
+git push origin main
+git log -1 --oneline
+git status --short
+```
+
+Never:
+
+- commit `.env.local`
+- commit credentials
+- reset a dirty production working tree without inspecting it
+- rewrite hardware integration because a tooling agent timed out
+- infer that an Antigravity/Gemini API error means Phobo itself is broken
+
+---
+
+## 27. Documentation
+
+Existing supplementary docs:
+
+- [Windows Kiosk Deployment](docs/WINDOWS_KIOSK_DEPLOYMENT.md)
+- [Operator Guide](docs/OPERATOR_GUIDE.md)
+- [Maintenance Guide](docs/MAINTENANCE_GUIDE.md)
+- [Handover Video Script](docs/HANDOVER_VIDEO_SCRIPT.md)
+- [CRCS Hardware Bring-Up](docs/CRCS_HARDWARE_BRINGUP.md)
+- [Green Screen Testing](docs/GREEN_SCREEN_TESTING.md)
+
+Some older documents may describe earlier mock/EOS-watch architecture. When a document conflicts with current code, this README plus the current `main` branch are the authoritative project state.
+
+---
+
+## 28. Handover Note for Future AI/Coding Sessions
+
+When continuing this project in a new conversation/session:
+
+1. Read this README first.
+2. Check the latest commit on `main`.
+3. Inspect the relevant current files before proposing architecture changes.
+4. Preserve the hardware behavior documented above.
+5. Do not ask the project owner to re-explain the entire historical context.
+6. If current code conflicts with this README, current code wins and this README should be updated in the same change.
+7. Never include real secrets in generated prompts, patches, logs, documentation, or commits.
+
+The project owner should only need to provide the new issue/observation and, when relevant, new physical test logs/screenshots.
