@@ -194,10 +194,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const initPreviewTimer = useCallback((durationSeconds: number = 120) => {
     setSession(s => {
       const active = s ?? fresh();
-      if (active.previewDeadlineAt) {
-        const remaining = new Date(active.previewDeadlineAt).getTime() - Date.now();
-        if (remaining > 0) return active;
-      }
+      if (active.previewDeadlineAt) return active;
       const startTime = new Date();
       const deadline = new Date(startTime.getTime() + durationSeconds * 1000);
       return update(active, {

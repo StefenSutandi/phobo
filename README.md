@@ -4,7 +4,7 @@ Phobo is a production-oriented photobox kiosk application built with Next.js + T
 
 This README is intentionally written as the primary developer/AI handover document. If a new developer, ChatGPT session, or coding agent joins the project, read this file first before changing code.
 
-> **Current production baseline (2026-09-24):** `fix: ensure fresh preview edit cycle after camera session`
+> **Current production baseline (2026-09-24):** `fix: preserve expired preview deadline semantics`
 
 ---
 
@@ -235,13 +235,13 @@ The global timer:
 
 `/preview` has an independent **2-minute edit timer**.
 
-- **Authoritative initialization:** When the customer completes the required shots on `/camera` and clicks NEXT, `beginMainPreview()` is invoked before navigating to `/preview`. This guarantees a fresh 120-second editing cycle while strictly preserving all captured photos, frame selections, per-photo backgrounds, stickers, payment status, and the global session timer.
+- **Authoritative initialization:** `beginMainPreview()` is the **only** authoritative operation that creates a fresh main preview window, invoked when the customer completes required photos on `/camera` and clicks NEXT before routing to `/preview`. This guarantees a fresh 120-second editing cycle while strictly preserving all captured photos, frame selections, per-photo backgrounds, stickers, payment status, and the global session timer.
 - **Slot filling isolation:** Auto-assigning or filling slots (`isReady = true`) **never** automatically triggers composition or navigation. The customer is guaranteed their full editing time to rearrange photos, swap slots, and add stickers.
 - **Navigation triggers:** Navigation to `/result` only occurs when:
   1. The customer manually clicks the NEXT button, or
   2. The fresh 120-second preview timer genuinely elapses to `00:00` (`isExpired = true`).
-- **Reload & refresh persistence:** Reloading `/preview` preserves the remaining countdown against `previewDeadlineAt` (e.g. resuming at ~90s if 30s have passed) and does not reset the timer to 120s.
-- **Stale deadline protection:** If a stale/expired deadline is encountered on mount, `/preview` safely defaults to a fresh 120-second window rather than mounting at `00:00`, preventing premature auto-advancement to `/result`.
+- **Reload & refresh persistence:** Reloading `/preview` preserves the remaining countdown against `previewDeadlineAt` (e.g. resuming at ~90s if 30s have passed). Reloading after genuine expiry stays expired (`remainingSeconds = 0`) and allows normal exactly-once auto-compose to `/result`. An expired deadline is never reset back to 120s on refresh.
+- **Fallback:** `initPreviewTimer(120)` only initializes when `previewDeadlineAt` is genuinely missing unexpectedly.
 
 At expiry:
 

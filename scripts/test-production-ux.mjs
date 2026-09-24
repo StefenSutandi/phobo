@@ -1292,7 +1292,7 @@ async function runProductionUxTests() {
       previewDeadlineAt: staleDeadline,
     };
 
-    // Simulate beginMainPreview
+    // Simulate beginMainPreview (the ONLY authoritative fresh preview cycle starter)
     const startTime = new Date();
     const durationSeconds = 120;
     const deadline = new Date(startTime.getTime() + durationSeconds * 1000);
@@ -1310,54 +1310,54 @@ async function runProductionUxTests() {
     assert.equal(afterBeginMainPreview.sessionDeadlineAt, testSessionBefore.sessionDeadlineAt, "C33: global session timer preserved");
     const freshRemaining = Math.floor((new Date(afterBeginMainPreview.previewDeadlineAt).getTime() - Date.now()) / 1000);
     assert.ok(freshRemaining >= 118 && freshRemaining <= 120, "C33: preview deadline must be fresh ~120s");
-    console.log("✓ C33: beginMainPreview state contract verified: resets preview window to 120s while strictly preserving photos, frame, stickers, payment, and global timer");
+    console.log("✓ C33: beginMainPreview contract verified: fresh camera entry gets ~120 sec, preserving captures, frame, stickers, payment, and global timer");
 
     // C34: Camera NEXT button invokes beginMainPreview before router.push("/preview")
     assert.ok(cameraCode.includes("beginMainPreview()"), "C34: Camera page must call beginMainPreview()");
     assert.ok(cameraCode.includes("router.push(\"/preview\")"), "C34: Camera page must navigate to /preview");
     // Verify camera NEVER navigates to /result directly
     assert.ok(!cameraCode.includes("router.push(\"/result\")") && !cameraCode.includes("router.replace(\"/result\")"), "C34: Camera page must NEVER route directly to /result");
-    console.log("✓ C34: Camera NEXT routing verified: calls beginMainPreview() before push('/preview'), never jumps to /result");
+    console.log("✓ C34: Camera NEXT routing verified: calls beginMainPreview() before push('/preview'), no /camera -> /result direct path");
 
-    // C35: Main preview page resets/initializes timer if deadline <= Date.now() or missing
-    assert.ok(previewCode.includes("deadline <= Date.now()"), "C35: preview page must re-initialize timer if deadline <= Date.now()");
-    assert.ok(previewCode.includes("const diff = Math.floor((new Date(session.previewDeadlineAt).getTime() - Date.now()) / 1000);"), "C35: preview page computes diff");
-    assert.ok(previewCode.includes("if (diff > 0) return diff;"), "C35: diff <= 0 defaults to 120 (preventing 00:00 start)");
+    // C35: initPreviewTimer and preview mount semantics: expired existing deadline is NOT reset
+    assert.ok(sessionStoreCode.includes("if (active.previewDeadlineAt) return active;"), "C35: initPreviewTimer must not overwrite existing deadline");
+    assert.ok(previewCode.includes("if (!session.previewDeadlineAt)"), "C35: preview mount only calls initPreviewTimer when deadline is genuinely missing");
+    assert.ok(previewCode.includes("Math.max(0, Math.floor((new Date(session.previewDeadlineAt).getTime() - Date.now()) / 1000))"), "C35: preview computes remainingSeconds with Math.max(0, diff)");
 
-    // Simulate preview mount with expired deadline
     function computeInitialRemaining(sessionObj) {
       if (sessionObj?.previewDeadlineAt) {
-        const diff = Math.floor((new Date(sessionObj.previewDeadlineAt).getTime() - Date.now()) / 1000);
-        if (diff > 0) return diff;
+        return Math.max(0, Math.floor((new Date(sessionObj.previewDeadlineAt).getTime() - Date.now()) / 1000));
       }
       return 120;
     }
-    const initialExpired = computeInitialRemaining({ previewDeadlineAt: staleDeadline });
-    assert.equal(initialExpired, 120, "C35: Expired deadline must fallback to 120s on mount, NOT 0s");
-    console.log("✓ C35: Preview page mount guard verified: expired deadline safely initializes to 120s, eliminating instant-timeout risk");
+
+    // 1. Missing deadline initializes to 120
+    assert.equal(computeInitialRemaining({}), 120, "C35: Missing deadline initializes to 120s fallback");
+    // 2. Expired existing deadline remains 0 (is NOT reset to 120)
+    assert.equal(computeInitialRemaining({ previewDeadlineAt: staleDeadline }), 0, "C35: Expired deadline must remain 0 on mount, not reset to 120");
+    console.log("✓ C35: Preview deadline semantics verified: missing deadline initializes 120s fallback, while expired existing deadline stays 0s");
 
     // C36: Slot filling alone NEVER triggers auto-continue; auto-continue strictly requires isExpired && isReady
     assert.ok(previewCode.includes("if (isExpired && isReady && !saving && !composeLockRef.current && !hasAutoContinuedRef.current)"), "C36: auto-continue must require isExpired");
-    // Simulation:
-    let autoContinued = false;
-    function checkAutoContinue(isExpired, isReady) {
+    let autoContinued = 0;
+    function simulateAutoContinue(isExpired, isReady) {
       if (isExpired && isReady) {
-        autoContinued = true;
+        autoContinued++;
       }
     }
     // Slot assignment ready, but 120s remaining (isExpired = false)
-    checkAutoContinue(false, true);
-    assert.equal(autoContinued, false, "C36: When slots are filled and timer is active, auto-continue must NOT trigger");
-    // Timer genuinely expires (00:00)
-    checkAutoContinue(true, true);
-    assert.equal(autoContinued, true, "C36: Only when timer expires at 00:00 does auto-continue trigger");
-    console.log("✓ C36: Auto-continue invariant verified: slot-filling keeps customer on /preview; only genuine 00:00 timeout routes to /result");
+    simulateAutoContinue(false, true);
+    assert.equal(autoContinued, 0, "C36: When slots are filled and timer is active, auto-continue must NOT trigger");
+    // Expired existing deadline (remaining = 0, isExpired = true, isReady = true)
+    simulateAutoContinue(true, true);
+    assert.equal(autoContinued, 1, "C36: Expired preview auto-composes exactly once");
+    console.log("✓ C36: Auto-continue invariant verified: isReady alone does not navigate; expired preview auto-composes exactly once");
 
     // C37: Reloading /preview preserves active timer (does not reset countdown)
-    const activeFutureDeadline = new Date(Date.now() + 85000).toISOString();
+    const activeFutureDeadline = new Date(Date.now() + 90000).toISOString();
     const reloadRemaining = computeInitialRemaining({ previewDeadlineAt: activeFutureDeadline });
-    assert.ok(reloadRemaining >= 83 && reloadRemaining <= 85, "C37: Reloading with active deadline preserves remaining time ~85s");
-    console.log("✓ C37: Reloading /preview verified: preserves active timer countdown, does not reset to 120s on refresh");
+    assert.ok(reloadRemaining >= 88 && reloadRemaining <= 90, "C37: Reloading at ~90 sec preserves ~90 sec");
+    console.log("✓ C37: Reloading /preview verified: reload at ~90 sec preserves ~90 sec countdown");
   }
 
   console.log("\n==================================================");
