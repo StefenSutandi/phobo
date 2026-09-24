@@ -120,7 +120,7 @@ async function recoverDccPreview(liveRef: React.RefObject<CameraLiveViewHandle |
 
 export default function Camera() {
   const router = useRouter();
-  const { session, hasHydrated, selectBackground, addCapturedPhoto, initCameraTimer } = useSessionStore();
+  const { session, hasHydrated, selectBackground, addCapturedPhoto, initCameraTimer, beginMainPreview } = useSessionStore();
   const live = useRef<CameraLiveViewHandle>(null);
   const captureLock = useRef(false);
   const shotCount = useRef(0);
@@ -602,7 +602,12 @@ export default function Camera() {
           )}
           {count >= 1 && (
             <KioskButton
-              onClick={() => { if (count >= required) router.push("/preview"); }}
+              onClick={() => {
+                if (count >= required) {
+                  beginMainPreview();
+                  router.push("/preview");
+                }
+              }}
               disabled={count < required || previewRecoveryBlocking}
               className={`camera-next ${maxReached ? "camera-next--primary" : ""}`}
             >

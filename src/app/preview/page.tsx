@@ -38,7 +38,8 @@ export default function Preview() {
   // Persistent 2-minute Preview Timer
   const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
     if (session?.previewDeadlineAt) {
-      return Math.max(0, Math.floor((new Date(session.previewDeadlineAt).getTime() - Date.now()) / 1000));
+      const diff = Math.floor((new Date(session.previewDeadlineAt).getTime() - Date.now()) / 1000);
+      if (diff > 0) return diff;
     }
     return 120;
   });
@@ -48,7 +49,8 @@ export default function Preview() {
 
   useEffect(() => {
     if (!hasHydrated || !session) return;
-    if (!session.previewDeadlineAt) {
+    const deadline = session.previewDeadlineAt ? new Date(session.previewDeadlineAt).getTime() : 0;
+    if (!deadline || deadline <= Date.now()) {
       initPreviewTimer(120);
     }
   }, [hasHydrated, session, initPreviewTimer]);
