@@ -373,6 +373,8 @@ const DCC_POLL_INTERVAL_MS = 500;
             if (isAdvancing) {
               consecutiveFreshFramesRef.current += 1;
               lastFrameSequenceRef.current = seq;
+            } else {
+              consecutiveFreshFramesRef.current = 0;
             }
 
             // Dispose old ImageBitmap to prevent GPU memory leak

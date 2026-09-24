@@ -337,30 +337,49 @@ async function runTests() {
     console.log("✓ Contract 6 passed: DCC reconnect clears freeze after stable frames");
   }
 
-  // Test 7: Stale repeated DCC frame is not considered recovered
-  console.log("\nContract 7: Stale repeated DCC frame is not considered recovered...");
+  // Test 7: Stale repeated DCC frame is not considered recovered & resets consecutive counter
+  console.log("\nContract 7: Stale repeated DCC frame resets consecutive fresh frame counter...");
   {
-    let lastSeq = 42;
+    let lastSeq = 10;
     let consecutiveFreshFrames = 0;
 
-    const incomingFrames = [
-      { seq: 42, isNew: false, ts: 1001 }, // Identical frame with advancing timestamp
-      { seq: 42, isNew: false, ts: 1002 },
-      { seq: 42, isNew: false, ts: 1003 },
-    ];
-
-    for (const frame of incomingFrames) {
+    function processFrame(frame) {
       const isAdvancing = frame.isNew && frame.seq > lastSeq;
       if (isAdvancing) {
-        consecutiveFreshFrames++;
+        consecutiveFreshFrames += 1;
         lastSeq = frame.seq;
+      } else {
+        consecutiveFreshFrames = 0;
       }
+      return consecutiveFreshFrames >= 2;
     }
 
-    const isReady = consecutiveFreshFrames >= 2;
-    assert.equal(isReady, false, "Stale repeated frames must NEVER report ready even if timestamps advance");
-    assert.equal(consecutiveFreshFrames, 0, "consecutiveFreshFrames must remain 0 for stale frames");
-    console.log("✓ Contract 7 passed: Stale repeated frames rejected by readiness check");
+    // Sequence 1: fresh A -> stale A -> fresh B -> fresh C
+    // fresh A -> consecutive = 1
+    assert.equal(processFrame({ seq: 11, isNew: true }), false);
+    assert.equal(consecutiveFreshFrames, 1, "fresh A -> consecutive = 1");
+
+    // stale A -> consecutive = 0 (intervening identical frame resets counter)
+    assert.equal(processFrame({ seq: 11, isNew: false }), false);
+    assert.equal(consecutiveFreshFrames, 0, "stale A -> consecutive reset to 0");
+
+    // fresh B -> consecutive = 1
+    assert.equal(processFrame({ seq: 12, isNew: true }), false);
+    assert.equal(consecutiveFreshFrames, 1, "fresh B -> consecutive = 1");
+
+    // fresh C -> consecutive = 2 -> ready
+    assert.equal(processFrame({ seq: 13, isNew: true }), true);
+    assert.equal(consecutiveFreshFrames, 2, "fresh C -> consecutive = 2 -> ready");
+
+    // Sequence 2: fresh A -> fresh B -> ready
+    lastSeq = 20;
+    consecutiveFreshFrames = 0;
+    assert.equal(processFrame({ seq: 21, isNew: true }), false);
+    assert.equal(consecutiveFreshFrames, 1, "fresh A -> consecutive = 1");
+    assert.equal(processFrame({ seq: 22, isNew: true }), true);
+    assert.equal(consecutiveFreshFrames, 2, "fresh B -> consecutive = 2 -> ready");
+
+    console.log("✓ Contract 7 passed: Strict consecutive fresh frames verified (intervening stale resets counter to 0)");
   }
 
   // Test 8: DCC unavailable → browser-video fallback

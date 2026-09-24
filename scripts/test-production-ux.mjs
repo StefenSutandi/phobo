@@ -1193,10 +1193,39 @@ async function runProductionUxTests() {
     assert.ok(dccAdapterCode.includes("resetDccLiveViewMeta"), "C25: adapter must export resetDccLiveViewMeta");
     console.log("✓ C25: DCC frame freshness verified: full-buffer sha256 hash comparison used instead of sample/timestamp");
 
-    // C26: DCC polling cadence and freshness check in CameraLiveView
+    // C26: DCC polling cadence, freshness check, and strict consecutive reset in CameraLiveView
     assert.ok(liveViewCode.includes("DCC_POLL_INTERVAL_MS = 500"), "C26: live view must poll DCC at 500ms cadence");
     assert.ok(liveViewCode.includes("isNew && seq > lastFrameSequenceRef.current"), "C26: must require X-Frame-New and advancing sequence");
-    console.log("✓ C26: DCC client polling verified: 500ms cadence and strict isNew + seq freshness contract");
+    assert.ok(liveViewCode.includes("consecutiveFreshFramesRef.current = 0;"), "C26: must reset consecutive fresh frames counter on non-advancing frame");
+
+    // Deterministic simulation of consecutive frame reset logic:
+    {
+      let lastSeq = 100;
+      let consecutive = 0;
+      function simulateFeed(isNew, seq) {
+        const isAdvancing = isNew && seq > lastSeq;
+        if (isAdvancing) {
+          consecutive += 1;
+          lastSeq = seq;
+        } else {
+          consecutive = 0;
+        }
+        return consecutive >= 2;
+      }
+      // fresh A
+      assert.equal(simulateFeed(true, 101), false);
+      assert.equal(consecutive, 1, "C26: fresh A -> consecutive = 1");
+      // stale A (stale identical frame resets counter to 0)
+      assert.equal(simulateFeed(false, 101), false);
+      assert.equal(consecutive, 0, "C26: stale A -> consecutive = 0");
+      // fresh B
+      assert.equal(simulateFeed(true, 102), false);
+      assert.equal(consecutive, 1, "C26: fresh B -> consecutive = 1");
+      // fresh C -> ready
+      assert.equal(simulateFeed(true, 103), true);
+      assert.equal(consecutive, 2, "C26: fresh C -> consecutive = 2 -> ready");
+    }
+    console.log("✓ C26: DCC client polling verified: 500ms cadence, strict isNew + seq freshness, and reset on intervening stale frames");
 
     // C27: beginAdditionalPrint resets add-print state while preserving captures & main results
     assert.ok(sessionStoreCode.includes("beginAdditionalPrint"), "C27: session store must define beginAdditionalPrint");

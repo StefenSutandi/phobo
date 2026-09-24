@@ -4,7 +4,7 @@ Phobo is a production-oriented photobox kiosk application built with Next.js + T
 
 This README is intentionally written as the primary developer/AI handover document. If a new developer, ChatGPT session, or coding agent joins the project, read this file first before changing code.
 
-> **Current production baseline (2026-09-24):** `fix: preserve expired preview deadline semantics`
+> **Current production baseline (2026-09-24):** `fix: require consecutive fresh DCC frames`
 
 ---
 
@@ -332,7 +332,7 @@ Do not replace this with a plain `fetch()`/Node HTTP call without physically val
 3. **Advancing Frame Contract:**
    Frames are only accepted as fresh if `X-Frame-New === "1"` and `seq > lastSeq`. Stale frames with advancing timestamps are rejected.
 4. **Readiness Contract:**
-   Live view requires at least 2 consecutive fresh advancing frames (`consecutiveFreshFramesRef.current >= 2`) before reporting ready.
+   Live view requires at least 2 consecutive fresh advancing frames (`consecutiveFreshFramesRef.current >= 2`) before reporting ready; any intervening stale or repeated frame resets the counter back to 0.
 
 ### Browser-video fallback & Terminal Recovery
 
