@@ -62,6 +62,7 @@ type Store = {
   initSessionTimer: (durationSeconds?: number) => void;
   initPreviewTimer: (durationSeconds?: number) => void;
   initAdditionalPreviewTimer: (durationSeconds?: number) => void;
+  beginAdditionalPrint: () => void;
 };
 const Context = createContext<Store | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -218,7 +219,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const initAdditionalPreviewTimer = useCallback((durationSeconds: number = 120) => {
     setSession(s => {
       const active = s ?? fresh();
-      if (active.additionalPreviewDeadlineAt) return active;
+      if (active.additionalPreviewDeadlineAt) {
+        const remaining = new Date(active.additionalPreviewDeadlineAt).getTime() - Date.now();
+        if (remaining > 0) return active;
+      }
       const startTime = new Date();
       const deadline = new Date(startTime.getTime() + durationSeconds * 1000);
       return update(active, {
@@ -227,6 +231,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       });
     });
   }, []);
+
+  const beginAdditionalPrint = useCallback(() => patch({
+    additionalFrameId: undefined,
+    additionalSelectedPhotoIndices: undefined,
+    additionalPhotoSlotAssignments: undefined,
+    additionalStickers: [],
+    addPrintPaymentStatus: "unpaid",
+    addPrintPaymentOrderId: undefined,
+    addPrintPaymentRedirectUrl: undefined,
+    addPrintPayableAmount: undefined,
+    addPrintUniqueCode: undefined,
+    additionalPrintImageUrl: undefined,
+    additionalPrintStatus: "idle",
+    additionalPrintCommitted: false,
+    additionalPreviewStartedAt: undefined,
+    additionalPreviewDeadlineAt: undefined,
+  }), [patch]);
 
   const value = useMemo(() => ({
     session,
@@ -270,7 +291,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     initSessionTimer,
     initPreviewTimer,
     initAdditionalPreviewTimer,
-  }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, setPaymentData, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, setPhotoSlotAssignments, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, addAdditionalSticker, updateAdditionalSticker, removeAdditionalSticker, clearAdditionalStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setPrintCommitted, setGreenScreenTuning, selectAdditionalFrame, setAdditionalSelectedPhotoIndices, setAdditionalPhotoSlotAssignments, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl, setAdditionalPrintStatus, setAdditionalPrintCommitted, initCameraTimer, initSessionTimer, initPreviewTimer, initAdditionalPreviewTimer]);
+    beginAdditionalPrint,
+  }), [session, hasHydrated, createNewSession, resetSession, selectPackage, setPaymentStatus, setPaymentData, selectFrame, selectBackground, addCapturedPhoto, clearCapturedPhotos, selectPhotos, setPhotoSlotAssignments, selectSticker, clearFinalResult, addSticker, updateSticker, removeSticker, clearStickers, addAdditionalSticker, updateAdditionalSticker, removeAdditionalSticker, clearAdditionalStickers, setFinalImageUrl, setPrintImageUrl, setDriveUrl, setPrintStatus, setPrintCommitted, setGreenScreenTuning, selectAdditionalFrame, setAdditionalSelectedPhotoIndices, setAdditionalPhotoSlotAssignments, setAddPrintPaymentStatus, setAddPrintPaymentData, setAdditionalPrintImageUrl, setAdditionalPrintStatus, setAdditionalPrintCommitted, initCameraTimer, initSessionTimer, initPreviewTimer, initAdditionalPreviewTimer, beginAdditionalPrint]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useSessionStore() { const value = useContext(Context); if (!value) throw new Error("useSessionStore must be used within SessionProvider"); return value; }

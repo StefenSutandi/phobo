@@ -355,6 +355,17 @@ export default function AddPrintPayment() {
               Order ID: <span>{session.addPrintPaymentOrderId}</span> • Simpan ID ini jika terjadi kendala
             </div>
           )}
+
+          {process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" && (
+            <button
+              className="operator-confirm"
+              onClick={() => {
+                setAddPrintPaymentStatus("paid");
+              }}
+            >
+              SIMULATE ADD-PRINT PAYMENT
+            </button>
+          )}
         </>
       )}
     </KioskStage>

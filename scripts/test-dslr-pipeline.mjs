@@ -341,26 +341,24 @@ async function runTests() {
   console.log("\nContract 7: Stale repeated DCC frame is not considered recovered...");
   {
     let lastSeq = 42;
-    let lastTs = 1000;
     let consecutiveFreshFrames = 0;
 
     const incomingFrames = [
-      { seq: 42, ts: 1000 }, // Identical stale sequence/timestamp
-      { seq: 42, ts: 1000 },
-      { seq: 42, ts: 1000 },
+      { seq: 42, isNew: false, ts: 1001 }, // Identical frame with advancing timestamp
+      { seq: 42, isNew: false, ts: 1002 },
+      { seq: 42, isNew: false, ts: 1003 },
     ];
 
     for (const frame of incomingFrames) {
-      const isAdvancing = frame.seq > lastSeq || frame.ts > lastTs;
+      const isAdvancing = frame.isNew && frame.seq > lastSeq;
       if (isAdvancing) {
         consecutiveFreshFrames++;
         lastSeq = frame.seq;
-        lastTs = frame.ts;
       }
     }
 
     const isReady = consecutiveFreshFrames >= 2;
-    assert.equal(isReady, false, "Stale repeated frames must NEVER report ready");
+    assert.equal(isReady, false, "Stale repeated frames must NEVER report ready even if timestamps advance");
     assert.equal(consecutiveFreshFrames, 0, "consecutiveFreshFrames must remain 0 for stale frames");
     console.log("✓ Contract 7 passed: Stale repeated frames rejected by readiness check");
   }

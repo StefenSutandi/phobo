@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import net from "node:net";
+import crypto from "node:crypto";
 import { existsSync } from "node:fs";
 import { getPhoboEnv } from "@/lib/config/phobo-env";
 import { sanitizeSessionId } from "@/lib/results/result-storage";
@@ -343,7 +344,12 @@ export type DccLiveFrameMeta = {
 };
 
 let liveFrameSeq = 0;
-let lastFrameSample = "";
+let lastFrameHash = "";
+
+export function resetDccLiveViewMeta(): void {
+  liveFrameSeq = 0;
+  lastFrameHash = "";
+}
 
 export async function ensureDccLiveViewStarted(): Promise<boolean> {
   try {
@@ -377,11 +383,11 @@ export async function getDccLiveViewFrameWithMeta(): Promise<DccLiveFrameMeta | 
   if (!buffer) return null;
 
   const timestamp = Date.now();
-  const sample = `${buffer.length}:${buffer.subarray(0, 16).toString("hex")}:${buffer.subarray(Math.floor(buffer.length / 2), Math.floor(buffer.length / 2) + 16).toString("hex")}`;
-  const isNew = sample !== lastFrameSample;
+  const hash = crypto.createHash("sha256").update(buffer).digest("hex");
+  const isNew = hash !== lastFrameHash;
   if (isNew) {
     liveFrameSeq++;
-    lastFrameSample = sample;
+    lastFrameHash = hash;
   }
 
   return {

@@ -5,13 +5,14 @@ export function computePhotoFit(
   sourceHeight: number,
   slotWidth: number,
   slotHeight: number,
-  mode: FitMode = "smart-cover"
+  mode: FitMode = "smart-cover",
+  isMaskedOrNonRect: boolean = false
 ) {
-  let finalMode = mode;
+  let finalMode = isMaskedOrNonRect ? "cover" : mode;
   const sourceRatio = sourceWidth / sourceHeight;
   const slotRatio = slotWidth / slotHeight;
 
-  if (mode === "smart-cover") {
+  if (finalMode === "smart-cover") {
     // If it's a portrait slot and source is landscape, use contain to avoid chopping sides
     if (slotRatio < 0.8 && sourceRatio > 1.2) {
       finalMode = "contain";

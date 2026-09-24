@@ -9,7 +9,7 @@ import { useSessionStore } from "@/lib/session/session-store";
 
 export default function Result() {
   const router = useRouter();
-  const { session, setPrintStatus, setPrintCommitted, setPrintImageUrl } = useSessionStore();
+  const { session, setPrintStatus, setPrintCommitted, setPrintImageUrl, beginAdditionalPrint } = useSessionStore();
   const [url, setUrl] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -267,7 +267,13 @@ export default function Result() {
             )}
           </>
         )}
-        <button className="add-print" onClick={() => router.push("/additional-frame")}>
+        <button
+          className="add-print"
+          onClick={() => {
+            beginAdditionalPrint();
+            router.push("/additional-frame");
+          }}
+        >
           ADD PRINT · +20.000,00
         </button>
         <button onClick={() => router.replace("/closing")}>FINISH</button>

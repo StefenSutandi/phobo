@@ -4,7 +4,7 @@ Phobo is a production-oriented photobox kiosk application built with Next.js + T
 
 This README is intentionally written as the primary developer/AI handover document. If a new developer, ChatGPT session, or coding agent joins the project, read this file first before changing code.
 
-> **Current production baseline (2026-09-23):** `7e01822` — `fix: unify DSLR live preview with capture session`
+> **Current production baseline (2026-09-24):** `fix: harden camera recovery and add-print flow`
 
 ---
 
@@ -315,17 +315,26 @@ Do not replace this with a plain `fetch()`/Node HTTP call without physically val
 -> customer preview
 ```
 
-The DCC preview requires advancing frames before it is considered recovered. A stale repeated image must not count as successful recovery.
+### DCC Polling Cadence and SHA-256 Freshness
 
-### Browser-video fallback
+1. **Polling interval:**
+   `CameraLiveView` polls `/api/camera/live-frame` at `DCC_POLL_INTERVAL_MS = 500` (native DCC webserver cadence), avoiding socket exhaustion.
+2. **SHA-256 Frame Hashing:**
+   `getDccLiveViewFrameWithMeta` computes a SHA-256 hash (`crypto.createHash("sha256").update(buffer).digest("hex")`) across the entire JPEG buffer.
+3. **Advancing Frame Contract:**
+   Frames are only accepted as fresh if `X-Frame-New === "1"` and `seq > lastSeq`. Stale frames with advancing timestamps are rejected.
+4. **Readiness Contract:**
+   Live view requires at least 2 consecutive fresh advancing frames (`consecutiveFreshFramesRef.current >= 2`) before reporting ready.
 
-If DCC live view cannot initialize, Phobo may fall back to:
+### Browser-video fallback & Terminal Recovery
+
+If DCC live view cannot initialize or if recovery times out across 2 restart attempts in `recoverDccPreview`, Phobo executes a terminal fallback to:
 
 ```text
-navigator.mediaDevices.getUserMedia(...)
+navigator.mediaDevices.getUserMedia(...)  (provider: browser-video)
 ```
 
-This is a fallback only for production DCC mode.
+This unfreezes the preview and ensures the customer is never trapped behind a stuck overlay.
 
 ### DSLR shutter capture
 
@@ -389,7 +398,20 @@ Overlay copy:
 
 - capturing: `MENGAMBIL FOTO...`
 - recovering: `MEMULIHKAN KAMERA...`
-- long recovery: `FOTO TERSIMPAN / MENUNGGU PREVIEW KAMERA...`
+- long recovery: `FOTO TERSIMPAN / MENUNGGU PREVIEW KAMERA...` with red `RETRY KAMERA` button
+
+### Camera Interaction Lock (`previewRecoveryBlocking`)
+
+To prevent camera freeze surviving between shots or operations occurring behind the freeze overlay:
+1. `previewRecoveryBlocking` is engaged during `countdown`, `capturing`, `recovering`, `recovery-warning`, or while `freezeFrameUrl !== null`.
+2. While engaged:
+   - `handleShoot()` is strictly rejected.
+   - `handleSelectBackground()` is strictly rejected.
+   - SHOOT button is disabled.
+   - NEXT button is disabled.
+   - `BackgroundPicker` is disabled.
+3. When recovery completes and freeze is cleared, newly selected backgrounds update the live preview immediately without requiring another shutter press.
+4. If recovery times out, the `recovery-warning` overlay renders a high-visibility `RETRY KAMERA` button allowing the customer or operator to re-trigger preview recovery directly.
 
 The camera HUD must stay visible above the freeze overlay.
 
@@ -406,7 +428,7 @@ Do not clear the freeze just because a video element has dimensions. Recovery ne
 
 ---
 
-## 10. Green Screen / Background Processing
+## 10. Green Screen / Background Processing & Aperture Geometry
 
 The live customer preview applies chroma-key processing on a canvas.
 
@@ -420,9 +442,16 @@ spillReduction
 edgeSoftness
 ```
 
-Background is selectable during camera flow.
+Background is selectable during camera flow. Newly selected backgrounds reflect immediately on the live view.
 
 For each captured photo, the background active at shutter time is stored with the photo so later preview/composition can preserve per-shot background choice.
+
+### Non-Rectangular Aperture Geometry (No White Gaps)
+
+For circular, ellipse, rounded, or custom-masked frame slots (e.g. Frame 8 Heart, Frame 10 Ellipse):
+- `PreviewComposer` (`src/components/kiosk.tsx`) forces `object-fit: cover` (never `contain`).
+- `composeFinalImages` (`src/lib/image-processing/compose-final.ts`) and `computePhotoFit` (`src/lib/image-processing/fit-math.ts`) force fit mode `"cover"` whenever `isMaskedOrNonRect` is true.
+- This prevents letterboxing and eliminates white background gaps inside non-rectangular apertures.
 
 Frame slot geometry comes from:
 
@@ -622,7 +651,50 @@ Do not remove it until Midtrans has passed full physical production validation.
 
 ---
 
-## 16. Environment Configuration
+## 16. Additional Print Flow & Physical Acceptance Guarantees
+
+Customers can purchase an additional physical print for +Rp20.000,00 from the `/result` page.
+
+### Add-Print State Reset (`beginAdditionalPrint`)
+
+Clicking the `ADD PRINT · +20.000,00` button on `/result` invokes `beginAdditionalPrint()` before navigating to `/additional-frame`.
+This clears all previous additional-print state:
+- resets `additionalFrameId` to undefined
+- clears slot assignments (`additionalPhotoSlotAssignments`, `additionalSelectedPhotoIndices`)
+- clears `additionalStickers` to `[]`
+- resets `addPrintPaymentStatus` to `"unpaid"`
+- clears add-print order IDs and payment URLs
+- clears `additionalPrintImageUrl`, `additionalPrintStatus` (`"idle"`), and `additionalPrintCommitted` (`false`)
+- clears `additionalPreviewStartedAt` and `additionalPreviewDeadlineAt`
+
+**Critical Preservation:**
+`beginAdditionalPrint()` strictly preserves all already captured photos (`session.capturedPhotos`), the active package, and main result assets (`finalImageUrl`, `printImageUrl`, `driveUrl`).
+
+### 120-Second Additional Preview Timer
+
+Upon entering `/additional-preview`, the session timer checks `additionalPreviewDeadlineAt`:
+- If missing or if the deadline has already expired (`deadline <= Date.now()`), `initAdditionalPreviewTimer(120)` immediately initializes a fresh 120-second countdown (`02:00`).
+- This guarantees customers always receive their full editing duration without dead-ends.
+
+### Strict Non-Auto-Navigation on Slot Completion
+
+Filling all frame slots in `/additional-preview` updates `isReady` to true but **never** triggers auto-navigation.
+Auto-navigation to `/add-print-payment` only occurs when the edit timer strictly reaches `00:00` (`isExpired && isReady`).
+Customers can continue adjusting photos and stickers until they explicitly click `NEXT` or the timer expires.
+
+### Add-Print Payment & Single Physical Print Execution
+
+In `/add-print-payment`:
+1. When `process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true"`, a `SIMULATE ADD-PRINT PAYMENT` button is rendered to mark the payment paid.
+2. Once marked `"paid"`, an automated pipeline:
+   - Sets `additionalPrintCommitted = true` and `additionalPrintStatus = "composing"` (with one-shot duplicate protection).
+   - Calls `/api/results/compose-additional` to compose `additional_screen.png` and `additional_print.jpg`.
+   - Sends exactly **one** physical print request (`POST /api/printer/print`) to the Canon SELPHY CP1500 (`Copies=1`).
+   - Sets status to `"printed"` and smoothly navigates to `/closing` after 1.5 seconds.
+
+---
+
+## 17. Environment Configuration
 
 Do not commit `.env.local`.
 

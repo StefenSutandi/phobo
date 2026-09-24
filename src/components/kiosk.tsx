@@ -416,17 +416,19 @@ export function PreviewComposer({
         const displayUrl = getPhotoDisplayUrl(photoItem);
         const activeSrc = isValidImgSrc(displayUrl) ? displayUrl : "";
 
-        const slotRatio = photoSlot.width / photoSlot.height;
-        const useContain = slotRatio < 0.8;
-        const isSelected = activeSlotIndex === index;
-        const isDragOver = dragOverSlotIndex === index;
-        const isFailed = Boolean(failedSlots[index]);
-        
         const hasTemplateMask = Boolean(photoSlot.maskUrl);
         const maskUrl = photoSlot.maskUrl;
 
         const isEllipse = photoSlot.shape === "ellipse" || photoSlot.shape === "circle";
         const isRounded = photoSlot.shape === "rounded";
+        const isMaskedOrNonRect = hasTemplateMask || isEllipse || isRounded;
+
+        const slotRatio = photoSlot.width / photoSlot.height;
+        const useContain = !isMaskedOrNonRect && slotRatio < 0.8;
+        const isSelected = activeSlotIndex === index;
+        const isDragOver = dragOverSlotIndex === index;
+        const isFailed = Boolean(failedSlots[index]);
+        
         const slotBorderRadius = !hasTemplateMask
           ? isEllipse
             ? "50%"

@@ -86,10 +86,30 @@ async function recoverDccPreview(liveRef: React.RefObject<CameraLiveViewHandle |
     }
   }
 
+  // 4B. Terminal recovery fallback to browser-video if DCC remains unready
+  if (!streamActive && liveRef.current.switchToProvider) {
+    if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
+      console.log(`[Camera Preview] DCC unready, attempting terminal fallback to browser-video`);
+    }
+    try {
+      await liveRef.current.switchToProvider("browser-video");
+      const fallbackStart = Date.now();
+      while (Date.now() - fallbackStart < 2500) {
+        if (liveRef.current.isReady()) {
+          streamActive = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    } catch (err) {
+      console.warn("[Camera Preview] Terminal fallback to browser-video failed:", err);
+    }
+  }
+
   if (streamActive) {
     // 5. Additional settle window to allow video frames to stabilize and clear any residual buffer
     if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
-      console.log(`[Camera Preview] ActiveProvider=${activeProvider} Stream active; waiting ${HDMI_RECOVERY_SETTLE_WINDOW_MS}ms settle window before clearing freeze`);
+      console.log(`[Camera Preview] Stream active; waiting ${HDMI_RECOVERY_SETTLE_WINDOW_MS}ms settle window before clearing freeze`);
     }
     await new Promise((r) => setTimeout(r, HDMI_RECOVERY_SETTLE_WINDOW_MS));
     return true;
@@ -221,20 +241,29 @@ export default function Camera() {
     }
   }, [hasHydrated, session?.selectedFrameId, session?.selectedBackgroundId, router, selectBackground]);
 
-  const handleSelectBackground = useCallback((bgId: string) => {
-    if (isCapturing || captureLock.current) return;
-    selectedBackgroundIdRef.current = bgId;
-    selectBackground(bgId);
-  }, [isCapturing, selectBackground]);
-
   const count = session?.capturedPhotos.length ?? 0;
   const max = session?.requiredShotCount ?? session?.maxShots ?? 8;
   const required = max; // require full package shot count
   const maxReached = count >= max;
   shotCount.current = count;
 
+  const previewRecoveryBlocking =
+    isCapturing ||
+    captureLock.current ||
+    captureState === "countdown" ||
+    captureState === "capturing" ||
+    captureState === "recovering" ||
+    captureState === "recovery-warning" ||
+    Boolean(freezeFrameUrl);
+
+  const handleSelectBackground = useCallback((bgId: string) => {
+    if (previewRecoveryBlocking) return;
+    selectedBackgroundIdRef.current = bgId;
+    selectBackground(bgId);
+  }, [previewRecoveryBlocking, selectBackground]);
+
   async function handleShoot() {
-    if (!session || isCapturing || captureLock.current || maxReached) return;
+    if (!session || previewRecoveryBlocking || maxReached) return;
 
     captureLock.current = true;
     setIsCapturing(true);
@@ -486,9 +515,39 @@ export default function Camera() {
             {captureState === "recovery-warning" ? (
               <>
                 <div>FOTO TERSIMPAN</div>
-                <div style={{ fontSize: "1.5rem", marginTop: "8px", fontWeight: "normal", opacity: 0.9 }}>
+                <div style={{ fontSize: "1.5rem", marginTop: "8px", marginBottom: "16px", fontWeight: "normal", opacity: 0.9 }}>
                   MENUNGGU PREVIEW KAMERA...
                 </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setMessage("MENCOBA MEMULIHKAN KAMERA...");
+                    setCaptureState("recovering");
+                    const recovered = await recoverDccPreview(live);
+                    if (recovered) {
+                      setFreezeFrameUrl(null);
+                      setCaptureState("recovered");
+                      setMessage(`FOTO ${shotCount.current} TERSIMPAN`);
+                    } else {
+                      setCaptureState("recovery-warning");
+                      setMessage("PREVIEW KAMERA BELUM PULIH — FOTO TETAP TERSIMPAN");
+                    }
+                  }}
+                  style={{
+                    pointerEvents: "auto",
+                    padding: "12px 28px",
+                    fontSize: "1.2rem",
+                    fontWeight: 700,
+                    backgroundColor: "#ef4444",
+                    color: "#ffffff",
+                    borderRadius: "12px",
+                    border: "2px solid #ffffff",
+                    cursor: "pointer",
+                    boxShadow: "0 4px 14px rgba(0,0,0,0.5)",
+                  }}
+                >
+                  RETRY KAMERA
+                </button>
               </>
             ) : captureState === "recovering" ? (
               <div>MEMULIHKAN KAMERA...</div>
@@ -521,7 +580,7 @@ export default function Camera() {
         backgrounds={backgrounds}
         selectedBackgroundId={session?.selectedBackgroundId || backgrounds[0].id}
         onSelectBackground={handleSelectBackground}
-        disabled={isCapturing}
+        disabled={previewRecoveryBlocking}
       />
 
       <footer className="camera-actions">
@@ -537,14 +596,14 @@ export default function Camera() {
         </div>
         <div className="camera-action-buttons">
           {!maxReached && (
-            <KioskButton onClick={handleShoot} disabled={isCapturing} className="camera-shoot">
+            <KioskButton onClick={handleShoot} disabled={previewRecoveryBlocking} className="camera-shoot">
               {isCapturing ? "MENGAMBIL FOTO..." : "SHOOT"}
             </KioskButton>
           )}
           {count >= 1 && (
             <KioskButton
               onClick={() => { if (count >= required) router.push("/preview"); }}
-              disabled={count < required || isCapturing}
+              disabled={count < required || previewRecoveryBlocking}
               className={`camera-next ${maxReached ? "camera-next--primary" : ""}`}
             >
               {maxReached ? "NEXT" : `NEXT (${count}/${required})`}

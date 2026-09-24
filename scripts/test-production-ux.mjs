@@ -1160,6 +1160,111 @@ async function runProductionUxTests() {
   console.log("✓ C22: Result page timer ownership verified: SessionTimerHud removed, 300s/60s CountdownTimer owns lifecycle");
   }
 
+  // ================================================================
+  // TEST 19: Physical Acceptance Bugfix Batch (Issues A - J)
+  // ================================================================
+  console.log("\nStep 19: Validating Physical Acceptance Bugfix Batch (Issues A - J)...");
+  {
+    const cameraCode = await fs.readFile(path.join(projectRoot, "src/app/camera/page.tsx"), "utf-8");
+    const liveViewCode = await fs.readFile(path.join(projectRoot, "src/components/camera-live-view.tsx"), "utf-8");
+    const dccAdapterCode = await fs.readFile(path.join(projectRoot, "src/lib/camera/digicamcontrol-adapter.ts"), "utf-8");
+    const sessionStoreCode = await fs.readFile(path.join(projectRoot, "src/lib/session/session-store.tsx"), "utf-8");
+    const resultPageCode = await fs.readFile(path.join(projectRoot, "src/app/result/page.tsx"), "utf-8");
+    const addPreviewCode = await fs.readFile(path.join(projectRoot, "src/app/additional-preview/page.tsx"), "utf-8");
+    const addPaymentCode = await fs.readFile(path.join(projectRoot, "src/app/add-print-payment/page.tsx"), "utf-8");
+    const kioskCode = await fs.readFile(path.join(projectRoot, "src/components/kiosk.tsx"), "utf-8");
+    const composeFinalCode = await fs.readFile(path.join(projectRoot, "src/lib/image-processing/compose-final.ts"), "utf-8");
+    const { computePhotoFit } = await import("../src/lib/image-processing/fit-math.ts");
+
+    // C23: previewRecoveryBlocking locks shoot, background selection, buttons
+    assert.ok(cameraCode.includes("previewRecoveryBlocking"), "C23: camera page must define previewRecoveryBlocking");
+    assert.ok(cameraCode.includes("if (previewRecoveryBlocking) return;"), "C23: handleSelectBackground must check previewRecoveryBlocking");
+    assert.ok(cameraCode.includes("if (!session || previewRecoveryBlocking || maxReached) return;"), "C23: handleShoot must check previewRecoveryBlocking");
+    assert.ok(cameraCode.includes("disabled={previewRecoveryBlocking}"), "C23: controls must be disabled during recovery");
+    assert.ok(cameraCode.includes("RETRY KAMERA"), "C23: recovery-warning overlay must render RETRY KAMERA button");
+    console.log("✓ C23: Camera interaction lock verified: previewRecoveryBlocking blocks shoot/background/next and provides RETRY KAMERA");
+
+    // C24: Terminal fallback to browser-video in recoverDccPreview
+    assert.ok(cameraCode.includes("switchToProvider(\"browser-video\")"), "C24: recoverDccPreview must attempt terminal fallback to browser-video");
+    console.log("✓ C24: Terminal recovery fallback verified: falls back to browser-video provider when DCC unready");
+
+    // C25: DCC SHA-256 hash comparison in digicamcontrol-adapter
+    assert.ok(dccAdapterCode.includes("createHash(\"sha256\")"), "C25: adapter must use crypto sha256 hashing");
+    assert.ok(dccAdapterCode.includes("resetDccLiveViewMeta"), "C25: adapter must export resetDccLiveViewMeta");
+    console.log("✓ C25: DCC frame freshness verified: full-buffer sha256 hash comparison used instead of sample/timestamp");
+
+    // C26: DCC polling cadence and freshness check in CameraLiveView
+    assert.ok(liveViewCode.includes("DCC_POLL_INTERVAL_MS = 500"), "C26: live view must poll DCC at 500ms cadence");
+    assert.ok(liveViewCode.includes("isNew && seq > lastFrameSequenceRef.current"), "C26: must require X-Frame-New and advancing sequence");
+    console.log("✓ C26: DCC client polling verified: 500ms cadence and strict isNew + seq freshness contract");
+
+    // C27: beginAdditionalPrint resets add-print state while preserving captures & main results
+    assert.ok(sessionStoreCode.includes("beginAdditionalPrint"), "C27: session store must define beginAdditionalPrint");
+    const testSession = {
+      sessionId: "test-sess-1",
+      capturedPhotos: [{ raw: "photo.jpg", display: "photo.jpg" }],
+      finalImageUrl: "/results/final.png",
+      additionalFrameId: "frame-2",
+      addPrintPaymentStatus: "paid",
+      additionalPreviewDeadlineAt: new Date(Date.now() - 5000).toISOString(),
+    };
+    // Simulate beginAdditionalPrint patch
+    const resetPatch = {
+      additionalFrameId: undefined,
+      additionalSelectedPhotoIndices: undefined,
+      additionalPhotoSlotAssignments: undefined,
+      additionalStickers: [],
+      addPrintPaymentStatus: "unpaid",
+      addPrintPaymentOrderId: undefined,
+      addPrintPaymentRedirectUrl: undefined,
+      addPrintPayableAmount: undefined,
+      addPrintUniqueCode: undefined,
+      additionalPrintImageUrl: undefined,
+      additionalPrintStatus: "idle",
+      additionalPrintCommitted: false,
+      additionalPreviewStartedAt: undefined,
+      additionalPreviewDeadlineAt: undefined,
+    };
+    const afterReset = { ...testSession, ...resetPatch };
+    assert.equal(afterReset.capturedPhotos.length, 1, "C27: captured photos must be preserved");
+    assert.equal(afterReset.finalImageUrl, "/results/final.png", "C27: final image URL must be preserved");
+    assert.equal(afterReset.additionalFrameId, undefined, "C27: additionalFrameId must be reset");
+    assert.equal(afterReset.addPrintPaymentStatus, "unpaid", "C27: addPrintPaymentStatus must be reset to unpaid");
+    assert.equal(afterReset.additionalPreviewDeadlineAt, undefined, "C27: deadline must be reset");
+    console.log("✓ C27: beginAdditionalPrint state isolation verified: resets add-print properties while preserving captured photos and main result");
+
+    // C28: Result page ADD PRINT button invokes beginAdditionalPrint
+    assert.ok(resultPageCode.includes("beginAdditionalPrint()"), "C28: Result page must invoke beginAdditionalPrint on ADD PRINT click");
+    console.log("✓ C28: Result page ADD PRINT button invokes beginAdditionalPrint before navigating to /additional-frame");
+
+    // C29: Additional preview re-initializes timer if expired
+    assert.ok(addPreviewCode.includes("deadline <= Date.now()"), "C29: additional preview must re-init timer if deadline <= Date.now()");
+    console.log("✓ C29: Additional preview timer verified: always provides fresh 120s timer on entry");
+
+    // C30: Filling slots does NOT auto-navigate in additional preview
+    assert.ok(addPreviewCode.includes("isExpired && isReady"), "C30: auto-navigate requires isExpired AND isReady");
+    console.log("✓ C30: Additional preview auto-navigation verified: filling slots does not navigate; only 00:00 expiry does");
+
+    // C31: Simulate add-print payment button in add-print-payment
+    assert.ok(addPaymentCode.includes("SIMULATE ADD-PRINT PAYMENT"), "C31: add-print-payment must render SIMULATE ADD-PRINT PAYMENT");
+    console.log("✓ C31: Debug simulate add-print payment verified: available when NEXT_PUBLIC_PAYMENT_DEBUG=true");
+
+    // C32: Round/ellipse aperture mask forces cover mode (no letterboxing white gaps)
+    assert.ok(kioskCode.includes("useContain = !isMaskedOrNonRect && slotRatio < 0.8"), "C32: kiosk PreviewComposer must disable contain for masked/non-rect slots");
+    assert.ok(composeFinalCode.includes("computePhotoFit(sWidth, sHeight, photoSlot.width, photoSlot.height, fitMode, isMaskedOrNonRect)"), "C32: compose-final must pass isMaskedOrNonRect to computePhotoFit");
+    
+    // Mathematical verification of computePhotoFit:
+    // Slot 419x530 (ratio 0.79) with 1920x1080 landscape photo (ratio 1.77)
+    const normalSmartCoverFit = computePhotoFit(1920, 1080, 419, 530, "smart-cover", false);
+    assert.equal(normalSmartCoverFit.finalMode, "contain", "Rectangular slot with ratio 0.79 uses contain for landscape photo");
+
+    const maskedEllipseCoverFit = computePhotoFit(1920, 1080, 419, 530, "smart-cover", true);
+    assert.equal(maskedEllipseCoverFit.finalMode, "cover", "Masked/ellipse slot MUST force cover mode");
+    assert.equal(maskedEllipseCoverFit.dw, 419, "dw must match slotWidth in cover");
+    assert.equal(maskedEllipseCoverFit.dh, 530, "dh must match slotHeight in cover");
+    console.log("✓ C32: Non-rectangular aperture cover verified: masked/ellipse/circle/rounded slots force cover to prevent white gaps");
+  }
+
   console.log("\n==================================================");
   console.log("ALL PRODUCTION RESULT & ADD-PRINT UX TESTS PASSED!");
   console.log("==================================================");

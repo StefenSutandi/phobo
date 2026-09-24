@@ -306,6 +306,8 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, CameraLiveViewPro
 
     let consecutiveFailures = 0;
 
+const DCC_POLL_INTERVAL_MS = 500;
+
     const pollLoop = async () => {
       while (dccPollingActiveRef.current && activeProviderRef.current === "digicamcontrol") {
         try {
@@ -322,9 +324,9 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, CameraLiveViewPro
           }
 
           const seqHeader = res.headers.get("X-Frame-Sequence");
-          const tsHeader = res.headers.get("X-Frame-Timestamp");
+          const isNewHeader = res.headers.get("X-Frame-New");
           const seq = seqHeader ? Number.parseInt(seqHeader, 10) : 0;
-          const ts = tsHeader ? Number.parseInt(tsHeader, 10) : Date.now();
+          const isNew = isNewHeader === "1";
 
           const blob = await res.blob();
           if (blob.size < 100) {
@@ -367,11 +369,10 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, CameraLiveViewPro
           if (w > 0 && h > 0) {
             consecutiveFailures = 0;
 
-            const isAdvancing = seq > lastFrameSequenceRef.current || ts > lastFrameTimestampRef.current;
+            const isAdvancing = isNew && seq > lastFrameSequenceRef.current;
             if (isAdvancing) {
               consecutiveFreshFramesRef.current += 1;
               lastFrameSequenceRef.current = seq;
-              lastFrameTimestampRef.current = ts;
             }
 
             // Dispose old ImageBitmap to prevent GPU memory leak
@@ -408,8 +409,8 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, CameraLiveViewPro
           }
         }
 
-        // Target ~30fps live preview cadence
-        await new Promise((r) => setTimeout(r, 33));
+        // Native DCC webserver cadence
+        await new Promise((r) => setTimeout(r, DCC_POLL_INTERVAL_MS));
       }
     };
 

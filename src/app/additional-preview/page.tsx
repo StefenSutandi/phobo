@@ -37,7 +37,8 @@ export default function AdditionalPreview() {
   // Persistent 2-minute Additional Preview Timer
   const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
     if (session?.additionalPreviewDeadlineAt) {
-      return Math.max(0, Math.floor((new Date(session.additionalPreviewDeadlineAt).getTime() - Date.now()) / 1000));
+      const diff = Math.floor((new Date(session.additionalPreviewDeadlineAt).getTime() - Date.now()) / 1000);
+      if (diff > 0) return diff;
     }
     return 120;
   });
@@ -46,7 +47,8 @@ export default function AdditionalPreview() {
 
   useEffect(() => {
     if (!hasHydrated || !session) return;
-    if (!session.additionalPreviewDeadlineAt) {
+    const deadline = session.additionalPreviewDeadlineAt ? new Date(session.additionalPreviewDeadlineAt).getTime() : 0;
+    if (!deadline || deadline <= Date.now()) {
       initAdditionalPreviewTimer(120);
     }
   }, [hasHydrated, session, initAdditionalPreviewTimer]);
