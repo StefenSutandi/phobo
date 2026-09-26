@@ -337,49 +337,138 @@ async function runTests() {
     console.log("✓ Contract 6 passed: DCC reconnect clears freeze after stable frames");
   }
 
-  // Test 7: Stale repeated DCC frame is not considered recovered & resets consecutive counter
-  console.log("\nContract 7: Stale repeated DCC frame resets consecutive fresh frame counter...");
+  // Test 7: Duplicate-tolerant DCC recovery within bounded window
+  console.log("\nContract 7: Duplicate-tolerant DCC recovery within bounded window (4000ms)...");
   {
-    let lastSeq = 10;
-    let consecutiveFreshFrames = 0;
+    function createRecoveryTracker() {
+      let lastSeq = 10;
+      let freshFrameProgress = 0;
+      let firstRecoveryFreshFrameAt = 0;
 
-    function processFrame(frame) {
-      const isAdvancing = frame.isNew && frame.seq > lastSeq;
-      if (isAdvancing) {
-        consecutiveFreshFrames += 1;
-        lastSeq = frame.seq;
-      } else {
-        consecutiveFreshFrames = 0;
-      }
-      return consecutiveFreshFrames >= 2;
+      return {
+        processFrame(frame, currentTime) {
+          const now = currentTime || Date.now();
+          const isAdvancing = frame.isNew && frame.seq > lastSeq;
+
+          if (isAdvancing) {
+            if (freshFrameProgress === 0) {
+              freshFrameProgress = 1;
+              firstRecoveryFreshFrameAt = now;
+              lastSeq = frame.seq;
+            } else {
+              if (now - firstRecoveryFreshFrameAt <= 4000) {
+                freshFrameProgress += 1;
+                lastSeq = frame.seq;
+              } else {
+                freshFrameProgress = 1;
+                firstRecoveryFreshFrameAt = now;
+                lastSeq = frame.seq;
+              }
+            }
+          } else {
+            if (freshFrameProgress === 1 && now - firstRecoveryFreshFrameAt > 4000) {
+              freshFrameProgress = 0;
+              firstRecoveryFreshFrameAt = 0;
+            }
+            if (frame.seq < lastSeq) {
+              lastSeq = frame.seq;
+              freshFrameProgress = 0;
+              firstRecoveryFreshFrameAt = 0;
+            }
+          }
+
+          return freshFrameProgress >= 2;
+        },
+        restart() {
+          freshFrameProgress = 0;
+          firstRecoveryFreshFrameAt = 0;
+        },
+        switchProvider() {
+          freshFrameProgress = 0;
+          firstRecoveryFreshFrameAt = 0;
+        },
+        getProgress() {
+          return freshFrameProgress;
+        },
+      };
     }
 
-    // Sequence 1: fresh A -> stale A -> fresh B -> fresh C
-    // fresh A -> consecutive = 1
-    assert.equal(processFrame({ seq: 11, isNew: true }), false);
-    assert.equal(consecutiveFreshFrames, 1, "fresh A -> consecutive = 1");
+    // Case 1: fresh A -> stale A -> fresh B => READY
+    {
+      const tracker = createRecoveryTracker();
+      const t0 = 1000;
+      assert.equal(tracker.processFrame({ seq: 11, isNew: true }, t0), false);
+      assert.equal(tracker.getProgress(), 1, "Case 1: fresh A -> progress = 1");
+      // duplicate/stale poll does NOT reset progress
+      assert.equal(tracker.processFrame({ seq: 11, isNew: false }, t0 + 500), false);
+      assert.equal(tracker.getProgress(), 1, "Case 1: stale A does not reset progress");
+      assert.equal(tracker.processFrame({ seq: 12, isNew: true }, t0 + 1000), true);
+      assert.equal(tracker.getProgress(), 2, "Case 1: fresh B -> progress = 2 -> ready");
+    }
 
-    // stale A -> consecutive = 0 (intervening identical frame resets counter)
-    assert.equal(processFrame({ seq: 11, isNew: false }), false);
-    assert.equal(consecutiveFreshFrames, 0, "stale A -> consecutive reset to 0");
+    // Case 2: fresh A -> stale A -> stale A -> fresh B => READY
+    {
+      const tracker = createRecoveryTracker();
+      const t0 = 1000;
+      assert.equal(tracker.processFrame({ seq: 11, isNew: true }, t0), false);
+      assert.equal(tracker.processFrame({ seq: 11, isNew: false }, t0 + 500), false);
+      assert.equal(tracker.processFrame({ seq: 11, isNew: false }, t0 + 1000), false);
+      assert.equal(tracker.getProgress(), 1, "Case 2: 2x stale polls retain progress = 1");
+      assert.equal(tracker.processFrame({ seq: 12, isNew: true }, t0 + 1500), true);
+      assert.equal(tracker.getProgress(), 2, "Case 2: fresh B within 4s window -> ready");
+    }
 
-    // fresh B -> consecutive = 1
-    assert.equal(processFrame({ seq: 12, isNew: true }), false);
-    assert.equal(consecutiveFreshFrames, 1, "fresh B -> consecutive = 1");
+    // Case 3: stale A -> stale A -> stale A => NOT READY
+    {
+      const tracker = createRecoveryTracker();
+      const t0 = 1000;
+      assert.equal(tracker.processFrame({ seq: 10, isNew: false }, t0), false);
+      assert.equal(tracker.processFrame({ seq: 10, isNew: false }, t0 + 500), false);
+      assert.equal(tracker.processFrame({ seq: 10, isNew: false }, t0 + 1000), false);
+      assert.equal(tracker.getProgress(), 0, "Case 3: purely stale feed stays progress = 0");
+    }
 
-    // fresh C -> consecutive = 2 -> ready
-    assert.equal(processFrame({ seq: 13, isNew: true }), true);
-    assert.equal(consecutiveFreshFrames, 2, "fresh C -> consecutive = 2 -> ready");
+    // Case 4: fresh A -> wait >4s -> stale A => reset to 0 (window expired)
+    {
+      const tracker = createRecoveryTracker();
+      const t0 = 1000;
+      assert.equal(tracker.processFrame({ seq: 11, isNew: true }, t0), false);
+      assert.equal(tracker.getProgress(), 1, "Case 4: fresh A -> progress = 1");
+      // 4500ms later (> 4000ms window), stale frame arrives
+      assert.equal(tracker.processFrame({ seq: 11, isNew: false }, t0 + 4500), false);
+      assert.equal(tracker.getProgress(), 0, "Case 4: stale frame after window expiry resets progress to 0");
+    }
 
-    // Sequence 2: fresh A -> fresh B -> ready
-    lastSeq = 20;
-    consecutiveFreshFrames = 0;
-    assert.equal(processFrame({ seq: 21, isNew: true }), false);
-    assert.equal(consecutiveFreshFrames, 1, "fresh A -> consecutive = 1");
-    assert.equal(processFrame({ seq: 22, isNew: true }), true);
-    assert.equal(consecutiveFreshFrames, 2, "fresh B -> consecutive = 2 -> ready");
+    // Case 5: fresh A -> fresh B => READY
+    {
+      const tracker = createRecoveryTracker();
+      const t0 = 1000;
+      assert.equal(tracker.processFrame({ seq: 11, isNew: true }, t0), false);
+      assert.equal(tracker.processFrame({ seq: 12, isNew: true }, t0 + 500), true);
+      assert.equal(tracker.getProgress(), 2, "Case 5: immediate consecutive fresh frames -> ready");
+    }
 
-    console.log("✓ Contract 7 passed: Strict consecutive fresh frames verified (intervening stale resets counter to 0)");
+    // Case 6: recovery restart resets progress
+    {
+      const tracker = createRecoveryTracker();
+      const t0 = 1000;
+      assert.equal(tracker.processFrame({ seq: 11, isNew: true }, t0), false);
+      assert.equal(tracker.getProgress(), 1, "Case 6: fresh A -> progress = 1");
+      tracker.restart();
+      assert.equal(tracker.getProgress(), 0, "Case 6: restartLiveView resets progress to 0");
+    }
+
+    // Case 7: provider switch resets progress
+    {
+      const tracker = createRecoveryTracker();
+      const t0 = 1000;
+      assert.equal(tracker.processFrame({ seq: 11, isNew: true }, t0), false);
+      assert.equal(tracker.getProgress(), 1, "Case 7: fresh A -> progress = 1");
+      tracker.switchProvider();
+      assert.equal(tracker.getProgress(), 0, "Case 7: switchToProvider resets progress to 0");
+    }
+
+    console.log("✓ Contract 7 passed: Duplicate-tolerant bounded recovery verified across all 7 cases");
   }
 
   // Test 8: DCC unavailable → browser-video fallback

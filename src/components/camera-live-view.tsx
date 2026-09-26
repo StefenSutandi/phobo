@@ -78,7 +78,8 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, CameraLiveViewPro
   const currentDccImageRef = useRef<HTMLImageElement | ImageBitmap | null>(null);
   const lastFrameSequenceRef = useRef<number>(0);
   const lastFrameTimestampRef = useRef<number>(0);
-  const consecutiveFreshFramesRef = useRef<number>(0);
+  const freshFrameProgressRef = useRef<number>(0);
+  const firstRecoveryFreshFrameAtRef = useRef<number>(0);
 
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const backgroundImgRef = useRef<HTMLImageElement | null>(null);
@@ -111,7 +112,8 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, CameraLiveViewPro
       (currentDccImageRef.current as ImageBitmap).close();
     }
     currentDccImageRef.current = null;
-    consecutiveFreshFramesRef.current = 0;
+    freshFrameProgressRef.current = 0;
+    firstRecoveryFreshFrameAtRef.current = 0;
 
     // 2. Stop browser video
     readySamplesRef.current = 0;
@@ -132,9 +134,9 @@ export const CameraLiveView = forwardRef<CameraLiveViewHandle, CameraLiveViewPro
       const img = currentDccImageRef.current;
       const isImgValid = Boolean(img && img.width > 0 && img.height > 0);
       const ready = Boolean(
-        statusRef.current === "active" &&
+        (statusRef.current === "active" || statusRef.current === "starting" || statusRef.current === "recovering") &&
         isImgValid &&
-        consecutiveFreshFramesRef.current >= 2
+        freshFrameProgressRef.current >= 2
       );
       return ready;
     }
@@ -371,10 +373,35 @@ const DCC_POLL_INTERVAL_MS = 500;
 
             const isAdvancing = isNew && seq > lastFrameSequenceRef.current;
             if (isAdvancing) {
-              consecutiveFreshFramesRef.current += 1;
-              lastFrameSequenceRef.current = seq;
+              const now = Date.now();
+              if (freshFrameProgressRef.current === 0) {
+                freshFrameProgressRef.current = 1;
+                firstRecoveryFreshFrameAtRef.current = now;
+                lastFrameSequenceRef.current = seq;
+              } else {
+                if (now - firstRecoveryFreshFrameAtRef.current <= 4000) {
+                  freshFrameProgressRef.current += 1;
+                  lastFrameSequenceRef.current = seq;
+                } else {
+                  // Window expired (>4s); restart progress with this fresh frame
+                  freshFrameProgressRef.current = 1;
+                  firstRecoveryFreshFrameAtRef.current = now;
+                  lastFrameSequenceRef.current = seq;
+                }
+              }
             } else {
-              consecutiveFreshFramesRef.current = 0;
+              // Stale or duplicate poll: do NOT increment, do NOT immediately reset.
+              // If waiting on a single fresh frame and window expires (>4s), reset back to 0.
+              if (freshFrameProgressRef.current === 1 && Date.now() - firstRecoveryFreshFrameAtRef.current > 4000) {
+                freshFrameProgressRef.current = 0;
+                firstRecoveryFreshFrameAtRef.current = 0;
+              }
+              // If sequence regressed (e.g. DCC server restarted and reset sequence):
+              if (seq < lastFrameSequenceRef.current) {
+                lastFrameSequenceRef.current = seq;
+                freshFrameProgressRef.current = 0;
+                firstRecoveryFreshFrameAtRef.current = 0;
+              }
             }
 
             // Dispose old ImageBitmap to prevent GPU memory leak
@@ -389,7 +416,7 @@ const DCC_POLL_INTERVAL_MS = 500;
             currentDccImageRef.current = decoded;
             setVideoDimensions(`${w}x${h}`);
 
-            if (statusRef.current === "starting" && consecutiveFreshFramesRef.current >= 2) {
+            if ((statusRef.current === "starting" || statusRef.current === "recovering") && freshFrameProgressRef.current >= 2) {
               updateStatus("active");
               console.log(
                 `[Camera Preview] PreferredProvider=${preferred} ActiveProvider=digicamcontrol DccEndpoint=/api/camera/live-frame State=active`
@@ -399,7 +426,8 @@ const DCC_POLL_INTERVAL_MS = 500;
         } catch (err) {
           if (!dccPollingActiveRef.current) break;
           consecutiveFailures += 1;
-          consecutiveFreshFramesRef.current = 0;
+          freshFrameProgressRef.current = 0;
+          firstRecoveryFreshFrameAtRef.current = 0;
 
           // If starting and DCC fails 3 consecutive times (~1.5-2s), fall back to browser-video
           if (statusRef.current === "starting" && consecutiveFailures >= 3) {
@@ -424,7 +452,8 @@ const DCC_POLL_INTERVAL_MS = 500;
       if (process.env.PHOBO_DEBUG_LOGS === "true" || process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true") {
         console.log("[Camera Preview] ActiveProvider=digicamcontrol State=recovering");
       }
-      consecutiveFreshFramesRef.current = 0;
+      freshFrameProgressRef.current = 0;
+      firstRecoveryFreshFrameAtRef.current = 0;
       if (!dccPollingActiveRef.current) {
         await startDccLiveView();
       }

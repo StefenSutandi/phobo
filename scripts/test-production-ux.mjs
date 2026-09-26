@@ -1193,39 +1193,58 @@ async function runProductionUxTests() {
     assert.ok(dccAdapterCode.includes("resetDccLiveViewMeta"), "C25: adapter must export resetDccLiveViewMeta");
     console.log("✓ C25: DCC frame freshness verified: full-buffer sha256 hash comparison used instead of sample/timestamp");
 
-    // C26: DCC polling cadence, freshness check, and strict consecutive reset in CameraLiveView
+    // C26: DCC polling cadence, freshness check, and duplicate-tolerant bounded recovery in CameraLiveView
     assert.ok(liveViewCode.includes("DCC_POLL_INTERVAL_MS = 500"), "C26: live view must poll DCC at 500ms cadence");
     assert.ok(liveViewCode.includes("isNew && seq > lastFrameSequenceRef.current"), "C26: must require X-Frame-New and advancing sequence");
-    assert.ok(liveViewCode.includes("consecutiveFreshFramesRef.current = 0;"), "C26: must reset consecutive fresh frames counter on non-advancing frame");
+    assert.ok(liveViewCode.includes("freshFrameProgressRef"), "C26: must track freshFrameProgressRef for bounded recovery");
 
-    // Deterministic simulation of consecutive frame reset logic:
+    // Deterministic simulation of duplicate-tolerant bounded recovery logic:
     {
       let lastSeq = 100;
-      let consecutive = 0;
-      function simulateFeed(isNew, seq) {
+      let progress = 0;
+      let firstFreshAt = 0;
+      function simulateFeed(isNew, seq, now) {
         const isAdvancing = isNew && seq > lastSeq;
         if (isAdvancing) {
-          consecutive += 1;
-          lastSeq = seq;
+          if (progress === 0) {
+            progress = 1;
+            firstFreshAt = now;
+            lastSeq = seq;
+          } else {
+            if (now - firstFreshAt <= 4000) {
+              progress += 1;
+              lastSeq = seq;
+            } else {
+              progress = 1;
+              firstFreshAt = now;
+              lastSeq = seq;
+            }
+          }
         } else {
-          consecutive = 0;
+          if (progress === 1 && now - firstFreshAt > 4000) {
+            progress = 0;
+            firstFreshAt = 0;
+          }
+          if (seq < lastSeq) {
+            lastSeq = seq;
+            progress = 0;
+            firstFreshAt = 0;
+          }
         }
-        return consecutive >= 2;
+        return progress >= 2;
       }
+      const t0 = 1000;
       // fresh A
-      assert.equal(simulateFeed(true, 101), false);
-      assert.equal(consecutive, 1, "C26: fresh A -> consecutive = 1");
-      // stale A (stale identical frame resets counter to 0)
-      assert.equal(simulateFeed(false, 101), false);
-      assert.equal(consecutive, 0, "C26: stale A -> consecutive = 0");
-      // fresh B
-      assert.equal(simulateFeed(true, 102), false);
-      assert.equal(consecutive, 1, "C26: fresh B -> consecutive = 1");
-      // fresh C -> ready
-      assert.equal(simulateFeed(true, 103), true);
-      assert.equal(consecutive, 2, "C26: fresh C -> consecutive = 2 -> ready");
+      assert.equal(simulateFeed(true, 101, t0), false);
+      assert.equal(progress, 1, "C26: fresh A -> progress = 1");
+      // stale A (stale poll does NOT reset progress within bounded window)
+      assert.equal(simulateFeed(false, 101, t0 + 500), false);
+      assert.equal(progress, 1, "C26: stale A -> progress retained = 1");
+      // fresh B -> ready
+      assert.equal(simulateFeed(true, 102, t0 + 1000), true);
+      assert.equal(progress, 2, "C26: fresh B -> progress = 2 -> ready");
     }
-    console.log("✓ C26: DCC client polling verified: 500ms cadence, strict isNew + seq freshness, and reset on intervening stale frames");
+    console.log("✓ C26: DCC client polling verified: 500ms cadence, advancing seq freshness, and duplicate tolerance within 4000ms window");
 
     // C27: beginAdditionalPrint resets add-print state while preserving captures & main results
     assert.ok(sessionStoreCode.includes("beginAdditionalPrint"), "C27: session store must define beginAdditionalPrint");
