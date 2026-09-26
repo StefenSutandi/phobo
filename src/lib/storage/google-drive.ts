@@ -62,6 +62,10 @@ export async function uploadFileToGoogleDrive({
       fields: "id, webViewLink, webContentLink",
     });
   } catch (error) {
+    if (error instanceof Error && error.message.toLowerCase().includes("invalid_grant")) {
+      console.error("[Google Drive] Google Drive OAuth refresh token rejected (invalid_grant). Re-authorize the production Google account.");
+      throw new Error("Google Drive OAuth refresh token rejected (invalid_grant). Re-authorize the production Google account.");
+    }
     if (authMode !== "oauth" && error instanceof Error && error.message.toLowerCase().includes("quota")) {
       throw new Error(`Service account cannot upload to normal My Drive. Use Shared Drive or GOOGLE_DRIVE_AUTH_MODE=oauth. Original error: ${error.message}`);
     }

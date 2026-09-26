@@ -130,9 +130,10 @@ export async function composeFinalImages({
       const meta = await sharp(transparentSubject).metadata();
       const sWidth = meta.width ?? 1;
       const sHeight = meta.height ?? 1;
-      const isMaskedOrNonRect = Boolean(photoSlot.maskUrl) || photoSlot.shape === "ellipse" || photoSlot.shape === "circle" || photoSlot.shape === "rounded";
-      const fitMode = isMaskedOrNonRect ? "cover" : "smart-cover";
-      const fit = computePhotoFit(sWidth, sHeight, photoSlot.width, photoSlot.height, fitMode, isMaskedOrNonRect);
+      const isRoundSlot = photoSlot.shape === "ellipse" || photoSlot.shape === "circle";
+      const isMaskedOrNonRect = Boolean(photoSlot.maskUrl) || isRoundSlot || photoSlot.shape === "rounded";
+      const fitMode = isRoundSlot ? "contain-center" : (isMaskedOrNonRect ? "cover" : "smart-cover");
+      const fit = computePhotoFit(sWidth, sHeight, photoSlot.width, photoSlot.height, fitMode, isMaskedOrNonRect, isRoundSlot ? "center" : "bottom");
       
       const extractedSubject = await sharp(transparentSubject).extract({
         left: fit.sx,

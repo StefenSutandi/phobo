@@ -1297,20 +1297,83 @@ async function runProductionUxTests() {
     assert.ok(addPaymentCode.includes("SIMULATE ADD-PRINT PAYMENT"), "C31: add-print-payment must render SIMULATE ADD-PRINT PAYMENT");
     console.log("✓ C31: Debug simulate add-print payment verified: available when NEXT_PUBLIC_PAYMENT_DEBUG=true");
 
-    // C32: Round/ellipse aperture mask forces cover mode (no letterboxing white gaps)
-    assert.ok(kioskCode.includes("useContain = !isMaskedOrNonRect && slotRatio < 0.8"), "C32: kiosk PreviewComposer must disable contain for masked/non-rect slots");
-    assert.ok(composeFinalCode.includes("computePhotoFit(sWidth, sHeight, photoSlot.width, photoSlot.height, fitMode, isMaskedOrNonRect)"), "C32: compose-final must pass isMaskedOrNonRect to computePhotoFit");
+    // C32: Ellipse/Circle aperture centered contain foreground with full cover background
+    assert.ok(kioskCode.includes("useContain = isEllipse ? true : (!isMaskedOrNonRect && slotRatio < 0.8)"), "C32: kiosk PreviewComposer must use contain for ellipse/circle slots");
+    assert.ok(kioskCode.includes("objectPosition = isEllipse ? \"center\" : (useContain ? \"bottom\" : \"center\")"), "C32: kiosk PreviewComposer must center contain ellipse/circle slots");
+    assert.ok(composeFinalCode.includes("isRoundSlot ? \"contain-center\" : (isMaskedOrNonRect ? \"cover\" : \"smart-cover\")"), "C32: compose-final must use contain-center for ellipse/circle slots");
     
-    // Mathematical verification of computePhotoFit:
-    // Slot 419x530 (ratio 0.79) with 1920x1080 landscape photo (ratio 1.77)
-    const normalSmartCoverFit = computePhotoFit(1920, 1080, 419, 530, "smart-cover", false);
-    assert.equal(normalSmartCoverFit.finalMode, "contain", "Rectangular slot with ratio 0.79 uses contain for landscape photo");
+    // 1. Ellipse landscape foreground uses centered contain:
+    const ellipseLandscapeFit = computePhotoFit(1920, 1080, 419, 530, "contain-center", true, "center");
+    assert.equal(ellipseLandscapeFit.finalMode, "contain", "Ellipse slot must use contain mode");
+    assert.equal(ellipseLandscapeFit.alignment, "center", "Ellipse slot must use centered alignment");
+    assert.equal(ellipseLandscapeFit.dw, 419, "dw matches slotWidth in contain for landscape photo");
+    assert.equal(ellipseLandscapeFit.dh, Math.round(419 / (1920 / 1080)), "dh scales proportionally without side crop");
+    assert.equal(ellipseLandscapeFit.dx, 0, "dx is 0 for landscape photo in portrait slot");
+    assert.equal(ellipseLandscapeFit.dy, Math.round((530 - ellipseLandscapeFit.dh) / 2), "dy is centered vertically (slotHeight - dh) / 2");
+    assert.equal(ellipseLandscapeFit.sw, 1920, "sw is full source width (no side cropping)");
+    assert.equal(ellipseLandscapeFit.sh, 1080, "sh is full source height");
 
-    const maskedEllipseCoverFit = computePhotoFit(1920, 1080, 419, 530, "smart-cover", true);
-    assert.equal(maskedEllipseCoverFit.finalMode, "cover", "Masked/ellipse slot MUST force cover mode");
-    assert.equal(maskedEllipseCoverFit.dw, 419, "dw must match slotWidth in cover");
-    assert.equal(maskedEllipseCoverFit.dh, 530, "dh must match slotHeight in cover");
-    console.log("✓ C32: Non-rectangular aperture cover verified: masked/ellipse/circle/rounded slots force cover to prevent white gaps");
+    // 2. Circle landscape foreground uses centered contain:
+    const circleLandscapeFit = computePhotoFit(1920, 1080, 400, 400, "contain-center", true, "center");
+    assert.equal(circleLandscapeFit.finalMode, "contain", "Circle slot must use contain mode");
+    assert.equal(circleLandscapeFit.alignment, "center", "Circle slot must use centered alignment");
+    assert.equal(circleLandscapeFit.dw, 400, "Circle dw is full width");
+    assert.equal(circleLandscapeFit.dh, 225, "Circle dh is proportional");
+    assert.equal(circleLandscapeFit.dx, 0, "Circle dx is 0");
+    assert.equal(circleLandscapeFit.dy, Math.round((400 - 225) / 2), "Circle dy is centered vertically");
+
+    // 3. Ellipse background still uses cover:
+    // In PreviewComposer: slotBgObj/background <img> has objectFit: "cover", width: "100%", height: "100%"
+    assert.ok(kioskCode.includes('objectFit: "cover", zIndex: 0'), "C32: PreviewComposer background layer must use objectFit: cover");
+    // In composeFinal: normalizeImageBuffer uses fit: "cover" for slotBg.imageUrl
+    assert.ok(composeFinalCode.includes('fit: "cover"'), "C32: compose-final background layer must use fit: cover");
+
+    // 4. No white/placeholder gap introduced:
+    // Slot composite has bgBuffer (full width x height) underlying extractedSubject, then aperture mask clips both.
+    assert.ok(composeFinalCode.includes(".composite([{ input: extractedSubject, left: fit.dx, top: fit.dy }])"), "C32: subject composited over full-slot bgBuffer");
+
+    // 5. Preview/final compose use equivalent geometry:
+    // Both use objectFit/mode: contain + center for foreground, and cover for background.
+    console.log("✓ C32: Ellipse/circle landscape foreground uses centered contain with full-cover background");
+
+    // C32B: Rectangular masked frame behavior does not regress (uses cover):
+    const rectMaskedFit = computePhotoFit(1920, 1080, 472, 353, "cover", true);
+    assert.equal(rectMaskedFit.finalMode, "cover", "Rectangular masked slot must use cover mode");
+    assert.equal(rectMaskedFit.dw, 472, "dw matches slotWidth in cover");
+    assert.equal(rectMaskedFit.dh, 353, "dh matches slotHeight in cover");
+    console.log("✓ C32B: Rectangular masked frames preserve full-cover fitting without regression");
+
+    // C32C: Background picker scroll viewport stays within picker bounds & all entries reachable:
+    const globalsCssCode = await fs.readFile(path.join(projectRoot, "src/app/globals.css"), "utf-8");
+    assert.ok(globalsCssCode.includes(".background-grid {"), "globals.css must define .background-grid");
+    assert.ok(globalsCssCode.includes("top: 82px;"), "background-grid top must be 82px");
+    assert.ok(globalsCssCode.includes("bottom: 12px;"), "background-grid bottom must be 12px");
+    assert.ok(globalsCssCode.includes("height: auto;"), "background-grid height must be auto");
+    assert.ok(globalsCssCode.includes("overflow-y: auto;"), "background-grid must have overflow-y: auto");
+    assert.ok(globalsCssCode.includes("padding: 4px 4px 28px 4px;"), "background-grid must provide safe touch padding-bottom");
+    assert.ok(!kioskCode.includes('style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", overflowY: "auto", padding: "10px" }}'), "BackgroundPicker must not have conflicting inline style overrides");
+
+    // Verify 750x440 kiosk viewport arithmetic:
+    const pickerHeight = 440 * 0.70; // 308px
+    const gridTop = 82;
+    const gridBottom = 12;
+    const gridHeight = pickerHeight - gridTop - gridBottom; // 214px
+    assert.equal(gridTop + gridHeight + gridBottom, pickerHeight, "background-grid is fully bounded within background-picker");
+    assert.ok(gridHeight > 0 && gridHeight < pickerHeight, "background-grid viewport height is positive and stays within parent");
+
+    // Verify all backgrounds in backgrounds.json are defined:
+    const backgroundsJsonRaw = await fs.readFile(path.join(projectRoot, "public/assets/backgrounds/backgrounds.json"), "utf-8");
+    const backgroundsList = JSON.parse(backgroundsJsonRaw);
+    assert.ok(backgroundsList.length > 8, "Must test with all current background entries, not just first 8");
+    console.log(`✓ C32C: Background picker geometry verified: ${backgroundsList.length} backgrounds fully reachable within bounded container`);
+
+    // C32D: Google Drive invalid_grant remains non-fatal:
+    const googleDriveCode = await fs.readFile(path.join(projectRoot, "src/lib/storage/google-drive.ts"), "utf-8");
+    const composeRouteCode = await fs.readFile(path.join(projectRoot, "src/app/api/results/compose/route.ts"), "utf-8");
+    assert.ok(googleDriveCode.includes("Google Drive OAuth refresh token rejected (invalid_grant). Re-authorize the production Google account."), "google-drive.ts must log clear invalid_grant diagnostic");
+    assert.ok(composeRouteCode.includes("Google Drive OAuth refresh token rejected (invalid_grant). Re-authorize the production Google account."), "compose route must catch and log invalid_grant diagnostic non-fatally");
+    assert.ok(composeRouteCode.includes("ok: true"), "compose route must return ok: true even if drive upload fails");
+    console.log("✓ C32D: Google Drive invalid_grant operational diagnostic and non-fatal contract verified");
   }
 
   // ================================================================

@@ -1,4 +1,5 @@
-export type FitMode = "cover" | "contain" | "smart-cover";
+export type FitMode = "cover" | "contain" | "smart-cover" | "contain-center";
+export type FitAlignment = "center" | "bottom";
 
 export function computePhotoFit(
   sourceWidth: number,
@@ -6,9 +7,18 @@ export function computePhotoFit(
   slotWidth: number,
   slotHeight: number,
   mode: FitMode = "smart-cover",
-  isMaskedOrNonRect: boolean = false
+  isMaskedOrNonRect: boolean = false,
+  alignment: FitAlignment = "bottom"
 ) {
-  let finalMode = isMaskedOrNonRect ? "cover" : mode;
+  let finalMode: FitMode = mode;
+  let finalAlignment: FitAlignment = alignment;
+
+  if (mode === "contain-center") {
+    finalMode = "contain";
+    finalAlignment = "center";
+  } else if (isMaskedOrNonRect) {
+    finalMode = "cover";
+  }
   const sourceRatio = sourceWidth / sourceHeight;
   const slotRatio = slotWidth / slotHeight;
 
@@ -44,12 +54,16 @@ export function computePhotoFit(
   } else if (finalMode === "contain") {
     if (sourceRatio > slotRatio) {
       // Source is wider than slot. Letterbox top/bottom.
+      dw = slotWidth;
       dh = slotWidth / sourceRatio;
-      dy = slotHeight - dh; // ANCHOR TO BOTTOM for natural placement!
+      dx = (slotWidth - dw) / 2;
+      dy = finalAlignment === "center" ? (slotHeight - dh) / 2 : slotHeight - dh; // CENTERED for ellipse/circle, BOTTOM for rectangular
     } else {
       // Source is taller than slot. Pillarbox left/right.
       dw = slotHeight * sourceRatio;
+      dh = slotHeight;
       dx = (slotWidth - dw) / 2;
+      dy = (slotHeight - dh) / 2;
     }
   }
 
@@ -61,7 +75,8 @@ export function computePhotoFit(
     dx: Math.round(dx), 
     dy: Math.round(dy), 
     dw: Math.round(dw), 
-    dh: Math.round(dh),
-    finalMode
+    dh: Math.round(dh), 
+    finalMode,
+    alignment: finalAlignment
   };
 }

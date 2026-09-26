@@ -186,7 +186,12 @@ export async function POST(request: Request) {
           const uploadResult = await Promise.race([driveUploadPromise, driveTimeoutPromise]);
           driveUrl = uploadResult.webViewLink;
         } catch (uploadError) {
-          console.error(`[Compose API] Drive upload non-fatal error for ${safeSessionId}:`, uploadError instanceof Error ? uploadError.message : String(uploadError));
+          const errMsg = uploadError instanceof Error ? uploadError.message : String(uploadError);
+          if (errMsg.toLowerCase().includes("invalid_grant")) {
+            console.error(`[Compose API] Google Drive OAuth refresh token rejected (invalid_grant). Re-authorize the production Google account.`);
+          } else {
+            console.error(`[Compose API] Drive upload non-fatal error for ${safeSessionId}:`, errMsg);
+          }
         }
       }
     }

@@ -418,24 +418,26 @@ button {
 
 .background-grid {
   display: grid;
-  gap: 10px 9px;
-  grid-template-columns: repeat(2, 40px);
-  height: 263px;
-  left: 16px;
+  gap: 10px 8px;
+  grid-template-columns: repeat(2, 1fr);
+  top: 82px;
+  bottom: 12px;
+  height: auto;
+  left: 12px;
+  right: 12px;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 0 0 12px 0;
+  padding: 4px 4px 28px 4px;
   position: absolute;
-  top: 82px;
-  width: 104px;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .background-choice {
   background: var(--placeholder);
   border: 0;
-  height: 46px;
-  width: 40px;
+  width: 100%;
+  aspect-ratio: 3 / 4;
 }
 
 .background-choice.is-selected {

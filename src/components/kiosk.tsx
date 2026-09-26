@@ -240,7 +240,7 @@ export function BackgroundPicker({
   return (
     <RoundedPanel className="background-picker">
       <p className="background-title">PILIH BACKGROUND</p>
-      <div className="background-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", overflowY: "auto", padding: "10px" }}>
+      <div className="background-grid">
         {backgrounds.map((bg) => (
           <button
             type="button"
@@ -424,7 +424,8 @@ export function PreviewComposer({
         const isMaskedOrNonRect = hasTemplateMask || isEllipse || isRounded;
 
         const slotRatio = photoSlot.width / photoSlot.height;
-        const useContain = !isMaskedOrNonRect && slotRatio < 0.8;
+        const useContain = isEllipse ? true : (!isMaskedOrNonRect && slotRatio < 0.8);
+        const objectPosition = isEllipse ? "center" : (useContain ? "bottom" : "center");
         const isSelected = activeSlotIndex === index;
         const isDragOver = dragOverSlotIndex === index;
         const isFailed = Boolean(failedSlots[index]);
@@ -497,7 +498,7 @@ export function PreviewComposer({
               <img 
                 src={activeSrc} 
                 alt={`Slot ${index + 1}`} 
-                style={{ position: "absolute", width: "100%", height: "100%", objectFit: useContain ? "contain" : "cover", objectPosition: useContain ? "bottom" : "center", zIndex: 1 }} 
+                style={{ position: "absolute", width: "100%", height: "100%", objectFit: useContain ? "contain" : "cover", objectPosition: objectPosition, zIndex: 1 }} 
                 onError={() => {
                   console.warn(`[PreviewComposer Diagnostics] Slot ${index} image failed to load. Display URL: ${displayUrl}`);
                   setFailedSlots(prev => ({ ...prev, [index]: true }));
@@ -511,7 +512,7 @@ export function PreviewComposer({
             )}
             {(process.env.NEXT_PUBLIC_CAMERA_DEBUG === "true" || process.env.PHOBO_DEBUG_LOGS === "true") && (
               <div style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0, border: "2px solid red", zIndex: 3, pointerEvents: "none", color: "red", fontSize: "10px", padding: "2px"}}>
-                Slot {index} | Mode: {useContain ? 'smart-cover' : 'cover'}<br/>
+                Slot {index} | Mode: {isEllipse ? 'contain-center' : (useContain ? 'smart-cover' : 'cover')}<br/>
                 Src: {activeSrc ? activeSrc.slice(0, 20) : "NONE"}<br/>
                 Bg: {slotBgId}
               </div>
