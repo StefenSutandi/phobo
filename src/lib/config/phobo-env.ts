@@ -27,6 +27,8 @@ export function getPhoboEnv() {
     printHeightPx: Number.isFinite(printHeightPx) ? printHeightPx : 1748,
     storageMode: process.env.PHOBO_STORAGE_MODE || "local",
     driveEnabled: process.env.PHOBO_DRIVE_ENABLED === "true",
+    cloudinaryEnabled: process.env.PHOBO_CLOUDINARY_ENABLED === "true",
+    storageProvider: process.env.PHOBO_STORAGE_PROVIDER || (process.env.PHOBO_CLOUDINARY_ENABLED === "true" ? "cloudinary" : (process.env.PHOBO_DRIVE_ENABLED === "true" ? "google-drive" : "local")),
     resultsDir: process.env.PHOBO_RESULTS_DIR || "public/results",
     publicBaseUrl: process.env.PHOBO_PUBLIC_BASE_URL || "http://localhost:3000",
     debugLogs: process.env.PHOBO_DEBUG_LOGS === "true",

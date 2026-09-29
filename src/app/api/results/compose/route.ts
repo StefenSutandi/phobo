@@ -6,6 +6,7 @@ import { generatePostcardPrint } from "@/lib/print/print-template";
 import { sanitizeSessionId } from "@/lib/results/result-storage";
 import { bufferToDataUrl } from "@/lib/image-processing/load-image";
 import { uploadFileToGoogleDrive } from "@/lib/storage/google-drive";
+import { uploadResultImage } from "@/lib/storage/cloud-storage";
 import { getPhoboEnv } from "@/lib/config/phobo-env";
 
 export const runtime = "nodejs";
@@ -123,16 +124,24 @@ export async function POST(request: Request) {
       printLayoutVersion: PRINT_LAYOUT_VERSION,
     });
 
+    const cloudUrlCachePath = path.join(outputDirectory, "cloud_url.txt");
     try {
       await access(finalScreenPath);
       await access(finalPrintPath);
       const existingManifest = await readFile(manifestPath, "utf-8");
       if (existingManifest === payloadHash) {
         console.log(`[Compose API] Inputs unchanged, skipping compose for ${safeSessionId}`);
+        let cachedCloudUrl: string | undefined = undefined;
+        try {
+          cachedCloudUrl = (await readFile(cloudUrlCachePath, "utf-8")).trim();
+        } catch {}
         return NextResponse.json({
           ok: true,
           finalImageUrl: `/results/${safeSessionId}/final_screen.png`,
           printImageUrl: `/results/${safeSessionId}/final_print.jpg`,
+          driveUrl: cachedCloudUrl || undefined,
+          cloudUrl: cachedCloudUrl || undefined,
+          storageProvider: cachedCloudUrl ? (cachedCloudUrl.includes("cloudinary") ? "cloudinary" : "google-drive") : "local",
           warnings: []
         });
       }
@@ -169,38 +178,33 @@ export async function POST(request: Request) {
     await writeFile(finalPrintPath, printBuffer);
     await writeFile(manifestPath, payloadHash);
     
-    let driveUrl = undefined;
-    if (process.env.PHOBO_DRIVE_ENABLED === "true") {
-      const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-      if (folderId) {
-        try {
-          const driveUploadPromise = uploadFileToGoogleDrive({
-            filePath: finalScreenPath,
-            fileName: `phobo_${safeSessionId}.png`,
-            mimeType: "image/png",
-            folderId: folderId
-          });
-          const driveTimeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Drive upload timeout after 7s")), 7000)
-          );
-          const uploadResult = await Promise.race([driveUploadPromise, driveTimeoutPromise]);
-          driveUrl = uploadResult.webViewLink;
-        } catch (uploadError) {
-          const errMsg = uploadError instanceof Error ? uploadError.message : String(uploadError);
-          if (errMsg.toLowerCase().includes("invalid_grant")) {
-            console.error(`[Compose API] Google Drive OAuth refresh token rejected (invalid_grant). Re-authorize the production Google account.`);
-          } else {
-            console.error(`[Compose API] Drive upload non-fatal error for ${safeSessionId}:`, errMsg);
-          }
-        }
-      }
+    // Cloud upload (Cloudinary preferred, Google Drive fallback, strictly non-fatal)
+    const cloudOutcome = await uploadResultImage({
+      filePath: finalScreenPath,
+      sessionId: safeSessionId,
+      fileName: `phobo_${safeSessionId}.png`,
+      mimeType: "image/png",
+    });
+
+    if (cloudOutcome.error && cloudOutcome.error.toLowerCase().includes("invalid_grant")) {
+      console.error(`[Compose API] Google Drive OAuth refresh token rejected (invalid_grant). Re-authorize the production Google account.`);
+    }
+
+    const cloudUrl = cloudOutcome.url;
+
+    if (cloudUrl) {
+      try {
+        await writeFile(cloudUrlCachePath, cloudUrl, "utf-8");
+      } catch {}
     }
 
     return NextResponse.json({
       ok: true,
       finalImageUrl: `/results/${safeSessionId}/final_screen.png`,
       printImageUrl: `/results/${safeSessionId}/final_print.jpg`,
-      driveUrl: driveUrl,
+      driveUrl: cloudUrl,
+      cloudUrl: cloudUrl,
+      storageProvider: cloudOutcome.provider,
       warnings: composed.warnings
     });
   } catch (error) {

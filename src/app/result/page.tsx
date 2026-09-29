@@ -22,7 +22,8 @@ export default function Result() {
   useEffect(() => {
     if (session?.driveUrl) {
       setUrl(session.driveUrl);
-      setMsg("Uploaded to Google Drive");
+      const isCloudinary = session.driveUrl.includes("cloudinary.com") || session.driveUrl.includes("res.cloudinary");
+      setMsg(isCloudinary ? "Uploaded to Cloudinary" : "Uploaded to Google Drive");
     } else if (session?.finalImageUrl) {
       setUrl(new URL(session.finalImageUrl, window.location.origin).toString());
       setMsg("Using local result link");

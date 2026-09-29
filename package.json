@@ -10,6 +10,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "cloudinary": "^2.11.0",
     "googleapis": "^173.0.0",
     "midtrans-client": "^1.4.3",
     "next": "16.2.7",

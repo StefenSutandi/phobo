@@ -527,11 +527,41 @@ Drive upload currently has a bounded timeout so the kiosk does not remain stuck 
 
 ---
 
-## 13. Google Drive
+## 13. Cloud Storage (Cloudinary & Google Drive)
 
-Drive is optional and controlled by environment configuration.
+Phobo supports cloud storage for customer-facing result images (`final_screen.png`).
+Cloudinary is the **preferred** cloud storage provider, while Google Drive remains supported as a legacy fallback.
 
-Typical production variables:
+### Cloud Storage Architecture
+
+1. **Local-First & Non-Fatal**: Local result files (`final_screen.png`, `final_print.jpg`) and `compose-manifest.json` are always generated and committed to local disk first. Cloud upload is attempted asynchronously and strictly non-fatally; if cloud upload fails or times out, local kiosk display and physical printing proceed without interruption.
+2. **Deterministic Public ID & Folder Hierarchy**:
+   Uploaded result images are structured deterministically:
+   ```text
+   phobo/YYYY-MM-DD/{sessionId}/final_screen
+   ```
+3. **Server-Side Signed Uploads**: All uploads use server-side signed requests via the official `cloudinary` SDK. No unsigned upload presets or client-side secrets are used.
+4. **Idempotency**: Successful uploads cache the resulting secure URL to `public/results/{sessionId}/cloud_url.txt`. Subsequent compose requests with identical inputs return the cached URL immediately.
+5. **Provider Resolution Priority**:
+   - `PHOBO_STORAGE_PROVIDER`: explicit override (`cloudinary` | `google-drive` | `local`).
+   - `PHOBO_CLOUDINARY_ENABLED=true`: resolves to `cloudinary`.
+   - `PHOBO_DRIVE_ENABLED=true`: resolves to `google-drive`.
+   - Default: `local`.
+   - Fallback: If `cloudinary` is selected but fails or credentials are missing, Phobo will automatically fall back to Google Drive (if enabled) before falling back to local result links.
+
+### Cloudinary Configuration
+
+```env
+PHOBO_STORAGE_PROVIDER=cloudinary
+PHOBO_CLOUDINARY_ENABLED=true
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+```
+
+### Google Drive Configuration (Legacy / Fallback)
+
+Drive is optional and controlled by environment configuration:
 
 ```env
 PHOBO_DRIVE_ENABLED=true
@@ -542,9 +572,8 @@ GOOGLE_OAUTH_CLIENT_SECRET=...
 GOOGLE_OAUTH_REFRESH_TOKEN=...
 ```
 
-Never commit real OAuth secrets or refresh tokens.
-
-If Drive upload fails but local composition succeeds, the result should still exist locally.
+Never commit real Cloudinary credentials, OAuth secrets, or refresh tokens to version control.
+If cloud upload fails, the result QR code seamlessly falls back to the local kiosk result URL.
 
 ---
 
@@ -725,18 +754,23 @@ PHOBO_PRINT_FIT=fill
 PHOBO_PRINT_WIDTH_PX=1181
 PHOBO_PRINT_HEIGHT_PX=1748
 
-# Storage
+# Storage & Cloud Provider (cloudinary | google-drive | local)
 PHOBO_STORAGE_MODE=local
-PHOBO_RESULTS_DIR=public/results
-PHOBO_STICKERS_ENABLED=true
+PHOBO_STORAGE_PROVIDER=cloudinary
+PHOBO_CLOUDINARY_ENABLED=true
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
 
-# Google Drive
-PHOBO_DRIVE_ENABLED=true
+# Google Drive (Legacy / Fallback)
+PHOBO_DRIVE_ENABLED=false
 GOOGLE_DRIVE_AUTH_MODE=oauth
 GOOGLE_DRIVE_FOLDER_ID=...
 GOOGLE_OAUTH_CLIENT_ID=...
 GOOGLE_OAUTH_CLIENT_SECRET=...
 GOOGLE_OAUTH_REFRESH_TOKEN=...
+PHOBO_RESULTS_DIR=public/results
+PHOBO_STICKERS_ENABLED=true
 
 # Payment
 PHOBO_PAYMENT_PROVIDER=midtrans
