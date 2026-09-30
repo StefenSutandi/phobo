@@ -5,7 +5,6 @@ import { composeFinalImages } from "@/lib/image-processing/compose-final";
 import { generatePostcardPrint } from "@/lib/print/print-template";
 import { sanitizeSessionId } from "@/lib/results/result-storage";
 import { bufferToDataUrl } from "@/lib/image-processing/load-image";
-import { uploadFileToGoogleDrive } from "@/lib/storage/google-drive";
 import { uploadResultImage } from "@/lib/storage/cloud-storage";
 import { getPhoboEnv } from "@/lib/config/phobo-env";
 
@@ -55,7 +54,6 @@ export async function POST(request: Request) {
     const { generatePostcardPrint } = await import("@/lib/print/print-template");
     const { sanitizeSessionId } = await import("@/lib/results/result-storage");
     const { bufferToDataUrl } = await import("@/lib/image-processing/load-image");
-    const { uploadFileToGoogleDrive } = await import("@/lib/storage/google-drive");
     const { getPhoboEnv } = await import("@/lib/config/phobo-env");
     
     let body: ComposeRequest;
@@ -133,15 +131,54 @@ export async function POST(request: Request) {
         console.log(`[Compose API] Inputs unchanged, skipping compose for ${safeSessionId}`);
         let cachedCloudUrl: string | undefined = undefined;
         try {
-          cachedCloudUrl = (await readFile(cloudUrlCachePath, "utf-8")).trim();
+          const rawCached = (await readFile(cloudUrlCachePath, "utf-8")).trim();
+          if (rawCached) {
+            cachedCloudUrl = rawCached;
+          }
         } catch {}
+
+        // A. If cloud_url.txt exists and contains a URL:
+        //    return immediately, do NOT recompose, do NOT upload again
+        if (cachedCloudUrl) {
+          return NextResponse.json({
+            ok: true,
+            finalImageUrl: `/results/${safeSessionId}/final_screen.png`,
+            printImageUrl: `/results/${safeSessionId}/final_print.jpg`,
+            driveUrl: cachedCloudUrl,
+            cloudUrl: cachedCloudUrl,
+            storageProvider: cachedCloudUrl.includes("cloudinary") ? "cloudinary" : "google-drive",
+            warnings: []
+          });
+        }
+
+        // B. If cloud_url.txt is missing or empty:
+        //    do NOT recompose, retry cloud upload using existing final_screen.png
+        console.log(`[Compose API] Inputs unchanged but cloud URL missing, retrying cloud upload for ${safeSessionId}...`);
+        const cloudOutcome = await uploadResultImage({
+          filePath: finalScreenPath,
+          sessionId: safeSessionId,
+          fileName: `phobo_${safeSessionId}.png`,
+          mimeType: "image/png",
+        });
+
+        if (cloudOutcome.error && cloudOutcome.error.toLowerCase().includes("invalid_grant")) {
+          console.error(`[Compose API] Google Drive OAuth refresh token rejected (invalid_grant). Re-authorize the production Google account.`);
+        }
+
+        const cloudUrl = cloudOutcome.url;
+        if (cloudUrl) {
+          try {
+            await writeFile(cloudUrlCachePath, cloudUrl, "utf-8");
+          } catch {}
+        }
+
         return NextResponse.json({
           ok: true,
           finalImageUrl: `/results/${safeSessionId}/final_screen.png`,
           printImageUrl: `/results/${safeSessionId}/final_print.jpg`,
-          driveUrl: cachedCloudUrl || undefined,
-          cloudUrl: cachedCloudUrl || undefined,
-          storageProvider: cachedCloudUrl ? (cachedCloudUrl.includes("cloudinary") ? "cloudinary" : "google-drive") : "local",
+          driveUrl: cloudUrl || undefined,
+          cloudUrl: cloudUrl || undefined,
+          storageProvider: cloudOutcome.provider,
           warnings: []
         });
       }

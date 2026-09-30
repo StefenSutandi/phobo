@@ -18,6 +18,9 @@ export interface CloudStorageOutcome {
 
 /**
  * Resolves the preferred cloud storage provider based on environment configuration.
+ * PHOBO_STORAGE_PROVIDER is authoritative (options: "cloudinary" | "google-drive" | "local").
+ * PHOBO_CLOUDINARY_ENABLED and PHOBO_DRIVE_ENABLED are legacy / convenience auto-selection
+ * flags used only when PHOBO_STORAGE_PROVIDER is not explicitly set.
  * Priority: PHOBO_STORAGE_PROVIDER > PHOBO_CLOUDINARY_ENABLED > PHOBO_DRIVE_ENABLED > local
  */
 export function resolveStorageProvider(): CloudStorageProvider {

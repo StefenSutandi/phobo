@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
+if (process.stdout._handle && typeof process.stdout._handle.setBlocking === "function") {
+  process.stdout._handle.setBlocking(true);
+}
+
 console.log("==================================================");
 console.log("PHOBO CLOUDINARY STORAGE CONTRACT & UNIT TEST SUITE");
 console.log("==================================================");
@@ -190,6 +194,188 @@ async function main() {
     await fs.writeFile(cloudUrlCachePath, sampleUrl, "utf-8");
     const readBack = (await fs.readFile(cloudUrlCachePath, "utf-8")).trim();
     assert.equal(readBack, sampleUrl);
+
+    // Clean up
+    await fs.rm(testDir, { recursive: true, force: true });
+  });
+
+  // TEST 9: Compose route retry: existing matching manifest + missing cloud_url.txt
+  // -> retries cloud upload WITHOUT image recomposition
+  await runTest("Compose route retry: matching manifest + missing cloud_url.txt retries upload without recomposition", async () => {
+    const { POST, PRINT_LAYOUT_VERSION } = await import("../src/app/api/results/compose/route.ts");
+    const sessionId = "test_compose_retry_session";
+    const testDir = path.join(projectRoot, "public", "results", sessionId);
+    await fs.mkdir(testDir, { recursive: true });
+
+    const finalScreenPath = path.join(testDir, "final_screen.png");
+    const finalPrintPath = path.join(testDir, "final_print.jpg");
+    const manifestPath = path.join(testDir, "compose-manifest.json");
+    const cloudUrlCachePath = path.join(testDir, "cloud_url.txt");
+
+    const sentinelScreen = "SENTINEL_FINAL_SCREEN_IMAGE_BYTES";
+    const sentinelPrint = "SENTINEL_FINAL_PRINT_IMAGE_BYTES";
+    await fs.writeFile(finalScreenPath, sentinelScreen, "utf-8");
+    await fs.writeFile(finalPrintPath, sentinelPrint, "utf-8");
+
+    const requestPayload = {
+      sessionId,
+      capturedPhotos: [{ raw: "photo1.jpg", display: "photo1.jpg" }],
+      selectedFrameId: "frame-1",
+      selectedBackgroundId: "bg-1",
+      options: {},
+    };
+
+    const matchingHash = JSON.stringify({
+      capturedPhotos: [{ raw: "photo1.jpg", display: "photo1.jpg" }],
+      selectedFrameId: "frame-1",
+      selectedBackgroundId: "bg-1",
+      slotAssignments: undefined,
+      stickers: [],
+      options: {},
+      printLayoutVersion: PRINT_LAYOUT_VERSION,
+    });
+    await fs.writeFile(manifestPath, matchingHash, "utf-8");
+
+    // Ensure cloud_url.txt does NOT exist
+    try { await fs.unlink(cloudUrlCachePath); } catch {}
+
+    // Call compose route
+    const req = new Request("http://localhost:3000/api/results/compose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestPayload),
+    });
+
+    const res = await POST(req);
+    const json = await res.json();
+
+    assert.equal(json.ok, true, "Response must be ok: true");
+    // Verify files were NOT recomposed (sentinel content preserved)
+    const currentScreen = await fs.readFile(finalScreenPath, "utf-8");
+    const currentPrint = await fs.readFile(finalPrintPath, "utf-8");
+    assert.equal(currentScreen, sentinelScreen, "final_screen.png must NOT be recomposed");
+    assert.equal(currentPrint, sentinelPrint, "final_print.jpg must NOT be recomposed");
+
+    // Clean up
+    await fs.rm(testDir, { recursive: true, force: true });
+  });
+
+  // TEST 10: Compose route idempotency: existing cloud_url.txt -> upload NOT repeated
+  await runTest("Compose route idempotency: existing cloud_url.txt returns immediately without repeating upload or recomposing", async () => {
+    const { POST, PRINT_LAYOUT_VERSION } = await import("../src/app/api/results/compose/route.ts");
+    const sessionId = "test_compose_cached_session";
+    const testDir = path.join(projectRoot, "public", "results", sessionId);
+    await fs.mkdir(testDir, { recursive: true });
+
+    const finalScreenPath = path.join(testDir, "final_screen.png");
+    const finalPrintPath = path.join(testDir, "final_print.jpg");
+    const manifestPath = path.join(testDir, "compose-manifest.json");
+    const cloudUrlCachePath = path.join(testDir, "cloud_url.txt");
+
+    const sentinelScreen = "SENTINEL_SCREEN_CACHED";
+    const sentinelPrint = "SENTINEL_PRINT_CACHED";
+    const cachedUrl = "https://res.cloudinary.com/demo/image/upload/v1234/phobo/2026-09-29/final_screen.png";
+
+    await fs.writeFile(finalScreenPath, sentinelScreen, "utf-8");
+    await fs.writeFile(finalPrintPath, sentinelPrint, "utf-8");
+    await fs.writeFile(cloudUrlCachePath, cachedUrl, "utf-8");
+
+    const requestPayload = {
+      sessionId,
+      capturedPhotos: [{ raw: "photo1.jpg", display: "photo1.jpg" }],
+      selectedFrameId: "frame-2",
+      selectedBackgroundId: "bg-2",
+      options: {},
+    };
+
+    const matchingHash = JSON.stringify({
+      capturedPhotos: [{ raw: "photo1.jpg", display: "photo1.jpg" }],
+      selectedFrameId: "frame-2",
+      selectedBackgroundId: "bg-2",
+      slotAssignments: undefined,
+      stickers: [],
+      options: {},
+      printLayoutVersion: PRINT_LAYOUT_VERSION,
+    });
+    await fs.writeFile(manifestPath, matchingHash, "utf-8");
+
+    const req = new Request("http://localhost:3000/api/results/compose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestPayload),
+    });
+
+    const res = await POST(req);
+    const json = await res.json();
+
+    assert.equal(json.ok, true);
+    assert.equal(json.cloudUrl, cachedUrl, "Cached cloud URL must be returned immediately");
+    assert.equal(json.driveUrl, cachedUrl, "driveUrl must mirror cached cloud URL");
+    assert.equal(json.storageProvider, "cloudinary");
+
+    // Sentinel bytes must still be untouched
+    assert.equal(await fs.readFile(finalScreenPath, "utf-8"), sentinelScreen);
+    assert.equal(await fs.readFile(finalPrintPath, "utf-8"), sentinelPrint);
+
+    // Clean up
+    await fs.rm(testDir, { recursive: true, force: true });
+  });
+
+  // TEST 11: Empty or whitespace cloud_url.txt triggers upload retry without recomposition
+  await runTest("Compose route retry: empty or whitespace cloud_url.txt triggers upload retry without recomposition", async () => {
+    const { POST, PRINT_LAYOUT_VERSION } = await import("../src/app/api/results/compose/route.ts");
+    const sessionId = "test_compose_empty_url_session";
+    const testDir = path.join(projectRoot, "public", "results", sessionId);
+    await fs.mkdir(testDir, { recursive: true });
+
+    const finalScreenPath = path.join(testDir, "final_screen.png");
+    const finalPrintPath = path.join(testDir, "final_print.jpg");
+    const manifestPath = path.join(testDir, "compose-manifest.json");
+    const cloudUrlCachePath = path.join(testDir, "cloud_url.txt");
+
+    const sentinelScreen = "SENTINEL_SCREEN_EMPTY_URL";
+    const sentinelPrint = "SENTINEL_PRINT_EMPTY_URL";
+
+    await fs.writeFile(finalScreenPath, sentinelScreen, "utf-8");
+    await fs.writeFile(finalPrintPath, sentinelPrint, "utf-8");
+    // Write empty / whitespace cache file
+    await fs.writeFile(cloudUrlCachePath, "   \n\t   ", "utf-8");
+
+    const requestPayload = {
+      sessionId,
+      capturedPhotos: [{ raw: "photo1.jpg", display: "photo1.jpg" }],
+      selectedFrameId: "frame-3",
+      selectedBackgroundId: "bg-3",
+      options: {},
+    };
+
+    const matchingHash = JSON.stringify({
+      capturedPhotos: [{ raw: "photo1.jpg", display: "photo1.jpg" }],
+      selectedFrameId: "frame-3",
+      selectedBackgroundId: "bg-3",
+      slotAssignments: undefined,
+      stickers: [],
+      options: {},
+      printLayoutVersion: PRINT_LAYOUT_VERSION,
+    });
+    await fs.writeFile(manifestPath, matchingHash, "utf-8");
+
+    const req = new Request("http://localhost:3000/api/results/compose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestPayload),
+    });
+
+    const res = await POST(req);
+    const json = await res.json();
+
+    assert.equal(json.ok, true);
+    // Whitespace string was NOT accepted as cached URL
+    assert.equal(json.cloudUrl, undefined);
+
+    // Sentinel bytes must still be untouched (no image recomposition)
+    assert.equal(await fs.readFile(finalScreenPath, "utf-8"), sentinelScreen);
+    assert.equal(await fs.readFile(finalPrintPath, "utf-8"), sentinelPrint);
 
     // Clean up
     await fs.rm(testDir, { recursive: true, force: true });
